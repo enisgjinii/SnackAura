@@ -1,0 +1,35 @@
+/* assets/css/styles.css */
+
+/* Ensure the sidebar and content fill the viewport height */
+html,
+body {
+    height: 100%;
+}
+
+#sidebar-wrapper {
+    min-height: 100vh;
+}
+
+/* Styling for the active navigation link */
+.list-group-item-action.active {
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+    color: white !important;
+}
+
+/* Hover effects for navigation links */
+.list-group-item-action:hover {
+    background-color: #343a40;
+    color: white;
+}
+
+/* Adjust content padding when sidebar is present */
+#page-content-wrapper {
+    padding: 20px;
+}
+
+/* Smooth transition for the sidebar */
+#sidebar-wrapper,
+#page-content-wrapper {
+    transition: margin .25s ease-out;
+}
