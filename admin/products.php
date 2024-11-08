@@ -29,6 +29,14 @@ try {
     $message .= '<div class="alert alert-danger">Error fetching extras: ' . htmlspecialchars($e->getMessage()) . '</div>';
 }
 
+// Fetch sauces for selection
+try {
+    $available_sauces = $pdo->query('SELECT * FROM sauces ORDER BY name ASC')->fetchAll();
+} catch (PDOException $e) {
+    $available_sauces = [];
+    $message .= '<div class="alert alert-danger">Error fetching sauces: ' . htmlspecialchars($e->getMessage()) . '</div>';
+}
+
 // Handle different actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
@@ -42,20 +50,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_active = isset($_POST['is_active']) ? 1 : 0;
         $image_url = trim($_POST['image_url']); // Alternatively, handle file uploads
         $selected_extras = $_POST['extras'] ?? [];
+        $selected_sauces = $_POST['sauces'] ?? []; // Array of sauce names
+
+        // Convert sauces array to comma-separated string
+        $sauces_string = !empty($selected_sauces) ? implode(', ', array_map('trim', $selected_sauces)) : null;
 
         // Validate inputs
         if ($name === '' || $category_id === 0) {
             $message = '<div class="alert alert-danger">Name and Category are required.</div>';
         } else {
             // Insert product
-            $stmt = $pdo->prepare('INSERT INTO products (category_id, name, description, allergies, image_url, is_new, is_offer, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO products (category_id, name, description, allergies, sauces, image_url, is_new, is_offer, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
             try {
-                $stmt->execute([$category_id, $name, $description, $allergies, $image_url, $is_new, $is_offer, $is_active]);
-                $product_id = $pdo->lastInsertId();
+                $stmt->execute([$category_id, $name, $description, $allergies, $sauces_string, $image_url, $is_new, $is_offer, $is_active]);
 
                 // Insert selected extras
                 if (!empty($selected_extras)) {
                     $stmt_extras = $pdo->prepare('INSERT INTO product_extras (product_id, extra_id) VALUES (?, ?)');
+                    $product_id = $pdo->lastInsertId();
                     foreach ($selected_extras as $extra_id) {
                         $stmt_extras->execute([$product_id, $extra_id]);
                     }
@@ -84,21 +96,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_active = isset($_POST['is_active']) ? 1 : 0;
         $image_url = trim($_POST['image_url']); // Alternatively, handle file uploads
         $selected_extras = $_POST['extras'] ?? [];
+        $selected_sauces = $_POST['sauces'] ?? []; // Array of sauce names
+
+        // Convert sauces array to comma-separated string
+        $sauces_string = !empty($selected_sauces) ? implode(', ', array_map('trim', $selected_sauces)) : null;
 
         // Validate inputs
         if ($name === '' || $category_id === 0) {
             $message = '<div class="alert alert-danger">Name and Category are required.</div>';
         } else {
             // Update product
-            $stmt = $pdo->prepare('UPDATE products SET category_id = ?, name = ?, description = ?, allergies = ?, image_url = ?, is_new = ?, is_offer = ?, is_active = ? WHERE id = ?');
+            $stmt = $pdo->prepare('UPDATE products SET category_id = ?, name = ?, description = ?, allergies = ?, sauces = ?, image_url = ?, is_new = ?, is_offer = ?, is_active = ? WHERE id = ?');
             try {
-                $stmt->execute([$category_id, $name, $description, $allergies, $image_url, $is_new, $is_offer, $is_active, $id]);
+                $stmt->execute([$category_id, $name, $description, $allergies, $sauces_string, $image_url, $is_new, $is_offer, $is_active, $id]);
 
-                // Delete existing extras
-                $stmt_delete = $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?');
-                $stmt_delete->execute([$id]);
+                // Update extras
+                // First, delete existing extras
+                $stmt_delete_extras = $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?');
+                $stmt_delete_extras->execute([$id]);
 
-                // Insert selected extras
+                // Then, insert new extras
                 if (!empty($selected_extras)) {
                     $stmt_extras = $pdo->prepare('INSERT INTO product_extras (product_id, extra_id) VALUES (?, ?)');
                     foreach ($selected_extras as $extra_id) {
@@ -137,12 +154,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($action === 'view') {
     try {
         $query = '
-            SELECT products.*, categories.name AS category_name,
-                   GROUP_CONCAT(extras.name SEPARATOR ", ") AS extras_names
+            SELECT products.*, categories.name AS category_name
             FROM products
             JOIN categories ON products.category_id = categories.id
-            LEFT JOIN product_extras ON products.id = product_extras.product_id
-            LEFT JOIN extras ON product_extras.extra_id = extras.id
             WHERE 1
         ';
         $params = [];
@@ -157,7 +171,7 @@ if ($action === 'view') {
             $params[] = $category_filter;
         }
 
-        $query .= ' GROUP BY products.id ORDER BY products.created_at DESC LIMIT ? OFFSET ?';
+        $query .= ' ORDER BY products.created_at DESC LIMIT ? OFFSET ?';
         $params[] = $limit;
         $params[] = $offset;
 
@@ -167,18 +181,18 @@ if ($action === 'view') {
 
         // Fetch total count for pagination
         $count_query = '
-            SELECT COUNT(DISTINCT products.id) FROM products
+            SELECT COUNT(*) FROM products
             WHERE 1
         ';
         $count_params = [];
 
         if ($search !== '') {
-            $count_query .= ' AND products.name LIKE ?';
+            $count_query .= ' AND name LIKE ?';
             $count_params[] = '%' . $search . '%';
         }
 
         if ($category_filter !== '') {
-            $count_query .= ' AND products.category_id = ?';
+            $count_query .= ' AND category_id = ?';
             $count_params[] = $category_filter;
         }
 
@@ -265,6 +279,7 @@ if ($action === 'view') {
                     <th scope="col">Name <i class="fas fa-sort"></i></th>
                     <th scope="col">Category <i class="fas fa-sort"></i></th>
                     <th scope="col">Extras</th>
+                    <th scope="col">Sauces</th>
                     <th scope="col">Allergies</th>
                     <th scope="col">Description</th>
                     <th scope="col">Image</th>
@@ -282,7 +297,8 @@ if ($action === 'view') {
                             <td><?= htmlspecialchars($product['id']) ?></td>
                             <td><?= htmlspecialchars($product['name']) ?></td>
                             <td><?= htmlspecialchars($product['category_name']) ?></td>
-                            <td><?= !empty($product['extras_names']) ? htmlspecialchars($product['extras_names']) : '-' ?></td>
+                            <td><?= !empty($product['extras']) ? htmlspecialchars($product['allergies']) : '-' ?></td>
+                            <td><?= !empty($product['sauces']) ? htmlspecialchars($product['sauces']) : '-' ?></td>
                             <td><?= htmlspecialchars($product['allergies']) ? htmlspecialchars($product['allergies']) : '-' ?></td>
                             <td><?= htmlspecialchars($product['description']) ?></td>
                             <td>
@@ -319,7 +335,7 @@ if ($action === 'view') {
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="12" class="text-center">No products found.</td>
+                        <td colspan="13" class="text-center">No products found.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
@@ -400,9 +416,14 @@ if ($action === 'view') {
     <!-- Initialize Select2 and Tooltips -->
     <script>
         $(document).ready(function() {
-            // Initialize Select2 on extras multi-select
+            // Initialize Select2 on extras and sauces multi-select
             $('#extras').select2({
                 placeholder: "Select extras",
+                allowClear: true
+            });
+
+            $('#sauces').select2({
+                placeholder: "Select sauces",
                 allowClear: true
             });
 
@@ -443,6 +464,9 @@ if ($action === 'view') {
                 $selected_extras = [];
                 $message .= '<div class="alert alert-danger">Error fetching product extras: ' . htmlspecialchars($e->getMessage()) . '</div>';
             }
+
+            // Convert existing sauces string to array
+            $selected_sauces_array = !empty($product['sauces']) ? array_map('trim', explode(',', $product['sauces'])) : [];
         } catch (PDOException $e) {
             echo '<div class="alert alert-danger">Error fetching product details: ' . htmlspecialchars($e->getMessage()) . '</div>';
             require_once 'includes/footer.php';
@@ -546,6 +570,24 @@ if ($action === 'view') {
             </div>
         </div>
 
+        <!-- Sauces Multi-Select -->
+        <div class="row g-3 mt-3">
+            <div class="col-md-12">
+                <label for="sauces" class="form-label">Sauces</label>
+                <select class="form-select" id="sauces" name="sauces[]" multiple aria-describedby="sauces-addon">
+                    <?php foreach ($available_sauces as $sauce): ?>
+                        <option value="<?= htmlspecialchars($sauce['name']) ?>" 
+                            <?= (isset($_POST['sauces']) && in_array($sauce['name'], $_POST['sauces'])) ||
+                               ($action === 'edit' && isset($selected_sauces_array) && in_array($sauce['name'], $selected_sauces_array)) 
+                               ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($sauce['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text">Select sauces for this product.</div>
+            </div>
+        </div>
+
         <!-- Additional Options: New, Offer, Active -->
         <div class="row g-3 mt-3">
             <!-- New Product -->
@@ -601,9 +643,14 @@ if ($action === 'view') {
     <!-- Initialize Select2 and Tooltips -->
     <script>
         $(document).ready(function() {
-            // Initialize Select2 on extras multi-select
+            // Initialize Select2 on extras and sauces multi-select
             $('#extras').select2({
                 placeholder: "Select extras",
+                allowClear: true
+            });
+
+            $('#sauces').select2({
+                placeholder: "Select sauces",
                 allowClear: true
             });
 
@@ -620,11 +667,6 @@ if ($action === 'view') {
             deleteModal.show();
         }
     </script>
-<?php endif; ?>
-
-<?php if ($action === 'view'): ?>
-    <!-- The view action code as shown earlier -->
-    <!-- ... -->
 <?php endif; ?>
 
 <?php
