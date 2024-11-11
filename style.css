@@ -1,0 +1,471 @@
+/* Root Variables */
+:root {
+    --primary-color: #9a2a18;
+    --secondary-color: #FFFFFF;
+    --accent-color: #d7b96f;
+    --neutral-light: #F5F5F5;
+    --neutral-dark: #333333;
+    --font-family: 'Saira', sans-serif;
+    --border-radius: 8px;
+    --transition-speed: 0.3s;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--neutral-light);
+    color: var(--neutral-dark);
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--secondary-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.navbar-brand img {
+    border-radius: 50%;
+    border: 2px solid #e0e0e0;
+    transition: transform var(--transition-speed);
+}
+
+.navbar-brand img:hover {
+    transform: scale(1.05);
+}
+
+.restaurant-name {
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin-left: 0.5rem;
+}
+
+/* Language Switcher */
+.language-switcher {
+    position: absolute;
+    top: 1rem;
+    right: 2rem;
+    z-index: 1000;
+}
+
+.language-switcher .dropdown-toggle {
+    display: flex;
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--neutral-dark);
+    font-weight: 600;
+}
+
+.language-switcher .flag-icon {
+    margin-right: 8px;
+}
+
+/* Promo Banner */
+.promo-banner {
+    background-color: var(--secondary-color);
+    padding: 4rem 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.promo-banner h1 {
+    font-size: 3.5rem;
+    color: var(--primary-color);
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.promo-banner h2 {
+    font-size: 2.5rem;
+    color: var(--accent-color);
+    font-weight: 600;
+    margin-top: 1rem;
+}
+
+.promo-banner p {
+    font-size: 1.25rem;
+    color: #555555;
+    margin-top: 1rem;
+    line-height: 1.6;
+}
+
+.promo-banner img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: transform var(--transition-speed);
+}
+
+.promo-banner img:hover {
+    transform: scale(1.02);
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+    justify-content: center;
+    border-bottom: none;
+    margin-top: -1rem;
+}
+
+.nav-tabs .nav-link {
+    color: var(--secondary-color);
+    font-weight: 600;
+    border: none;
+    transition: color var(--transition-speed), background-color var(--transition-speed);
+    padding: 0.75rem 1.5rem;
+    background-color: #fcd008;
+    margin-left: 15px;
+    border-radius: 5px;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--secondary-color);
+    background-color: #9a2a18;
+    border-radius: 5px;
+}
+
+/* Menu Items */
+.menu-item img {
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+    transition: transform var(--transition-speed);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+.menu-item img:hover {
+    /* Optional: Uncomment to add hover effect */
+    /* transform: scale(1.05); */
+}
+
+.menu-item .card-body {
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+}
+
+.menu-item .card-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.menu-item .card-text {
+    flex-grow: 1;
+    color: #777777;
+    margin-bottom: 1rem;
+}
+
+.menu-item .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    transition: background-color var(--transition-speed), border-color var(--transition-speed);
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+}
+
+.menu-item .btn-primary:hover {
+    background-color: #cc0000;
+    border-color: #cc0000;
+}
+
+/* Order Summary */
+.order-summary {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+    background-color: var(--secondary-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 2rem;
+}
+
+.order-summary .order-title {
+    font-size: 2rem;
+    color: var(--accent-color);
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+}
+
+.order-summary .card-text {
+    font-size: 1.1rem;
+    color: #555555;
+}
+
+.order-summary .btn-primary {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    transition: background-color var(--transition-speed), border-color var(--transition-speed);
+    padding: 0.75rem 1.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    width: 100%;
+}
+
+.order-summary .btn-primary:hover {
+    background-color: #115293;
+    border-color: #115293;
+}
+
+/* Footer */
+footer {
+    background-color: var(--secondary-color);
+    border-top: 1px solid #e0e0e0;
+    padding: 2rem 0;
+}
+
+footer img {
+    border-radius: var(--border-radius);
+    transition: transform var(--transition-speed);
+}
+
+footer img:hover {
+    transform: scale(1.05);
+}
+
+/* Image Container */
+.image-container {
+    position: relative;
+}
+
+.image-container img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    transition: transform var(--transition-speed);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+/* Badge Styling */
+.badge-new {
+    top: 10px;
+    left: 10px;
+    background-color: #28a745;
+    /* Green */
+}
+
+.badge-offer {
+    top: 10px;
+    left: 70px;
+    background-color: #ffc107;
+    /* Yellow */
+}
+
+.badge-allergies {
+    top: 10px;
+    right: 10px;
+    background-color: #dc3545;
+    /* Red */
+}
+
+/* Ensure all badges are positioned absolutely */
+.badge-new,
+.badge-offer,
+.badge-allergies {
+    position: absolute;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    border-radius: var(--border-radius);
+}
+
+footer a {
+    color: var(--neutral-dark);
+    margin-right: 1.5rem;
+    transition: color var(--transition-speed);
+    font-size: 1.5rem;
+}
+
+footer a:hover {
+    color: var(--primary-color);
+}
+
+/* Modals */
+.modal-content {
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header,
+.modal-footer {
+    border: none;
+    padding: 1.5rem 2rem;
+}
+
+.modal-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-color);
+}
+
+/* Toasts */
+.toast-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 1100;
+}
+
+/* Skeleton Loading */
+.skeleton {
+    background-color: #e0e0e0;
+    border-radius: var(--border-radius);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    display: none;
+}
+
+.loading-overlay.active {
+    display: flex;
+}
+
+/* Button Animations */
+.btn {
+    transition: transform 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Accessibility Focus Styles */
+.btn:focus,
+.nav-link:focus,
+.dropdown-item:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1200px) {
+    .promo-banner h1 {
+        font-size: 3rem;
+    }
+
+    .promo-banner h2 {
+        font-size: 2.2rem;
+    }
+}
+
+@media (max-width: 992px) {
+    .navbar {
+        padding: 0.75rem 1.5rem;
+    }
+
+    .restaurant-name {
+        font-size: 1.25rem;
+    }
+
+    .promo-banner {
+        padding: 3rem 0;
+    }
+
+    .promo-banner h1 {
+        font-size: 2.5rem;
+    }
+
+    .promo-banner h2 {
+        font-size: 1.8rem;
+    }
+
+    .promo-banner p {
+        font-size: 1.1rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .language-switcher {
+        position: static;
+        margin-top: 1rem;
+        text-align: center;
+    }
+
+    .promo-banner {
+        padding: 2rem 1rem;
+    }
+
+    .promo-banner h1 {
+        font-size: 2rem;
+    }
+
+    .promo-banner h2 {
+        font-size: 1.5rem;
+    }
+
+    .promo-banner p {
+        font-size: 1rem;
+    }
+
+    .order-summary {
+        position: static;
+        max-height: none;
+        margin-top: 2rem;
+    }
+
+    .order-summary .order-title {
+        font-size: 1.5rem;
+    }
+
+    .menu-item .card-body {
+        padding: 1rem;
+    }
+
+    .menu-item .card-title {
+        font-size: 1.25rem;
+    }
+
+    .menu-item .card-text {
+        font-size: 0.95rem;
+    }
+
+    .order-summary .btn-primary {
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+    }
+
+    .nav-tabs .nav-link {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    footer a {
+        margin-right: 1rem;
+        font-size: 1.2rem;
+    }
+}

@@ -2,3 +2,5 @@ dbfood (1).sql
 dbfood (2).sql
 error_log.md
 .vscode/easycode.ignore
+vendor
+vendor/

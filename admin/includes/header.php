@@ -168,6 +168,14 @@ require_once 'auth.php';
                 <li class="<?= basename($_SERVER['PHP_SELF']) == 'sauces.php' ? 'active' : '' ?>">
                     <a href="sauces.php"><i class="fas fa-seedling"></i> Sauces</a>
                 </li>
+                <!-- Informations -->
+                <li class="<?= basename($_SERVER['PHP_SELF']) == 'informations.php' ? 'active' : '' ?>">
+                    <a href="informations.php"><i class="fas fa-info-circle"></i> Informations</a>
+                </li>
+                <!-- Users -->
+                <li class="<?= basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : '' ?>">
+                    <a href="users.php"><i class="fas fa-users"></i> Users</a>
+                </li>
             </ul>
         </nav>
 
