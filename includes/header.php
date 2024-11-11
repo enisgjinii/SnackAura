@@ -13,6 +13,7 @@
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <!-- Custom CSS -->
     <link href="assets/css/styles.css" rel="stylesheet">
+    
     <style>
         /* Custom styles for the sidebar */
         body {

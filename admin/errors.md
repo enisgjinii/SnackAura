@@ -1,40 +1,32 @@
-### [2024-11-10 20:19:32] Error
+### [2024-11-11 23:12:51] Error
 
-**Message:** Uncaught Exception: Cannot modify header information - headers already sent by (output started at C:\xampp\htdocs\arber-dobruna\admin\includes\header.php:152)
+**Message:** Geocoding Failed for Address: Accusamus est eius
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 224
-
----
-
-### [2024-11-11 11:36:54] Error
-
-**Message:** Uncaught Exception: Cannot modify header information - headers already sent by (output started at C:\xampp\htdocs\arber-dobruna\admin\includes\header.php:152)
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 114
+**Context:** No results returned.
 
 ---
 
-### [2024-11-11 11:40:27] Error
+### [2024-11-11 23:13:04] Error
 
-**Message:** Uncaught Exception: Cannot modify header information - headers already sent by (output started at C:\xampp\htdocs\arber-dobruna\admin\includes\header.php:152)
+**Message:** Geocoding Failed for Address: Accusamus est eius
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 114
-
----
-
-### [2024-11-11 11:41:11] Error
-
-**Message:** Uncaught Exception: Cannot modify header information - headers already sent by (output started at C:\xampp\htdocs\arber-dobruna\admin\includes\header.php:152)
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 136
+**Context:** No results returned.
 
 ---
 
-### [2024-11-11 11:41:17] Error
+### [2024-11-11 23:27:40] Error
 
-**Message:** Uncaught Exception: Cannot modify header information - headers already sent by (output started at C:\xampp\htdocs\arber-dobruna\admin\includes\header.php:152)
+**Message:** Uncaught Exception: Undefined array key &quot;latitude&quot;
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 114
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 197
+
+---
+
+### [2024-11-11 23:27:49] Error
+
+**Message:** Uncaught Exception: Undefined array key &quot;latitude&quot;
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 197
 
 ---
 
