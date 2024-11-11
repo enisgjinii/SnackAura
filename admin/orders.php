@@ -5,6 +5,9 @@ require 'vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 
+// Define error log file
+define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+
 // Function to send status update emails
 function sendStatusUpdateEmail($email, $name, $order_id, $status)
 {
@@ -68,9 +71,6 @@ $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 
-// Define error log file
-define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-
 // Handle different actions using switch statement
 switch ($action) {
     case 'update_status':
@@ -84,7 +84,7 @@ switch ($action) {
 
                 if ($new_status) {
                     // Fetch customer details
-                    $stmt = $pdo->prepare('SELECT customer_email, customer_name FROM orders WHERE id = ?');
+                    $stmt = $pdo->prepare('SELECT customer_email, customer_name FROM orders WHERE id = ? AND deleted_at IS NULL');
                     $stmt->execute([$id]);
                     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -107,20 +107,60 @@ switch ($action) {
 
     case 'delete':
         if ($id > 0) {
-            // Delete order
-            $delete = $pdo->prepare('DELETE FROM orders WHERE id = ?');
+            // Zhvendos porosinë në Trash duke përditësuar fushën deleted_at
+            $delete = $pdo->prepare('UPDATE orders SET deleted_at = NOW() WHERE id = ?');
             $success = $delete->execute([$id]);
-            $msg = $success ? 'Order deleted successfully.' : 'Failed to delete order.';
+            $msg = $success ? 'Porosia është zhvendosur në Trash.' : 'Deshtoi zhvendosja e porosisë në Trash.';
             header('Location: orders.php?action=view&message=' . urlencode($msg));
             exit();
+        }
+        break;
+
+    case 'permanent_delete':
+        if ($id > 0) {
+            // Fshije përfundimisht porosinë nga baza e të dhënave
+            $perm_delete = $pdo->prepare('DELETE FROM orders WHERE id = ?');
+            $success = $perm_delete->execute([$id]);
+            $msg = $success ? 'Porosia është fshirë përfundimisht.' : 'Deshtoi fshirja përfundimtare e porosisë.';
+            header('Location: orders.php?action=view_trash&message=' . urlencode($msg));
+            exit();
+        }
+        break;
+
+    case 'restore':
+        if ($id > 0) {
+            // Rikthe porosinë duke vendosur deleted_at në NULL
+            $restore = $pdo->prepare('UPDATE orders SET deleted_at = NULL WHERE id = ?');
+            $success = $restore->execute([$id]);
+            $msg = $success ? 'Porosia është rikthyer.' : 'Deshtoi rikthimi i porosisë.';
+            header('Location: orders.php?action=view_trash&message=' . urlencode($msg));
+            exit();
+        }
+        break;
+
+    case 'view_trash':
+        try {
+            // Fetch all deleted orders
+            $stmt = $pdo->prepare('
+                SELECT o.*, os.status
+                FROM orders o
+                JOIN order_statuses os ON o.status_id = os.id
+                WHERE o.deleted_at IS NOT NULL
+                ORDER BY o.deleted_at DESC
+            ');
+            $stmt->execute();
+            $trash_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $trash_orders = [];
+            $message = '<div class="alert alert-danger">Deshtoi marrja e porosive në Trash.</div>';
         }
         break;
 
     case 'view_details':
         if ($id > 0) {
             try {
-                // Fetch order details
-                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ?');
+                // Fetch order details only if not in Trash
+                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ? AND o.deleted_at IS NULL');
                 $stmt->execute([$id]);
                 $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -158,9 +198,13 @@ switch ($action) {
                         $stmt_drinks->execute([$item['id']]);
                         $item['drinks'] = $stmt_drinks->fetchAll(PDO::FETCH_ASSOC);
                     }
+                } else {
+                    echo '<div class="alert alert-warning">Porosia nuk ekziston ose është në Trash.</div>';
+                    require_once 'includes/footer.php';
+                    exit();
                 }
             } catch (PDOException $e) {
-                echo '<div class="alert alert-danger">Failed to fetch order details.</div>';
+                echo '<div class="alert alert-danger">Deshtoi marrja e detajeve të porosisë.</div>';
                 require_once 'includes/footer.php';
                 exit();
             }
@@ -171,9 +215,15 @@ switch ($action) {
         if ($id > 0) {
             try {
                 // Fetch order details
-                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ?');
+                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ? AND o.deleted_at IS NULL');
                 $stmt->execute([$id]);
                 $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$order) {
+                    echo '<div class="alert alert-warning">Porosia nuk ekziston ose është në Trash.</div>';
+                    require_once 'includes/footer.php';
+                    exit();
+                }
 
                 // Fetch all statuses
                 $statuses = $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
@@ -181,7 +231,7 @@ switch ($action) {
                 // Fetch any messages
                 $message = $_GET['message'] ?? '';
             } catch (PDOException $e) {
-                echo '<div class="alert alert-danger">Failed to fetch data.</div>';
+                echo '<div class="alert alert-danger">Deshtoi marrja e të dhënave.</div>';
                 require_once 'includes/footer.php';
                 exit();
             }
@@ -190,16 +240,17 @@ switch ($action) {
 
     case 'customer_counts':
         try {
-            // Fetch customer order counts
+            // Fetch customer order counts excluding Trash
             $customer_counts = $pdo->query('
                 SELECT customer_name, customer_email, customer_phone, COUNT(*) AS order_count 
                 FROM orders 
+                WHERE deleted_at IS NULL
                 GROUP BY customer_email, customer_phone 
                 ORDER BY order_count DESC
             ')->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $customer_counts = [];
-            $message = '<div class="alert alert-danger">Failed to fetch customer counts.</div>';
+            $message = '<div class="alert alert-danger">Deshtoi marrja e numrave të porosive të klientëve.</div>';
         }
         break;
 
@@ -211,7 +262,7 @@ switch ($action) {
             $ratings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $ratings = [];
-            $message = '<div class="alert alert-danger">Failed to fetch ratings.</div>';
+            $message = '<div class="alert alert-danger">Deshtoi marrja e vlerësimeve.</div>';
         }
         break;
 
@@ -220,7 +271,7 @@ switch ($action) {
             // Delete rating
             $delete = $pdo->prepare('DELETE FROM ratings WHERE id = ?');
             $success = $delete->execute([$id]);
-            $msg = $success ? 'Rating deleted successfully.' : 'Failed to delete rating.';
+            $msg = $success ? 'Vlerësimi është fshirë me sukses.' : 'Deshtoi fshirja e vlerësimit.';
             header('Location: orders.php?action=manage_ratings&message=' . urlencode($msg));
             exit();
         }
@@ -229,7 +280,7 @@ switch ($action) {
     case 'view':
     default:
         try {
-            // Fetch all orders with order_count using subquery and COALESCE to handle NULLs
+            // Fetch all active orders with order_count using subquery and COALESCE to handle NULLs
             $stmt = $pdo->prepare('
                 SELECT o.*, os.status, c.order_count
                 FROM orders o
@@ -240,9 +291,11 @@ switch ($action) {
                         COALESCE(customer_phone, "") AS customer_phone, 
                         COUNT(*) AS order_count
                     FROM orders
+                    WHERE deleted_at IS NULL
                     GROUP BY customer_email, customer_phone
                 ) c 
                 ON (o.customer_email = c.customer_email OR o.customer_phone = c.customer_phone)
+                WHERE o.deleted_at IS NULL
                 ORDER BY os.id ASC, o.created_at DESC
             ');
             $stmt->execute();
@@ -251,7 +304,7 @@ switch ($action) {
             // Fetch all statuses
             $statuses = $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
 
-            // Group orders by status using array_map
+            // Group orders by status
             $grouped_orders = [];
             foreach ($statuses as $status) {
                 $grouped_orders[$status['status']] = [];
@@ -261,7 +314,7 @@ switch ($action) {
             }
         } catch (PDOException $e) {
             $grouped_orders = [];
-            $message = '<div class="alert alert-danger">Failed to fetch orders.</div>';
+            $message = '<div class="alert alert-danger">Deshtoi marrja e porosive.</div>';
         }
         break;
 }
@@ -272,26 +325,27 @@ if ($action === 'manage_ratings') {
 }
 ?>
 <?php if ($action === 'view'): ?>
-    <!-- Existing Orders Management Code -->
-    <h2>Orders</h2>
-    <a href="orders.php?action=customer_counts" class="btn btn-primary mb-3">View Customer Order Counts</a>
-    <a href="orders.php?action=manage_ratings" class="btn btn-warning mb-3 ms-2">Manage Ratings</a>
+    <!-- Orders Management Section -->
+    <h2>Porositë</h2>
+    <a href="orders.php?action=customer_counts" class="btn btn-primary mb-3">Shikoni Numrat e Porosive të Klientëve</a>
+    <a href="orders.php?action=manage_ratings" class="btn btn-warning mb-3 ms-2">Menaxhoni Vlerësimet</a>
+    <a href="orders.php?action=view_trash" class="btn btn-danger mb-3 ms-2">Trash</a>
     <?= isset($_GET['message']) ? '<div class="alert alert-success">' . htmlspecialchars($_GET['message']) . '</div>' : ($message ?? '') ?>
     <?php foreach ($grouped_orders as $status => $orders): ?>
-        <h4><?= htmlspecialchars($status) ?> Orders</h4>
+        <h4><?= htmlspecialchars($status) ?> Porositë</h4>
         <?php if (count($orders) > 0): ?>
             <table class="table table-bordered table-hover mb-4">
                 <thead class="table-dark">
                     <tr>
                         <th>ID</th>
-                        <th>Customer</th>
+                        <th>Klienti</th>
                         <th>Email</th>
-                        <th>Phone</th>
-                        <th>Address</th>
-                        <th>Total (€)</th>
-                        <th>Created At</th>
-                        <th>Order Count</th>
-                        <th>Actions</th>
+                        <th>Telefoni</th>
+                        <th>Adresë</th>
+                        <th>Totali (€)</th>
+                        <th>Krijuar Më</th>
+                        <th>Numri i Porosive</th>
+                        <th>Veprime</th>
                     </tr>
                 </thead>
                 <tbody id="orders-table-body-<?= strtolower(str_replace(' ', '_', $status)) ?>">
@@ -305,83 +359,84 @@ if ($action === 'manage_ratings') {
                             <td><?= htmlspecialchars($order['delivery_address']) ?></td>
                             <td><?= number_format($order['total_amount'], 2) ?>€</td>
                             <td><?= htmlspecialchars($order['created_at']) ?></td>
-                            <td><?= htmlspecialchars($order_count) ?> <?= $order_count > 1 ? '<span class="badge bg-primary">Repeat</span>' : '' ?></td>
+                            <td><?= htmlspecialchars($order_count) ?> <?= $order_count > 1 ? '<span class="badge bg-primary">Ripërsëritje</span>' : '' ?></td>
                             <td>
-                                <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info" data-bs-toggle="tooltip" title="View">View</a>
-                                <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning" data-bs-toggle="tooltip" title="Update Status">Update Status</a>
-                                <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-sm btn-danger" data-bs-toggle="tooltip" title="Delete" onclick="return confirm('Are you sure you want to delete this order?')">Delete</a>
+                                <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info" data-bs-toggle="tooltip" title="Shiko">Shiko</a>
+                                <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning" data-bs-toggle="tooltip" title="Përditëso Statusin">Përditëso Statusin</a>
+                                <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-sm btn-danger" data-bs-toggle="tooltip" title="Fshije" onclick="return confirm('A jeni i sigurt që dëshironi të fshini këtë porosi?')">Fshije</a>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         <?php else: ?>
-            <p>No orders in this category.</p>
+            <p>Nuk ka porosi në këtë kategori.</p>
         <?php endif; ?>
     <?php endforeach; ?>
 <?php elseif ($action === 'manage_ratings'): ?>
-    <h2>Manage Customer Ratings</h2>
+    <!-- Manage Ratings Section -->
+    <h2>Menaxho Vlerësimet e Klientëve</h2>
     <?= isset($_GET['message']) ? '<div class="alert alert-success">' . htmlspecialchars($_GET['message']) . '</div>' : ($message ?? '') ?>
     <?php if ($ratings): ?>
         <table class="table table-bordered table-hover">
             <thead class="table-dark">
                 <tr>
                     <th>ID</th>
-                    <th>Full Name</th>
+                    <th>Emri i Plotë</th>
                     <th>Email</th>
-                    <th>Phone</th>
-                    <th>Anonymous</th>
-                    <th>Rating</th>
-                    <th>Comments</th>
-                    <th>Submitted At</th>
-                    <th>Actions</th>
+                    <th>Telefoni</th>
+                    <th>Anonim</th>
+                    <th>Vlerësimi</th>
+                    <th>Komentet</th>
+                    <th>Paraqitur Më</th>
+                    <th>Veprime</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($ratings as $rating): ?>
                     <tr id="rating-row-<?= htmlspecialchars($rating['id']) ?>">
                         <td><?= htmlspecialchars($rating['id']) ?></td>
-                        <td><?= $rating['anonymous'] ? 'Anonymous' : htmlspecialchars($rating['full_name']) ?></td>
+                        <td><?= $rating['anonymous'] ? 'Anonim' : htmlspecialchars($rating['full_name']) ?></td>
                         <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['email']) ?></td>
                         <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['phone'] ?? 'N/A') ?></td>
-                        <td><?= $rating['anonymous'] ? '<span class="badge bg-secondary">Yes</span>' : '<span class="badge bg-success">No</span>' ?></td>
+                        <td><?= $rating['anonymous'] ? '<span class="badge bg-secondary">Po</span>' : '<span class="badge bg-success">Jo</span>' ?></td>
                         <td><?= str_repeat('⭐', $rating['rating']) ?></td>
-                        <td><?= htmlspecialchars($rating['comments'] ?? 'No comments') ?></td>
+                        <td><?= htmlspecialchars($rating['comments'] ?? 'Pa komente') ?></td>
                         <td><?= htmlspecialchars($rating['created_at']) ?></td>
                         <td>
-                            <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this rating?')">Delete</a>
+                            <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('A jeni i sigurt që dëshironi të fshini këtë vlerësim?')">Fshije</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
     <?php else: ?>
-        <p>No ratings submitted yet.</p>
+        <p>Nuk ka vlerësime të paraqitura ende.</p>
     <?php endif; ?>
-    <a href="orders.php?action=view" class="btn btn-secondary">Back to Orders</a>
+    <a href="orders.php?action=view" class="btn btn-secondary">Kthehu në Porositë</a>
 <?php elseif ($action === 'view_details' && $id > 0): ?>
-    <!-- Existing Order Details Code -->
-    <h2>Order Details - ID: <?= htmlspecialchars($order['id']) ?></h2>
+    <!-- Order Details Section -->
+    <h2>Detajet e Porosisë - ID: <?= htmlspecialchars($order['id']) ?></h2>
     <div class="mb-3">
-        <strong>Customer Name:</strong> <?= htmlspecialchars($order['customer_name']) ?><br>
+        <strong>Emri i Klientit:</strong> <?= htmlspecialchars($order['customer_name']) ?><br>
         <strong>Email:</strong> <?= htmlspecialchars($order['customer_email']) ?><br>
-        <strong>Phone:</strong> <?= htmlspecialchars($order['customer_phone']) ?><br>
-        <strong>Address:</strong> <?= nl2br(htmlspecialchars($order['delivery_address'])) ?><br>
-        <strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?>€<br>
-        <strong>Status:</strong> <?= htmlspecialchars($order['status']) ?><br>
-        <strong>Created At:</strong> <?= htmlspecialchars($order['created_at']) ?>
+        <strong>Telefoni:</strong> <?= htmlspecialchars($order['customer_phone']) ?><br>
+        <strong>Adresa:</strong> <?= nl2br(htmlspecialchars($order['delivery_address'])) ?><br>
+        <strong>Shuma Totale:</strong> <?= number_format($order['total_amount'], 2) ?>€<br>
+        <strong>Statusi:</strong> <?= htmlspecialchars($order['status']) ?><br>
+        <strong>Krijuar Më:</strong> <?= htmlspecialchars($order['created_at']) ?>
     </div>
-    <h4>Items:</h4>
+    <h4>Pajisjet:</h4>
     <table class="table table-bordered">
         <thead>
             <tr>
-                <th>Product</th>
-                <th>Size</th>
-                <th>Quantity</th>
-                <th>Price (€)</th>
+                <th>Produkti</th>
+                <th>Madhësia</th>
+                <th>Shuma</th>
+                <th>Çmimi (€)</th>
                 <th>Extras</th>
-                <th>Drinks</th>
-                <th>Special Instructions</th>
+                <th>Pijes</th>
+                <th>Udhëzime Speciale</th>
             </tr>
         </thead>
         <tbody>
@@ -406,14 +461,14 @@ if ($action === 'manage_ratings') {
             <?php endforeach; ?>
         </tbody>
     </table>
-    <a href="orders.php?action=view" class="btn btn-secondary">Back to Orders</a>
+    <a href="orders.php?action=view" class="btn btn-secondary">Kthehu në Porositë</a>
 <?php elseif ($action === 'update_status_form' && $id > 0): ?>
-    <!-- Existing Update Status Form Code -->
-    <h2>Update Order Status - ID: <?= htmlspecialchars($order['id']) ?></h2>
+    <!-- Update Status Form Section -->
+    <h2>Update Status porosisë - ID: <?= htmlspecialchars($order['id']) ?></h2>
     <?= $message ? '<div class="alert alert-danger">' . htmlspecialchars($message) . '</div>' : '' ?>
     <form method="POST" action="orders.php?action=update_status&id=<?= $id ?>">
         <div class="mb-3">
-            <label for="status_id" class="form-label">Select New Status</label>
+            <label for="status_id" class="form-label">Zgjidh Statusin e Ri</label>
             <select class="form-select" id="status_id" name="status_id" required>
                 <?php foreach ($statuses as $status_option): ?>
                     <option value="<?= htmlspecialchars($status_option['id']) ?>" <?= ($order['status_id'] == $status_option['id']) ? 'selected' : '' ?>>
@@ -422,20 +477,20 @@ if ($action === 'manage_ratings') {
                 <?php endforeach; ?>
             </select>
         </div>
-        <button type="submit" class="btn btn-success">Update Status</button>
-        <a href="orders.php?action=view" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-success">Përditëso Statusin</button>
+        <a href="orders.php?action=view" class="btn btn-secondary">Anulo</a>
     </form>
 <?php elseif ($action === 'customer_counts'): ?>
-    <!-- Existing Customer Counts Code -->
-    <h2>Customer Order Counts</h2>
+    <!-- Customer Counts Section -->
+    <h2>Numrat e Porosive të Klientëve</h2>
     <?= isset($_GET['message']) ? '<div class="alert alert-success">' . htmlspecialchars($_GET['message']) . '</div>' : ($message ?? '') ?>
     <table class="table table-bordered table-hover">
         <thead class="table-dark">
             <tr>
-                <th>Customer Name</th>
+                <th>Emri i Klientit</th>
                 <th>Email</th>
-                <th>Phone</th>
-                <th>Total Orders</th>
+                <th>Telefoni</th>
+                <th>Numri Total i Porosive</th>
             </tr>
         </thead>
         <tbody>
@@ -449,48 +504,49 @@ if ($action === 'manage_ratings') {
             <?php endforeach; ?>
         </tbody>
     </table>
-    <a href="orders.php?action=view" class="btn btn-secondary">Back to Orders</a>
-<?php elseif ($action === 'manage_ratings'): ?>
-    <!-- Ratings Management Section -->
-    <h2>Manage Customer Ratings</h2>
+    <a href="orders.php?action=view" class="btn btn-secondary">Kthehu në Porositë</a>
+<?php elseif ($action === 'view_trash'): ?>
+    <!-- Trash Management Section -->
+    <h2>Trash - Porositë e Fshira</h2>
     <?= isset($_GET['message']) ? '<div class="alert alert-success">' . htmlspecialchars($_GET['message']) . '</div>' : ($message ?? '') ?>
-    <?php if ($ratings): ?>
+    <?php if ($trash_orders): ?>
         <table class="table table-bordered table-hover">
             <thead class="table-dark">
                 <tr>
                     <th>ID</th>
-                    <th>Full Name</th>
+                    <th>Emri i Klientit</th>
                     <th>Email</th>
-                    <th>Phone</th>
-                    <th>Anonymous</th>
-                    <th>Rating</th>
-                    <th>Comments</th>
-                    <th>Submitted At</th>
-                    <th>Actions</th>
+                    <th>Telefoni</th>
+                    <th>Adresë</th>
+                    <th>Shuma Totale (€)</th>
+                    <th>Fshihet Më</th>
+                    <th>Statusi</th>
+                    <th>Veprime</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($ratings as $rating): ?>
-                    <tr id="rating-row-<?= htmlspecialchars($rating['id']) ?>">
-                        <td><?= htmlspecialchars($rating['id']) ?></td>
-                        <td><?= $rating['anonymous'] ? 'Anonymous' : htmlspecialchars($rating['full_name']) ?></td>
-                        <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['email']) ?></td>
-                        <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['phone'] ?? 'N/A') ?></td>
-                        <td><?= $rating['anonymous'] ? '<span class="badge bg-secondary">Yes</span>' : '<span class="badge bg-success">No</span>' ?></td>
-                        <td><?= str_repeat('⭐', $rating['rating']) ?></td>
-                        <td><?= htmlspecialchars($rating['comments'] ?? 'No comments') ?></td>
-                        <td><?= htmlspecialchars($rating['created_at']) ?></td>
+                <?php foreach ($trash_orders as $order): ?>
+                    <tr id="trash-order-row-<?= htmlspecialchars($order['id']) ?>">
+                        <td><?= htmlspecialchars($order['id']) ?></td>
+                        <td><?= htmlspecialchars($order['customer_name']) ?></td>
+                        <td><?= htmlspecialchars($order['customer_email']) ?></td>
+                        <td><?= htmlspecialchars($order['customer_phone']) ?></td>
+                        <td><?= htmlspecialchars($order['delivery_address']) ?></td>
+                        <td><?= number_format($order['total_amount'], 2) ?>€</td>
+                        <td><?= htmlspecialchars($order['deleted_at']) ?></td>
+                        <td><?= htmlspecialchars($order['status']) ?></td>
                         <td>
-                            <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this rating?')">Delete</a>
+                            <a href="orders.php?action=restore&id=<?= $order['id'] ?>" class="btn btn-sm btn-success" onclick="return confirm('A jeni i sigurt që dëshironi të riktheni këtë porosi?')">Rikthe</a>
+                            <a href="orders.php?action=permanent_delete&id=<?= $order['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('A jeni i sigurt që dëshironi të fshini këtë porosi përfundimisht?')">Fshije Përfundimisht</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
     <?php else: ?>
-        <p>No ratings submitted yet.</p>
+        <p>Trash është bosh.</p>
     <?php endif; ?>
-    <a href="orders.php?action=view" class="btn btn-secondary">Back to Orders</a>
+    <a href="orders.php?action=view" class="btn btn-secondary">Kthehu në Porositë</a>
 <?php endif; ?>
 
 <!-- Bootstrap CSS -->
