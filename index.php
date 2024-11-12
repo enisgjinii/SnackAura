@@ -507,6 +507,7 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -537,30 +538,36 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             justify-content: center;
             align-items: center;
         }
+
         /* Calendar Styles (if used) */
         #calendar {
             max-width: 900px;
             margin: 40px auto;
         }
+
         .fc-event-title {
             color: #000 !important;
         }
+
         .tooltip-inner {
             max-width: 200px;
             text-align: left;
         }
+
         /* Disabled Button Styles */
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
+
         /* Language Switcher Positioning */
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
+
         /* Order Summary Styles */
         .order-summary {
             background-color: #f8f9fa;
@@ -569,9 +576,11 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             position: sticky;
             top: 20px;
         }
+
         .order-title {
             margin-bottom: 15px;
         }
+
         /* Badge Styles
         .badge-new {
             background-color: #28a745;
@@ -593,6 +602,7 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
         } */
     </style>
 </head>
+
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
@@ -707,7 +717,7 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                     <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&h=40&w=40" alt="Restaurant Logo" width="40" height="40" onerror="this.src='https://via.placeholder.com/40';">
                     <span class="restaurant-name">Restaurant</span>
                 </a>
-                <!-- Cart and Total -->
+                <!-- Cart, Reservation, and Ratings -->
                 <div class="d-flex align-items-center">
                     <button class="btn btn-outline-primary position-relative me-3 btn-add-to-cart" type="button" id="cart-button" aria-label="View Cart" data-bs-toggle="modal" data-bs-target="#cartModal">
                         <i class="bi bi-cart fs-4"></i>
@@ -718,27 +728,70 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                             </span>
                         <?php endif; ?>
                     </button>
-                    <!-- Button for modal -->
+                    <!-- Rezervim Button -->
+                    <button type="button" class="btn btn-outline-success me-3" data-bs-toggle="modal" data-bs-target="#reservationModal">
+                        <i class="bi bi-calendar-plus fs-4"></i> Rezervo
+                    </button>
+                    <!-- Ratings Button -->
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ratingsModal">
                         <i class="bi bi-star fs-4"></i>
                     </button>
-                    <span class="fw-bold fs-5" id="cart-total"><?= number_format($cart_total, 2) ?>€</span>
+                    <span class="fw-bold fs-5 ms-3" id="cart-total"><?= number_format($cart_total, 2) ?>€</span>
                 </div>
             </div>
         </nav>
-        <!-- Language Switcher -->
-        <div class="language-switcher">
-            <div class="dropdown">
-                <button class="btn btn-sm btn-outline-primary dropdown-toggle d-flex align-items-center" type="button" id="languageDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                    <span class="flag-icon flag-icon-de"></span> DE
-                </button>
-                <ul class="dropdown-menu" aria-labelledby="languageDropdown">
-                    <li><a class="dropdown-item language-option" href="#" data-lang="de"><span class="flag-icon flag-icon-de"></span> Deutsch (DE)</a></li>
-                    <li><a class="dropdown-item language-option" href="#" data-lang="sq"><span class="flag-icon flag-icon-al"></span> Shqip (SQ)</a></li>
-                </ul>
+        <!-- Language Switcher ... -->
+    </header>
+    <!-- Reservation Modal -->
+    <div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="reservationForm">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="reservationModalLabel">Bëj Rezervim</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Mbyll"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Emri i Klientit -->
+                        <div class="mb-3">
+                            <label for="reservation_name" class="form-label">Emri <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="reservation_name" name="client_name" required>
+                        </div>
+                        <!-- Email -->
+                        <div class="mb-3">
+                            <label for="reservation_email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="reservation_email" name="client_email" required>
+                        </div>
+                        <!-- Data e Rezervimit -->
+                        <div class="mb-3">
+                            <label for="reservation_date" class="form-label">Data e Rezervimit <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="reservation_date" name="reservation_date" required min="<?= date('Y-m-d') ?>">
+                        </div>
+                        <!-- Ora e Rezervimit -->
+                        <div class="mb-3">
+                            <label for="reservation_time" class="form-label">Ora e Rezervimit <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="reservation_time" name="reservation_time" required>
+                        </div>
+                        <!-- Numri i Njerëzve -->
+                        <div class="mb-3">
+                            <label for="number_of_people" class="form-label">Numri i Njerëzve <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="number_of_people" name="number_of_people" required min="1">
+                        </div>
+                        <!-- Mesazhi i Rezervimit (Opsionale) -->
+                        <div class="mb-3">
+                            <label for="reservation_message" class="form-label">Mesazh (Opsionale)</label>
+                            <textarea class="form-control" id="reservation_message" name="reservation_message" rows="3" placeholder="Shkruani ndonjë kërkesë të veçantë..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulo</button>
+                        <button type="submit" class="btn btn-success">Bëj Rezervim</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </header>
+    </div>
+
     <!-- Promotional Banner -->
     <section class="promo-banner">
         <div class="container">
@@ -1207,6 +1260,85 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             }
         });
     </script>
+    <!-- JavaScript Files -->
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery (required for some Bootstrap components) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        // Hide Loading Overlay once the page is fully loaded
+        window.addEventListener('load', function() {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
+        });
+
+        $(document).ready(function() {
+            // Initialize and show all toasts
+            $('.toast').toast('show');
+
+            // Handle Reservation Form Submission
+            $('#reservationForm').on('submit', function(e) {
+                e.preventDefault();
+
+                // Serialize form data
+                const formData = $(this).serialize();
+
+                // Disable the submit button to prevent multiple submissions
+                const submitButton = $(this).find('button[type="submit"]');
+                submitButton.prop('disabled', true);
+
+                // Send AJAX request
+                $.ajax({
+                    url: 'submit_reservation.php',
+                    type: 'POST',
+                    data: formData,
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            // Close the modal
+                            $('#reservationModal').modal('hide');
+                            // Destroy the modal
+                            $('#reservationModal').modal('dispose');
+                            // Reset the form
+                            $('#reservationForm')[0].reset();
+                            // Show success message
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Rezervim i Suksesshëm',
+                                text: response.message,
+                                timer: 3000,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            // Show error message
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gabim',
+                                text: response.message
+                            });
+                        }
+                    },
+                    error: function() {
+                        // Show generic error message
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gabim',
+                            text: 'Ka ndodhur një gabim gjatë dërgimit të rezervimit. Ju lutem provoni më vonë.'
+                        });
+                    },
+                    complete: function() {
+                        // Re-enable the submit button
+                        submitButton.prop('disabled', false);
+                    }
+                });
+            });
+        });
+    </script>
+
     <script>
         <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
             // Automatically hide the success modal after 5 seconds and redirect to homepage
@@ -1223,6 +1355,7 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             let storeClosedModalInstance = null;
+
             function checkStoreStatus() {
                 fetch('check_store_status.php')
                     .then(response => response.json())
@@ -1280,4 +1413,5 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
         });
     </script>
 </body>
+
 </html>

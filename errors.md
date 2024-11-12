@@ -214,3 +214,9 @@
 
 ---
 
+### [2024-11-12 23:39:22] Error
+
+**Message:** [2024-11-12 23:39:22] Failed to process reservation: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'message' in 'field list'
+
+---
+

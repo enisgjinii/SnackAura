@@ -1,6 +1,22 @@
 <?php
 // admin/includes/header.php
 require_once 'auth.php';
+$currentPage = basename($_SERVER['PHP_SELF']);
+$menuItems = [
+    ['dashboard.php', 'fas fa-tachometer-alt', 'Dashboard'],
+    ['categories.php', 'fas fa-list', 'Categories'],
+    ['products.php', 'fas fa-box-open', 'Products'],
+    ['sizes.php', 'fas fa-ruler', 'Sizes'],
+    ['extras.php', 'fas fa-plus-circle', 'Extras'],
+    ['settings.php', 'fas fa-cogs', 'Settings'],
+    ['orders.php', 'fas fa-shopping-cart', 'Orders'],
+    ['drinks.php', 'fas fa-mug-hot', 'Drinks'],
+    ['sauces.php', 'fas fa-seedling', 'Sauces'],
+    ['informations.php', 'fas fa-info-circle', 'Informations'],
+    ['users.php', 'fas fa-users', 'Users'],
+    ['products_mixes.php', 'fas fa-mix', 'Products Mixes'],
+    ['reservations.php', 'fas fa-calendar-alt', 'Reservations'],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -10,24 +26,19 @@ require_once 'auth.php';
     <title>Admin Panel - Restaurant Delivery</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome for Icons (Optional) -->
+    <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Custom CSS -->
     <link href="assets/css/styles.css" rel="stylesheet">
     <style>
-        /* Custom styles for the sidebar */
-        body {
-            overflow-x: hidden;
-        }
-
-        /* Sidebar */
+        /* Sidebar Styling */
         #sidebar {
             min-width: 250px;
             max-width: 250px;
-            min-height: 100vh;
-            transition: all 0.3s;
-            background: #343a40;
+            height: 100vh;
+            background-color: #343a40;
             color: #fff;
+            transition: all 0.3s;
         }
 
         #sidebar.collapsed {
@@ -35,83 +46,55 @@ require_once 'auth.php';
         }
 
         #sidebar .sidebar-header {
-            padding: 20px;
-            background: #3c4043;
+            padding: 1rem;
+            background-color: #3c4043;
             text-align: center;
         }
 
-        #sidebar ul.components {
-            padding: 20px 0;
-        }
-
-        #sidebar ul li {
-            padding: 10px 20px;
-            font-size: 1.1em;
-            display: flex;
-            align-items: center;
-        }
-
-        #sidebar ul li a {
+        #sidebar .list-unstyled .nav-link {
             color: #d1d1d1;
             display: flex;
             align-items: center;
-            text-decoration: none;
-            padding: 5px;
-            /* Remove underline */
-            width: 100%;
+            padding: 0.75rem 1rem;
+            transition: background 0.3s, color 0.3s;
         }
 
-        #sidebar ul li a:hover {
-            color: #ffffff;
-            background: #575757;
-            text-decoration: none;
-            /* Ensure no underline on hover */
-            border-radius: 4px;
-        }
-
-        /* Active link styling with left border */
-        #sidebar ul li.active>a {
+        #sidebar .list-unstyled .nav-link:hover,
+        #sidebar .list-unstyled .active>.nav-link {
             color: #fff;
-            background: #007bff;
-            border-left: 4px solid #ffffff;
-            /* White left border */
-            padding-left: 16px;
-            /* Adjust padding to accommodate border */
-            border-radius: 4px;
-            /* Rounded corners */
-            transition: border-left 0.3s, background 0.3s;
+            background-color: #007bff;
+            border-left: 4px solid #fff;
         }
 
-        /* Icon styling */
-        #sidebar ul li a .fas {
-            margin-right: 10px;
+        #sidebar .list-unstyled .nav-link .fas {
+            margin-right: 0.75rem;
             width: 20px;
-            /* Fixed width for icons */
             text-align: center;
         }
 
-        /* Content */
+        /* Content Styling */
         #content {
             width: 100%;
-            padding: 20px;
-            transition: all 0.3s;
+            padding: 1rem;
+            transition: margin 0.3s;
         }
 
-        /* Toggle button */
+        /* Toggle Button */
         #sidebarCollapse {
-            background: #343a40;
+            background-color: #343a40;
             color: #fff;
             border: none;
-            padding: 10px 15px;
+            padding: 0.5rem 1rem;
             cursor: pointer;
-            border-radius: 4px;
+            border-radius: 0.25rem;
+            transition: background-color 0.3s;
         }
 
         #sidebarCollapse:hover {
-            background: #495057;
+            background-color: #495057;
         }
 
-        /* Responsive adjustments */
+        /* Responsive Adjustments */
         @media (max-width: 768px) {
             #sidebar {
                 margin-left: -250px;
@@ -120,75 +103,34 @@ require_once 'auth.php';
             #sidebar.collapsed {
                 margin-left: 0;
             }
-
-            #content {
-                padding: 20px;
-            }
-
-            #sidebarCollapse {
-                display: inline-block;
-            }
         }
     </style>
 </head>
 
 <body>
-    <!-- Sidebar -->
     <div class="d-flex">
-        <nav id="sidebar">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="<?= isset($_COOKIE['sidebar_collapsed']) && $_COOKIE['sidebar_collapsed'] === 'true' ? 'collapsed' : '' ?>">
             <div class="sidebar-header">
                 <h3>Admin Panel</h3>
             </div>
             <ul class="list-unstyled components">
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : '' ?>">
-                    <a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'categories.php' ? 'active' : '' ?>">
-                    <a href="categories.php"><i class="fas fa-list"></i> Categories</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : '' ?>">
-                    <a href="products.php"><i class="fas fa-box-open"></i> Products</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'sizes.php' ? 'active' : '' ?>">
-                    <a href="sizes.php"><i class="fas fa-ruler"></i> Sizes</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'extras.php' ? 'active' : '' ?>">
-                    <a href="extras.php"><i class="fas fa-plus-circle"></i> Extras</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : '' ?>">
-                    <a href="settings.php"><i class="fas fa-cogs"></i> Settings</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'orders.php' ? 'active' : '' ?>">
-                    <a href="orders.php"><i class="fas fa-shopping-cart"></i> Orders</a>
-                </li>
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'drinks.php' ? 'active' : '' ?>">
-                    <a href="drinks.php"><i class="fas fa-mug-hot"></i> Drinks</a>
-                </li>
-                <!-- Sauces -->
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'sauces.php' ? 'active' : '' ?>">
-                    <a href="sauces.php"><i class="fas fa-seedling"></i> Sauces</a>
-                </li>
-                <!-- Informations -->
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'informations.php' ? 'active' : '' ?>">
-                    <a href="informations.php"><i class="fas fa-info-circle"></i> Informations</a>
-                </li>
-                <!-- Users -->
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : '' ?>">
-                    <a href="users.php"><i class="fas fa-users"></i> Users</a>
-                </li>
-                <!-- Products Mixes -->
-                <li class="<?= basename($_SERVER['PHP_SELF']) == 'products_mixes.php' ? 'active' : '' ?>">
-                    <a href="products_mixes.php"><i class="fas fa-mix"></i> Products Mixes</a>
-                </li>
+                <?php foreach ($menuItems as [$href, $icon, $label]): ?>
+                    <li class="<?= $currentPage === $href ? 'active' : '' ?>">
+                        <a href="<?= htmlspecialchars($href) ?>" class="nav-link">
+                            <i class="<?= htmlspecialchars($icon) ?>"></i> <?= htmlspecialchars($label) ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
             </ul>
         </nav>
 
         <!-- Page Content -->
-        <div id="content">
-            <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div id="content" class="flex-grow-1">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
                 <div class="container-fluid">
                     <button type="button" id="sidebarCollapse" class="btn">
-                        <i class="fas fa-bars"></i> <!-- Hamburger icon -->
+                        <i class="fas fa-bars"></i>
                     </button>
                     <div class="ms-auto d-flex align-items-center">
                         <span class="navbar-text me-3">
@@ -198,3 +140,4 @@ require_once 'auth.php';
                     </div>
                 </div>
             </nav>
+            <!-- Your page content starts here -->
