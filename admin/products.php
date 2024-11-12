@@ -1,5 +1,5 @@
 <?php
-ob_start(); // Start output buffering
+ob_start(); // Fillon buferimin e output-it
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 
@@ -57,13 +57,24 @@ function getTop10Products($pdo, $completed_status_id = 3)
     }
 }
 
-function recordSale($pdo, $order_id, $product_id, $quantity = 1)
+function getMixedProducts($pdo, $exclude_product_id = null)
 {
-    // Kjo funksion nuk është më e nevojshme pasi po përdorim tabelat ekzistuese
-    // Por mund të përdoret për operacione të tjera të shitjes
+    try {
+        $query = 'SELECT * FROM products ORDER BY name ASC';
+        if ($exclude_product_id) {
+            $query .= ' WHERE id != ?';
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([$exclude_product_id]);
+        } else {
+            $stmt = $pdo->query($query);
+        }
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        return [];
+    }
 }
 
-// Merrni të dhënat e kategorive, extras, dhe salcave
+// Merrni të dhënat e kategorive, extras, salcave dhe opsioneve të përzierjes
 $categories = getCategories($pdo);
 $extras = getExtras($pdo);
 $sauces = getSauces($pdo);
@@ -86,6 +97,7 @@ switch ($action) {
             $image_url = trim($_POST['image_url']);
             $selected_extras = $_POST['extras'] ?? [];
             $selected_sauces = $_POST['sauces'] ?? [];
+            $selected_mixes = $_POST['mixes'] ?? [];
 
             // Validimet
             if ($product_code === '' || $name === '' || $price === '' || $category_id === 0) {
@@ -111,7 +123,6 @@ switch ($action) {
                         $sql = 'UPDATE products SET product_code = ?, category_id = ?, name = ?, price = ?, description = ?, allergies = ?, image_url = ?, is_new = ?, is_offer = ?, is_active = ? WHERE id = ?';
                         $params = [$product_code, $category_id, $name, $price, $description, $allergies, $image_url, $is_new, $is_offer, $is_active, $id];
                     }
-
                     // Ekzekuto query-n
                     $stmt = $pdo->prepare($sql);
                     try {
@@ -121,7 +132,6 @@ switch ($action) {
                         } else {
                             $product_id = $id;
                         }
-
                         // Menaxho extras
                         $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?')->execute([$product_id]);
                         if (!empty($selected_extras)) {
@@ -130,7 +140,6 @@ switch ($action) {
                                 $stmt_extras->execute([$product_id, $extra_id]);
                             }
                         }
-
                         // Menaxho salcave
                         $pdo->prepare('DELETE FROM product_sauces WHERE product_id = ?')->execute([$product_id]);
                         if (!empty($selected_sauces)) {
@@ -139,7 +148,14 @@ switch ($action) {
                                 $stmt_sauces->execute([$product_id, $sauce_id]);
                             }
                         }
-
+                        // Menaxho opsionet e përzierjes
+                        $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id = ?')->execute([$product_id]);
+                        if (!empty($selected_mixes)) {
+                            $stmt_mixes = $pdo->prepare('INSERT INTO product_mixes (main_product_id, mixed_product_id) VALUES (?, ?)');
+                            foreach ($selected_mixes as $mixed_product_id) {
+                                $stmt_mixes->execute([$product_id, $mixed_product_id]);
+                            }
+                        }
                         // Redirect përpara
                         header('Location: products.php');
                         exit();
@@ -161,22 +177,27 @@ switch ($action) {
                     require_once 'includes/footer.php';
                     exit();
                 }
-
                 // Marr extras të lidhura
                 $stmt_extras = $pdo->prepare('SELECT extra_id FROM product_extras WHERE product_id = ?');
                 $stmt_extras->execute([$id]);
                 $selected_extras = $stmt_extras->fetchAll(PDO::FETCH_COLUMN);
-
                 // Marr salcave të lidhura
                 $stmt_sauces = $pdo->prepare('SELECT sauce_id FROM product_sauces WHERE product_id = ?');
                 $stmt_sauces->execute([$id]);
                 $selected_sauces = $stmt_sauces->fetchAll(PDO::FETCH_COLUMN);
+                // Marr opsionet e përzierjes të lidhura
+                $stmt_mixes = $pdo->prepare('SELECT mixed_product_id FROM product_mixes WHERE main_product_id = ?');
+                $stmt_mixes->execute([$id]);
+                $selected_mixes = $stmt_mixes->fetchAll(PDO::FETCH_COLUMN);
             } catch (PDOException $e) {
                 echo '<div class="alert alert-danger">Gabim gjatë marrjes së të dhënave të produktit: ' . htmlspecialchars($e->getMessage()) . '</div>';
                 require_once 'includes/footer.php';
                 exit();
             }
         }
+
+        // Merr opsionet e përzierjes për formën
+        $mixes = getMixedProducts($pdo, $action === 'edit' ? $id : null);
 
         // Shfaq formularin për shtim ose editim
 ?>
@@ -188,7 +209,6 @@ switch ($action) {
             <?php if ($action === 'edit'): ?>
                 <input type="hidden" name="id" value="<?= $id ?>">
             <?php endif; ?>
-
             <div class="row g-3">
                 <!-- Kodi i Produktit -->
                 <div class="col-md-6">
@@ -200,7 +220,6 @@ switch ($action) {
                         <input type="text" class="form-control" id="product_code" name="product_code" required value="<?= htmlspecialchars($action === 'edit' ? $product['product_code'] : ($_POST['product_code'] ?? '')) ?>" aria-describedby="product_code-addon">
                     </div>
                 </div>
-
                 <!-- Emri i Produktit -->
                 <div class="col-md-6">
                     <label for="name" class="form-label">Emri i Produktit <span class="text-danger">*</span></label>
@@ -212,7 +231,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Kategoria -->
                 <div class="col-md-6">
@@ -234,7 +252,6 @@ switch ($action) {
                         </select>
                     </div>
                 </div>
-
                 <!-- Çmimi -->
                 <div class="col-md-6">
                     <label for="price" class="form-label">Çmimi ($) <span class="text-danger">*</span></label>
@@ -246,7 +263,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- URL e Imazhit -->
                 <div class="col-md-6">
@@ -258,7 +274,6 @@ switch ($action) {
                         <input type="url" class="form-control" id="image_url" name="image_url" placeholder="https://example.com/image.jpg" value="<?= htmlspecialchars($action === 'edit' ? $product['image_url'] : ($_POST['image_url'] ?? '')) ?>" aria-describedby="image-addon">
                     </div>
                 </div>
-
                 <!-- Alergjitë -->
                 <div class="col-md-6">
                     <label for="allergies" class="form-label">Alergjitë</label>
@@ -271,7 +286,6 @@ switch ($action) {
                     <div class="form-text">Ndani alergjitë me presje.</div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Përshkrimi -->
                 <div class="col-md-12">
@@ -284,10 +298,9 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Extras -->
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label for="extras" class="form-label">Extras</label>
                     <select class="form-select" id="extras" name="extras[]" multiple>
                         <?php foreach ($extras as $extra): ?>
@@ -301,9 +314,8 @@ switch ($action) {
                     </select>
                     <div class="form-text">Zgjidhni extras për këtë produkt.</div>
                 </div>
-
                 <!-- Salcave -->
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label for="sauces" class="form-label">Salcave</label>
                     <select class="form-select" id="sauces" name="sauces[]" multiple>
                         <?php foreach ($sauces as $sauce): ?>
@@ -317,8 +329,22 @@ switch ($action) {
                     </select>
                     <div class="form-text">Zgjidhni salca për këtë produkt.</div>
                 </div>
+                <!-- Opsionet e Përzierjes -->
+                <div class="col-md-4">
+                    <label for="mixes" class="form-label">Opsionet e Përzierjes</label>
+                    <select class="form-select" id="mixes" name="mixes[]" multiple>
+                        <?php foreach ($mixes as $mix_product): ?>
+                            <option value="<?= $mix_product['id'] ?>" <?= (
+                                                                            (isset($_POST['mixes']) && in_array($mix_product['id'], $_POST['mixes'])) ||
+                                                                            ($action === 'edit' && in_array($mix_product['id'], $selected_mixes))
+                                                                        ) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($mix_product['name']) ?> - $<?= number_format($mix_product['price'], 2) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">Zgjidhni produkte që mund të përzihen me këtë produkt.</div>
+                </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Opsione Shtesë -->
                 <div class="col-md-4">
@@ -356,7 +382,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <!-- Butonat -->
             <div class="mt-4">
                 <button type="submit" class="btn btn-success me-2" data-bs-toggle="tooltip" title="<?= $action === 'add' ? 'Shto produkt të ri' : 'Rifresko produktin' ?>">
@@ -395,7 +420,6 @@ switch ($action) {
             </script>
             <?php unset($_SESSION['rating_error']); ?>
         <?php endif; ?>
-
         <!-- Skriptet -->
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -406,7 +430,10 @@ switch ($action) {
         <!-- Select2 -->
         <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
         <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
+        <!-- DataTables (nëse përdoret) -->
+        <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+        <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+        <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
         <script>
             $(document).ready(function() {
                 // Initialize Select2
@@ -418,7 +445,10 @@ switch ($action) {
                     placeholder: "Zgjidhni salca",
                     allowClear: true
                 });
-
+                $('#mixes').select2({
+                    placeholder: "Zgjidhni opsionet e përzierjes",
+                    allowClear: true
+                });
                 // Initialize Tooltips
                 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
                 var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -428,7 +458,6 @@ switch ($action) {
         </script>
     <?php
         break;
-
     case 'delete':
         if ($id > 0) {
             try {
@@ -436,19 +465,19 @@ switch ($action) {
                 $pdo->beginTransaction();
                 $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?')->execute([$id]);
                 $pdo->prepare('DELETE FROM product_sauces WHERE product_id = ?')->execute([$id]);
+                $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id = ?')->execute([$id]);
                 $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
                 $pdo->commit();
-
                 // Redirect pas fshirjes
                 header('Location: products.php');
                 exit();
             } catch (PDOException $e) {
+                $pdo->rollBack();
                 $message = '<div class="alert alert-danger">Gabim gjatë fshirjes së produktit: ' . htmlspecialchars($e->getMessage()) . '</div>';
             }
         } else {
             $message = '<div class="alert alert-danger">ID e produktit është e pavlefshme.</div>';
         }
-
         // Shfaqimi i mesazhit dhe redirect
     ?>
         <h2 class="mb-4">Fshi Produkt</h2>
@@ -456,21 +485,17 @@ switch ($action) {
         <a href="products.php" class="btn btn-secondary">Kthehu te Produktet</a>
     <?php
         break;
-
     case 'top10':
         // Merr Top 10 Produktet më të Shitura
         $topProducts = getTop10Products($pdo);
-
     ?>
         <h2 class="mb-4">Top 10 Produktet më të Shitura</h2>
         <?php if ($message): ?>
             <?= $message ?>
         <?php endif; ?>
-
         <?php if (!empty($topProducts)): ?>
             <!-- Grafiku me Chart.js -->
             <canvas id="topProductsChart" width="400" height="200" class="mb-4"></canvas>
-
             <!-- Tabela e Top 10 Produkteve -->
             <div class="table-responsive">
                 <table id="top10Table" class="table table-striped table-hover align-middle">
@@ -517,13 +542,11 @@ switch ($action) {
                     </tbody>
                 </table>
             </div>
-
             <!-- Skripti për Chart.js dhe DataTables -->
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
             <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
             <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-
             <script>
                 $(document).ready(function() {
                     // Initialize DataTables për Top 10 Tabelën
@@ -546,7 +569,6 @@ switch ($action) {
                             "search": "Kërko:"
                         }
                     });
-
                     // Gjenero të dhënat për Grafikun
                     var labels = [
                         <?php foreach ($topProducts as $product): ?> '<?= addslashes(htmlspecialchars($product['name'])) ?>',
@@ -557,7 +579,6 @@ switch ($action) {
                             <?= htmlspecialchars($product['total_sold']) ?>,
                         <?php endforeach; ?>
                     ];
-
                     // Inicializo Chart.js
                     var ctx = document.getElementById('topProductsChart').getContext('2d');
                     var topProductsChart = new Chart(ctx, {
@@ -590,7 +611,6 @@ switch ($action) {
                             }
                         }
                     });
-
                     // Initialize Tooltips
                     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
                     var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -605,7 +625,6 @@ switch ($action) {
         <a href="products.php" class="btn btn-secondary mt-3">Kthehu te Produktet</a>
     <?php
         break;
-
     case 'view':
     default:
         // Merr të gjitha produktet për shfaqje
@@ -623,13 +642,11 @@ switch ($action) {
             $products = [];
             $message = '<div class="alert alert-danger">Gabim gjatë marrjes së produkteve: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
-
     ?>
         <h2 class="mb-4">Menaxho Produktet</h2>
         <?php if ($message): ?>
             <?= $message ?>
         <?php endif; ?>
-
         <!-- Butonat për Menaxhim -->
         <div class="mb-3">
             <a href="products.php?action=add" class="btn btn-success me-2" data-bs-toggle="tooltip" title="Shto një produkt të ri">
@@ -639,7 +656,6 @@ switch ($action) {
                 <i class="fas fa-chart-line"></i> Top 10 Produktet
             </a>
         </div>
-
         <!-- Tabela e Produkteve -->
         <div class="table-responsive">
             <table id="productsTable" class="table table-striped table-hover align-middle">
@@ -651,6 +667,7 @@ switch ($action) {
                         <th>Kategoria</th>
                         <th>Extras</th>
                         <th>Salcave</th>
+                        <th>Opsionet e Përzierjes</th>
                         <th>Alergjitë</th>
                         <th>Përshkrimi</th>
                         <th>Çmimi ($)</th>
@@ -694,6 +711,18 @@ switch ($action) {
                                     }
                                     ?>
                                 </td>
+                                <td>
+                                    <?php
+                                    try {
+                                        $stmt_mixes = $pdo->prepare('SELECT p2.name FROM product_mixes pm JOIN products p2 ON pm.mixed_product_id = p2.id WHERE pm.main_product_id = ?');
+                                        $stmt_mixes->execute([$product['id']]);
+                                        $mixed_products = $stmt_mixes->fetchAll(PDO::FETCH_COLUMN);
+                                        echo !empty($mixed_products) ? htmlspecialchars(implode(', ', $mixed_products)) : '-';
+                                    } catch (PDOException $e) {
+                                        echo '<span class="text-danger">Gabim</span>';
+                                    }
+                                    ?>
+                                </td>
                                 <td><?= htmlspecialchars($product['allergies']) ?: '-' ?></td>
                                 <td><?= htmlspecialchars($product['description']) ?: '-' ?></td>
                                 <td><?= number_format($product['price'], 2) ?></td>
@@ -731,13 +760,12 @@ switch ($action) {
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="15" class="text-center">Nuk ka produkte të gjetura.</td>
+                            <td colspan="16" class="text-center">Nuk ka produkte të gjetura.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
-
         <!-- Modal për Fshirjen -->
         <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
             <div class="modal-dialog">
@@ -764,7 +792,6 @@ switch ($action) {
                 </form>
             </div>
         </div>
-
         <!-- Skriptet -->
         <!-- jQuery -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -779,7 +806,6 @@ switch ($action) {
         <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
         <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
         <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-
         <script>
             $(document).ready(function() {
                 // Initialize DataTables për tabelën e produkteve
@@ -802,7 +828,6 @@ switch ($action) {
                         "search": "Filtro rekordet:"
                     }
                 });
-
                 // Initialize Select2 për multi-select
                 $('#extras').select2({
                     placeholder: "Zgjidhni extras",
@@ -812,14 +837,16 @@ switch ($action) {
                     placeholder: "Zgjidhni salca",
                     allowClear: true
                 });
-
+                $('#mixes').select2({
+                    placeholder: "Zgjidhni opsionet e përzierjes",
+                    allowClear: true
+                });
                 // Initialize Tooltips
                 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
                 var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
                     return new bootstrap.Tooltip(tooltipTriggerEl)
                 })
             });
-
             // Funksioni për të treguar modalin e fshirjes
             function showDeleteModal(id) {
                 $('#deleteProductId').val(id);
@@ -831,7 +858,6 @@ switch ($action) {
         break;
 }
 ?>
-
 <?php
 require_once 'includes/footer.php';
 ?>

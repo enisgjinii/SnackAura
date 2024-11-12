@@ -5,7 +5,6 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-
 /**
  * Logs errors in Markdown format to a specified file.
  *
@@ -24,33 +23,27 @@ function log_error_markdown($error_message, $context = '')
     $formatted_message .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted_message, FILE_APPEND | LOCK_EX);
 }
-
 // Custom exception handler
 set_exception_handler(function ($exception) {
     log_error_markdown("Uncaught Exception: " . $exception->getMessage(), "File: " . $exception->getFile() . " Line: " . $exception->getLine());
     header("Location: index.php?error=unknown_error");
     exit;
 });
-
 // Custom error handler to convert errors to exceptions
 set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-
 // Initialize cart if not set
 if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
-
 // Initialize variables for operational status
 $is_closed = false;
 $notification = [];
-
 // Fetch Operational Hours
 $current_datetime = new DateTime();
 $current_date = $current_datetime->format('Y-m-d');
 $current_day = $current_datetime->format('l'); // Full day name, e.g., 'Monday'
 $current_time = $current_datetime->format('H:i:s');
-
 // Check if today is a holiday
 $stmt = $pdo->prepare("SELECT * FROM operational_hours WHERE type = 'holiday' AND date = ?");
 if ($stmt->execute([$current_date])) {
@@ -64,7 +57,6 @@ if ($stmt->execute([$current_date])) {
         ];
     }
 }
-
 if (!$is_closed) {
     // Check regular operational hours for today
     $stmt = $pdo->prepare("SELECT * FROM operational_hours WHERE type = 'regular' AND day_of_week = ?");
@@ -104,7 +96,6 @@ if (!$is_closed) {
         log_error_markdown("Failed to execute operational_hours query: " . implode(", ", $errorInfo), "Fetching Operational Hours");
     }
 }
-
 // Handle Add to Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     // Retrieve and sanitize POST data
@@ -115,7 +106,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
     $special_instructions = trim($_POST['special_instructions']);
     $selected_sauces = $_POST['sauces'] ?? [];
-
     // Fetch Product
     $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND is_active = 1");
     if (!$stmt->execute([$product_id])) {
@@ -125,10 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         exit;
     }
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
-
     if ($product) {
         $base_price = (float)$product['price'];
-
         // Fetch Size if selected
         if ($size_id) {
             $stmt = $pdo->prepare("SELECT ps.price, s.name FROM product_sizes ps JOIN sizes s ON ps.size_id = s.id WHERE ps.product_id = ? AND ps.size_id = ?");
@@ -141,7 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             if (!$size) $size_id = null;
         }
         $size_price = isset($size['price']) ? (float)$size['price'] : 0.00;
-
         // Fetch Extras
         $extras_details = [];
         $extras_total = 0.00;
@@ -153,7 +140,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 $extras_total = array_reduce($extras_details, fn($carry, $extra) => $carry + (float)$extra['price'], 0.00);
             }
         }
-
         // Fetch Drink
         $drink_details = null;
         $drink_total = 0.00;
@@ -165,7 +151,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 else $drink_id = null;
             }
         }
-
         // Fetch Sauces
         $sauces_details = [];
         $sauces_total = 0.00;
@@ -177,11 +162,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 $sauces_total = array_reduce($sauces_details, fn($carry, $sauce) => $carry + (float)$sauce['price'], 0.00);
             }
         }
-
         // Calculate Prices
         $unit_price = $base_price + $size_price + $extras_total + $drink_total + $sauces_total;
         $total_price = $unit_price * $quantity;
-
         // Prepare Cart Item
         $cart_item = [
             'product_id' => $product['id'],
@@ -199,7 +182,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             'total_price' => $total_price,
             'base_price' => $base_price
         ];
-
         // Check for Duplicates in Cart
         $duplicate_index = null;
         foreach ($_SESSION['cart'] as $index => $item) {
@@ -215,7 +197,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 break;
             }
         }
-
         if ($duplicate_index !== null) {
             // Update Quantity and Total Price if Duplicate Found
             $_SESSION['cart'][$duplicate_index]['quantity'] += $quantity;
@@ -224,7 +205,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             // Add New Item to Cart
             $_SESSION['cart'][] = $cart_item;
         }
-
         header("Location: index.php?added=1");
         exit;
     } else {
@@ -233,7 +213,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         exit;
     }
 }
-
 // Handle Remove from Cart
 if (isset($_GET['remove'])) {
     $remove_index = (int)$_GET['remove'];
@@ -246,7 +225,6 @@ if (isset($_GET['remove'])) {
     header("Location: index.php?removed=1");
     exit;
 }
-
 // Handle Update Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
     $item_index = (int)$_POST['item_index'];
@@ -258,7 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         $special_instructions = trim($_POST['special_instructions']);
         $selected_sauces = $_POST['sauces'] ?? [];
         $product_id = $_SESSION['cart'][$item_index]['product_id'];
-
         // Fetch Product
         $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND is_active = 1");
         if (!$stmt->execute([$product_id])) {
@@ -268,10 +245,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
             exit;
         }
         $product = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if ($product) {
             $base_price = (float)$product['price'];
-
             // Fetch Size if selected
             if ($size_id) {
                 $stmt = $pdo->prepare("SELECT ps.price, s.name FROM product_sizes ps JOIN sizes s ON ps.size_id = s.id WHERE ps.product_id = ? AND ps.size_id = ?");
@@ -284,7 +259,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                 if (!$size) $size_id = null;
             }
             $size_price = isset($size['price']) ? (float)$size['price'] : 0.00;
-
             // Fetch Extras
             $extras_details = [];
             $extras_total = 0.00;
@@ -296,7 +270,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     $extras_total = array_reduce($extras_details, fn($carry, $extra) => $carry + (float)$extra['price'], 0.00);
                 }
             }
-
             // Fetch Drink
             $drink_details = null;
             $drink_total = 0.00;
@@ -308,7 +281,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     else $drink_id = null;
                 }
             }
-
             // Fetch Sauces
             $sauces_details = [];
             $sauces_total = 0.00;
@@ -320,11 +292,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     $sauces_total = array_reduce($sauces_details, fn($carry, $sauce) => $carry + (float)$sauce['price'], 0.00);
                 }
             }
-
             // Calculate Prices
             $unit_price = $base_price + $size_price + $extras_total + $drink_total + $sauces_total;
             $total_price = $unit_price * $quantity;
-
             // Update Cart Item
             $_SESSION['cart'][$item_index] = [
                 'product_id' => $product['id'],
@@ -342,7 +312,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                 'total_price' => $total_price,
                 'base_price' => $base_price
             ];
-
             header("Location: index.php?updated=1");
             exit;
         } else {
@@ -356,7 +325,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         exit;
     }
 }
-
 // Handle Checkout
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     if (empty($_SESSION['cart'])) {
@@ -367,19 +335,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     $customer_email = trim($_POST['customer_email']);
     $customer_phone = trim($_POST['customer_phone']);
     $delivery_address = trim($_POST['delivery_address']);
-
     // Basic validation
     if (!$customer_name || !$customer_email || !$customer_phone || !$delivery_address) {
         header("Location: index.php?error=invalid_order_details");
         exit;
     }
-
     // Calculate total amount
     $total_amount = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
-
     try {
         $pdo->beginTransaction();
-
         // Insert Order
         $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
         if (!$stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2])) { // Assuming status_id 1 is 'Pending'
@@ -387,25 +351,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             throw new Exception("Failed to insert order: " . $errorInfo[2]);
         }
         $order_id = $pdo->lastInsertId();
-
         // Prepare Statements for Order Items, Extras, and Drinks
         $stmt_item = $pdo->prepare("INSERT INTO order_items (order_id, product_id, size_id, quantity, price, extras, special_instructions) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt_extras = $pdo->prepare("INSERT INTO order_extras (order_item_id, extra_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
         $stmt_drinks = $pdo->prepare("INSERT INTO order_drinks (order_item_id, drink_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
-
         foreach ($_SESSION['cart'] as $item) {
             // Prepare data for order_item
             $extras_ids = $item['extras'] ? implode(',', array_column($item['extras'], 'id')) : null;
             $sauces_names = $item['sauces'] ? implode(', ', array_column($item['sauces'], 'name')) : null;
             $combined_instructions = $sauces_names ? ($sauces_names . ($item['special_instructions'] ? "; " . $item['special_instructions'] : "")) : $item['special_instructions'];
-
             // Insert Order Item
             if (!$stmt_item->execute([$order_id, $item['product_id'], $item['size_id'], $item['quantity'], $item['unit_price'], $extras_ids, $combined_instructions])) {
                 $errorInfo = $stmt_item->errorInfo();
                 throw new Exception("Failed to insert order item: " . $errorInfo[2]);
             }
             $order_item_id = $pdo->lastInsertId();
-
             // Insert Extras
             foreach ($item['extras'] as $extra) {
                 if (!$stmt_extras->execute([$order_item_id, $extra['id'], 1, $extra['price'], $extra['price']])) {
@@ -413,7 +373,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                     throw new Exception("Failed to insert order extra: " . $errorInfo[2]);
                 }
             }
-
             // Insert Drink
             if ($item['drink']) {
                 if (!$stmt_drinks->execute([$order_item_id, $item['drink']['id'], 1, $item['drink']['price'], $item['drink']['price']])) {
@@ -422,7 +381,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 }
             }
         }
-
         $pdo->commit();
         $_SESSION['cart'] = []; // Clear cart after successful checkout
         header("Location: index.php?order=success");
@@ -434,7 +392,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         exit;
     }
 }
-
 // Fetch Categories
 $stmt = $pdo->prepare("SELECT * FROM categories ORDER BY name ASC");
 if (!$stmt->execute()) {
@@ -444,10 +401,8 @@ if (!$stmt->execute()) {
 } else {
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 // Determine Selected Category
 $selected_category_id = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-
 // Fetch Products Based on Selected Category
 $product_query = "SELECT p.id AS product_id, p.name AS product_name, p.description, p.image_url, p.is_new, p.is_offer, p.allergies, p.price AS base_price, ps.size_id, s.name AS size_name, ps.price AS size_price, e.id AS extra_id, e.name AS extra_name, e.price AS extra_price 
 FROM products p 
@@ -457,12 +412,10 @@ LEFT JOIN product_extras pe ON p.id = pe.product_id
 LEFT JOIN extras e ON pe.extra_id = e.id 
 WHERE p.is_active = 1" . ($selected_category_id > 0 ? " AND p.category_id = :category_id" : "") . " 
 ORDER BY p.name ASC, s.name ASC, e.name ASC";
-
 $stmt = $pdo->prepare($product_query);
 if ($selected_category_id > 0) {
     $stmt->bindParam(':category_id', $selected_category_id, PDO::PARAM_INT);
 }
-
 if (!$stmt->execute()) {
     $errorInfo = $stmt->errorInfo();
     log_error_markdown("Failed to execute products query: " . $errorInfo[2], "Fetching Products for Category ID: $selected_category_id");
@@ -470,7 +423,6 @@ if (!$stmt->execute()) {
 } else {
     $raw_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 // Organize Products
 $products = [];
 foreach ($raw_products as $row) {
@@ -505,13 +457,11 @@ foreach ($raw_products as $row) {
         ];
     }
 }
-
 foreach ($products as &$product) {
     $product['sizes'] = array_values($product['sizes']);
     $product['extras'] = array_values($product['extras']);
 }
 unset($product);
-
 // Fetch Sauces Associated with Products
 $product_ids = array_keys($products);
 $sauce_details = [];
@@ -530,7 +480,6 @@ if ($product_ids) {
             $product['sauces'] = $product_sauces[$pid] ?? [];
         }
         unset($product);
-
         $all_sauce_ids = array_unique(array_merge(...array_map(fn($p) => $p['sauces'], $products)));
         if ($all_sauce_ids) {
             $placeholders = implode(',', array_fill(0, count($all_sauce_ids), '?'));
@@ -544,7 +493,6 @@ if ($product_ids) {
         }
     }
 }
-
 // Fetch Drinks
 $stmt = $pdo->prepare("SELECT * FROM drinks ORDER BY name ASC");
 if (!$stmt->execute()) {
@@ -554,13 +502,11 @@ if (!$stmt->execute()) {
 } else {
     $drinks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 // Calculate Cart Total
 $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -591,36 +537,30 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             justify-content: center;
             align-items: center;
         }
-
         /* Calendar Styles (if used) */
         #calendar {
             max-width: 900px;
             margin: 40px auto;
         }
-
         .fc-event-title {
             color: #000 !important;
         }
-
         .tooltip-inner {
             max-width: 200px;
             text-align: left;
         }
-
         /* Disabled Button Styles */
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
-
         /* Language Switcher Positioning */
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         /* Order Summary Styles */
         .order-summary {
             background-color: #f8f9fa;
@@ -629,44 +569,35 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
-
-        /* Badge Styles */
+        /* Badge Styles
         .badge-new {
             background-color: #28a745;
-            /* Green */
             top: 10px;
             right: 10px;
             padding: 5px 10px;
         }
-
         .badge-offer {
             background-color: #ffc107;
-            /* Yellow */
             top: 40px;
             right: 10px;
             padding: 5px 10px;
         }
-
         .badge-allergies {
             background-color: rgba(220, 53, 69, 0.9);
-            /* Red with opacity */
             top: 70px;
             right: 10px;
             padding: 5px 10px;
-        }
+        } */
     </style>
 </head>
-
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
-
     <!-- Store Closed Modal -->
     <div class="modal fade" id="storeClosedModal" tabindex="-1" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -681,7 +612,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </div>
-
     <!-- Edit Cart Modals for Each Cart Item -->
     <?php foreach ($_SESSION['cart'] as $index => $item): ?>
         <div class="modal fade" id="editCartModal<?= $index ?>" tabindex="-1" aria-labelledby="editCartModalLabel<?= $index ?>" aria-hidden="true">
@@ -768,7 +698,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     <?php endforeach; ?>
-
     <!-- Navbar/Header -->
     <header class="position-relative">
         <nav class="navbar navbar-expand-lg">
@@ -810,7 +739,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </header>
-
     <!-- Promotional Banner -->
     <section class="promo-banner">
         <div class="container">
@@ -827,7 +755,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </section>
-
     <!-- Category Tabs -->
     <ul class="nav nav-tabs" id="myTab" role="tablist">
         <li class="nav-item" role="presentation"><a class="nav-link <?= ($selected_category_id === 0) ? 'active' : '' ?>" href="index.php" role="tab">All</a></li>
@@ -835,7 +762,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             <li class="nav-item" role="presentation"><a class="nav-link <?= ($selected_category_id === (int)$category['id']) ? 'active' : '' ?>" href="index.php?category_id=<?= htmlspecialchars($category['id']) ?>" role="tab"><?= htmlspecialchars($category['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
-
     <!-- Main Content -->
     <main class="container my-5">
         <div class="row">
@@ -868,7 +794,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Add to Cart Modal -->
                             <div class="modal fade" id="addToCartModal<?= $product['id'] ?>" tabindex="-1" aria-labelledby="addToCartModalLabel<?= $product['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -956,7 +881,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Allergies Modal -->
                             <?php if ($product['allergies']): ?>
                                 <div class="modal fade" id="allergiesModal<?= $product['id'] ?>" tabindex="-1" aria-labelledby="allergiesModalLabel<?= $product['id'] ?>" aria-hidden="true">
@@ -986,7 +910,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                     <?php endif; ?>
                 </div>
             </div>
-
             <!-- Order Summary -->
             <div class="col-lg-3">
                 <div class="order-summary">
@@ -1043,7 +966,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </main>
-
     <!-- Checkout Modal -->
     <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -1091,7 +1013,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </div>
-
     <!-- Success Modal (After Order Placement) -->
     <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
         <div class="modal fade show" tabindex="-1" style="display: block;" aria-modal="true">
@@ -1111,7 +1032,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     <?php endif; ?>
-
     <!-- Toast Notifications -->
     <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
         <div class="toast-container position-fixed bottom-0 end-0 p-3">
@@ -1143,7 +1063,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     <?php endif; ?>
-
     <!-- Cart Modal -->
     <div class="modal fade" id="cartModal" tabindex="-1" aria-labelledby="cartModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -1194,7 +1113,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </div>
-
     <!-- Footer -->
     <div class="container">
         <footer class="d-flex flex-wrap justify-content-between align-items-center py-3 my-4 border-top">
@@ -1273,7 +1191,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             </div>
         </div>
     </div>
-
     <!-- JavaScript Files -->
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -1281,7 +1198,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- SweetAlert2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
     <script>
         // Hide Loading Overlay once the page is fully loaded
         window.addEventListener('load', function() {
@@ -1291,7 +1207,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             }
         });
     </script>
-
     <script>
         <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
             // Automatically hide the success modal after 5 seconds and redirect to homepage
@@ -1305,11 +1220,9 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
             $('.toast').toast('show');
         });
     </script>
-
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             let storeClosedModalInstance = null;
-
             function checkStoreStatus() {
                 fetch('check_store_status.php')
                     .then(response => response.json())
@@ -1360,7 +1273,6 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
                     })
                     .catch(error => console.error('Error fetching store status:', error));
             }
-
             // Initial check
             checkStoreStatus();
             // Check every minute (60000 milliseconds)
@@ -1368,5 +1280,4 @@ $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $ite
         });
     </script>
 </body>
-
 </html>

@@ -176,6 +176,10 @@ require_once 'auth.php';
                 <li class="<?= basename($_SERVER['PHP_SELF']) == 'users.php' ? 'active' : '' ?>">
                     <a href="users.php"><i class="fas fa-users"></i> Users</a>
                 </li>
+                <!-- Products Mixes -->
+                <li class="<?= basename($_SERVER['PHP_SELF']) == 'products_mixes.php' ? 'active' : '' ?>">
+                    <a href="products_mixes.php"><i class="fas fa-mix"></i> Products Mixes</a>
+                </li>
             </ul>
         </nav>
 
