@@ -1,6 +1,7 @@
 <?php
 // admin/includes/header.php
 require_once 'auth.php';
+
 $currentPage = basename($_SERVER['PHP_SELF']);
 $menuItems = [
     ['dashboard.php', 'fas fa-tachometer-alt', 'Dashboard'],
@@ -14,8 +15,11 @@ $menuItems = [
     ['sauces.php', 'fas fa-seedling', 'Sauces'],
     ['informations.php', 'fas fa-info-circle', 'Informations'],
     ['users.php', 'fas fa-users', 'Users'],
-    ['products_mixes.php', 'fas fa-mix', 'Products Mixes'],
+    ['products_mixes.php', 'fas fa-utensils', 'Products Mixes'],
     ['reservations.php', 'fas fa-calendar-alt', 'Reservations'],
+    ['stores.php', 'fas fa-store', 'Stores'],
+    ['banners.php', 'fas fa-images', 'Banners'],
+    ['offers.php', 'fas fa-tags', 'Offers'],
 ];
 ?>
 <!DOCTYPE html>
@@ -39,16 +43,34 @@ $menuItems = [
             background-color: #343a40;
             color: #fff;
             transition: all 0.3s;
+            position: fixed;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         #sidebar.collapsed {
-            margin-left: -250px;
+            min-width: 80px;
+            max-width: 80px;
         }
 
         #sidebar .sidebar-header {
             padding: 1rem;
             background-color: #3c4043;
             text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        #sidebar .list-unstyled {
+            padding: 0;
+            flex-grow: 1;
+            overflow-y: auto;
+            /* Make the menu scrollable */
+        }
+
+        #sidebar .list-unstyled li {
+            width: 100%;
         }
 
         #sidebar .list-unstyled .nav-link {
@@ -57,6 +79,12 @@ $menuItems = [
             align-items: center;
             padding: 0.75rem 1rem;
             transition: background 0.3s, color 0.3s;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        #sidebar.collapsed .list-unstyled .nav-link {
+            justify-content: center;
         }
 
         #sidebar .list-unstyled .nav-link:hover,
@@ -70,13 +98,48 @@ $menuItems = [
             margin-right: 0.75rem;
             width: 20px;
             text-align: center;
+            font-size: 1.1rem;
+        }
+
+        #sidebar.collapsed .list-unstyled .nav-link .nav-label {
+            display: none;
+        }
+
+        /* Tooltip Styling */
+        #sidebar.collapsed .list-unstyled .nav-link .nav-label::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #343a40;
+            color: #fff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            margin-left: 0.5rem;
+            z-index: 1000;
+        }
+
+        #sidebar.collapsed .list-unstyled .nav-link:hover .nav-label::after {
+            opacity: 1;
         }
 
         /* Content Styling */
         #content {
-            width: 100%;
+            width: calc(100% - 250px);
+            margin-left: 250px;
             padding: 1rem;
-            transition: margin 0.3s;
+            transition: all 0.3s;
+            flex-grow: 1;
+        }
+
+        #sidebar.collapsed+#content {
+            width: calc(100% - 80px);
+            margin-left: 80px;
         }
 
         /* Toggle Button */
@@ -94,6 +157,11 @@ $menuItems = [
             background-color: #495057;
         }
 
+        /* Navbar Styling */
+        .navbar {
+            padding: 0.5rem 1rem;
+        }
+
         /* Responsive Adjustments */
         @media (max-width: 768px) {
             #sidebar {
@@ -102,7 +170,33 @@ $menuItems = [
 
             #sidebar.collapsed {
                 margin-left: 0;
+                min-width: 250px;
+                max-width: 250px;
             }
+
+            #content {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            #sidebar.collapsed+#content {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
+
+        /* Scrollbar Styling (Optional) */
+        #sidebar .list-unstyled::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #sidebar .list-unstyled::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        #sidebar .list-unstyled::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.4);
         }
     </style>
 </head>
@@ -112,13 +206,14 @@ $menuItems = [
         <!-- Sidebar -->
         <nav id="sidebar" class="<?= isset($_COOKIE['sidebar_collapsed']) && $_COOKIE['sidebar_collapsed'] === 'true' ? 'collapsed' : '' ?>">
             <div class="sidebar-header">
-                <h3>Admin Panel</h3>
+                <h4><?= isset($_SESSION['company_name']) ? htmlspecialchars($_SESSION['company_name']) : 'Admin Panel' ?></h4>
             </div>
             <ul class="list-unstyled components">
                 <?php foreach ($menuItems as [$href, $icon, $label]): ?>
                     <li class="<?= $currentPage === $href ? 'active' : '' ?>">
-                        <a href="<?= htmlspecialchars($href) ?>" class="nav-link">
-                            <i class="<?= htmlspecialchars($icon) ?>"></i> <?= htmlspecialchars($label) ?>
+                        <a href="<?= htmlspecialchars($href) ?>" class="nav-link" data-tooltip="<?= htmlspecialchars($label) ?>">
+                            <i class="<?= htmlspecialchars($icon) ?>"></i>
+                            <span class="nav-label"><?= htmlspecialchars($label) ?></span>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -134,9 +229,12 @@ $menuItems = [
                     </button>
                     <div class="ms-auto d-flex align-items-center">
                         <span class="navbar-text me-3">
-                            Logged in as <?= htmlspecialchars($_SESSION['username']) ?>
+                            <i class="fas fa-user-circle me-1"></i>
+                            <?= htmlspecialchars($_SESSION['username']) ?>
                         </span>
-                        <a href="logout.php" class="btn btn-outline-danger">Logout</a>
+                        <a href="logout.php" class="btn btn-outline-danger">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
                     </div>
                 </div>
             </nav>
