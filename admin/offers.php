@@ -642,7 +642,7 @@ try {
         </div>
         <a href="offers.php?action=list" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Kthehu te Lista
-        </a>
+        </a> 
     </div>
 <?php endif; ?>
 

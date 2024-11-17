@@ -1,78 +1,25 @@
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <?php
+// orders.php - Admin and Delivery Orders Management Page
+
+// Include necessary libraries and files
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require 'vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-// Define error log file
+// Start the session if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Define the error log file
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
 
-// Function to send status update emails to customers
-function sendStatusUpdateEmail($email, $name, $order_id, $status)
-{
-    $mail = new PHPMailer(true);
-    try {
-        // SMTP configuration
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.example.com'; // Replace with your SMTP host
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'your_email@example.com'; // Replace with your SMTP username
-        $mail->Password   = 'your_password'; // Replace with your SMTP password
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587; // Adjust port if necessary
-
-        // Sender and recipient settings
-        $mail->setFrom('no-reply@example.com', 'Your Company'); // Replace with your sender email and name
-        $mail->addAddress($email, $name);
-
-        // Email content
-        $mail->isHTML(true);
-        $mail->Subject = "Update Status of Your Order #{$order_id}";
-        $mail->Body    = "<h3>Dear {$name},</h3>
-                          <p>Your order <strong>#{$order_id}</strong> status has been updated to <strong>{$status}</strong>.</p>
-                          <p>Thank you for choosing us!</p>";
-
-        $mail->send();
-    } catch (Exception $e) {
-        error_log("Mail Error: " . $mail->ErrorInfo);
-    }
-}
-
-// Function to notify delivery person via email
-function notifyDeliveryPerson($email, $name, $order_id, $status)
-{
-    $mail = new PHPMailer(true);
-    try {
-        // SMTP configuration
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.example.com'; // Replace with your SMTP host
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'your_email@example.com'; // Replace with your SMTP username
-        $mail->Password   = 'your_password'; // Replace with your SMTP password
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587; // Adjust port if necessary
-
-        // Sender and recipient settings
-        $mail->setFrom('no-reply@example.com', 'Your Company');
-        $mail->addAddress($email, $name);
-
-        // Email content
-        $mail->isHTML(true);
-        $mail->Subject = "New Order Assigned - Order #{$order_id}";
-        $mail->Body    = "<h3>Dear {$name},</h3>
-                          <p>You have been assigned to handle order <strong>#{$order_id}</strong> with status <strong>{$status}</strong>.</p>
-                          <p>Please proceed accordingly.</p>";
-
-        $mail->send();
-    } catch (Exception $e) {
-        error_log("Mail Error: " . $mail->ErrorInfo);
-    }
-}
-
-// Function to log errors in Markdown format
+/**
+ * Log errors in a Markdown file for better readability.
+ */
 function log_error_markdown($error_message, $context = '')
 {
     $timestamp = date('Y-m-d H:i:s');
@@ -86,20 +33,182 @@ function log_error_markdown($error_message, $context = '')
     file_put_contents(ERROR_LOG_FILE, $formatted_message, FILE_APPEND | LOCK_EX);
 }
 
-// Custom exception handler
+/**
+ * Send an email using PHPMailer.
+ */
+function sendEmail($recipientEmail, $recipientName, $subject, $body)
+{
+    $mail = new PHPMailer(true);
+    try {
+        // SMTP configuration
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'egjini17@gmail.com'; // Replace with your SMTP username
+        $mail->Password = 'axnjsldfudhohipv';   // Replace with your SMTP password or app-specific password
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+
+        // Sender and recipient settings
+        $mail->setFrom('egjini17@gmail.com', 'Yumiis');
+        $mail->addAddress($recipientEmail, $recipientName);
+
+        // Email content settings
+        $mail->isHTML(true);
+        $mail->CharSet = 'UTF-8';
+        $mail->Subject = $subject;
+        $mail->Body    = $body;
+
+        $mail->send();
+    } catch (Exception $e) {
+        log_error_markdown("Mail Error: " . $mail->ErrorInfo, "Sending Email to: {$recipientEmail}");
+    }
+}
+
+/**
+ * Send a status update email to the customer.
+ */
+function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_date = null, $scheduled_time = null)
+{
+    $subject = "Update Status of Your Order #{$order_id}";
+    $scheduled_info = '';
+    if ($scheduled_date && $scheduled_time) {
+        $scheduled_info = "<p><strong>Scheduled Delivery:</strong> " . htmlspecialchars($scheduled_date) . " at " . htmlspecialchars($scheduled_time) . "</p>";
+    }
+    $body = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+                .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                .header { background-color: #4CAF50; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+                .content { padding: 20px; }
+                .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+                .button { background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h2>Yumiis</h2>
+                </div>
+                <div class='content'>
+                    <p>Pershendetje <strong>{$name}</strong>,</p>
+                    <p>Statusi i porosisë tuaj <strong>#{$order_id}</strong> është përditësuar në <strong>{$status}</strong>.</p>
+                    {$scheduled_info}
+                    <p>Faleminderit që zgjodhët Yumiis!</p>
+                    <a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Detajet</a>
+                </div>
+                <div class='footer'>
+                    &copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.
+                </div>
+            </div>
+        </body>
+        </html>
+    ";
+    sendEmail($email, $name, $subject, $body);
+}
+
+/**
+ * Notify the delivery person about the new order assignment.
+ */
+function notifyDeliveryPerson($email, $name, $order_id, $status)
+{
+    $subject = "New Order Assigned - Order #{$order_id}";
+    $body = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+                .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                .header { background-color: #2196F3; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+                .content { padding: 20px; }
+                .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+                .button { background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h2>Yumiis</h2>
+                </div>
+                <div class='content'>
+                    <p>Pershendetje <strong>{$name}</strong>,</p>
+                    <p>Ju keni caktuar të trajtoni porosinë <strong>#{$order_id}</strong> me statusin <strong>{$status}</strong>.</p>
+                    <p>Ju lutem, procedoni sipas nevojës.</p>
+                    <a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Porosinë</a>
+                </div>
+                <div class='footer'>
+                    &copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.
+                </div>
+            </div>
+        </body>
+        </html>
+    ";
+    sendEmail($email, $name, $subject, $body);
+}
+
+/**
+ * Send a delay notification email to the customer.
+ */
+function sendDelayNotificationEmail($email, $name, $order_id, $additional_time)
+{
+    $subject = "Njoftim për Vonese në Porosinë #{$order_id}";
+    $body = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+                .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                .header { background-color: #ff9800; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+                .content { padding: 20px; }
+                .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+                .button { background-color: #ff9800; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h2>Yumiis</h2>
+                </div>
+                <div class='content'>
+                    <p>Pershendetje <strong>{$name}</strong>,</p>
+                    <p>Na vjen keq të informojmë se porosia juaj <strong>#{$order_id}</strong> mund të përbëhet nga vonesë për shkak të numrit të madh të porosive.</p>
+                    <p>Kemi nevojë për miratimin tuaj për kohën e shtuar të dërgesës prej <strong>{$additional_time}</strong> orësh.</p>
+                    <p>Ju lutem, na njoftoni nëse jeni dakord me këtë ndryshim.</p>
+                    <a href='https://yourwebsite.com/contact' class='button'>Na Kontaktoni</a>
+                    <p>Faleminderit për mirëkuptimin!</p>
+                </div>
+                <div class='footer'>
+                    &copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.
+                </div>
+            </div>
+        </body>
+        </html>
+    ";
+    sendEmail($email, $name, $order_id, $additional_time);
+}
+
+/**
+ * Custom exception handler to log uncaught exceptions.
+ */
 set_exception_handler(function ($exception) {
     log_error_markdown("Uncaught Exception: " . $exception->getMessage(), "File: " . $exception->getFile() . " Line: " . $exception->getLine());
     header("Location: orders.php?action=view&message=unknown_error");
     exit;
 });
 
-// Custom error handler to convert errors to exceptions
+/**
+ * Custom error handler to convert errors to exceptions.
+ */
 set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
 
-// Function to fetch delivery users
+/**
+ * Fetch active delivery users from the database.
+ */
 function getDeliveryUsers($pdo)
 {
     $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE role = 'delivery' AND is_active = 1");
@@ -107,48 +216,42 @@ function getDeliveryUsers($pdo)
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Function to fetch order status history
+/**
+ * Fetch the status history of a specific order.
+ */
 function getOrderStatusHistory($pdo, $order_id)
 {
     $stmt = $pdo->prepare('
-        SELECT osh.*, os.status, u.username AS delivery_username, u.email AS delivery_email
-        FROM order_status_history osh
-        JOIN order_statuses os ON osh.status_id = os.id
-        LEFT JOIN users u ON osh.delivery_user_id = u.id
-        WHERE osh.order_id = ?
+        SELECT osh.*, os.status, u.username AS delivery_username, u.email AS delivery_email 
+        FROM order_status_history osh 
+        JOIN order_statuses os ON osh.status_id = os.id 
+        LEFT JOIN users u ON osh.delivery_user_id = u.id 
+        WHERE osh.order_id = ? 
         ORDER BY osh.changed_at DESC
     ');
     $stmt->execute([$order_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Function to geocode an address using Nominatim
+/**
+ * Geocode an address to obtain latitude and longitude using OpenStreetMap's Nominatim.
+ */
 function geocodeAddress($address)
 {
     $encoded_address = urlencode($address);
     $url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q={$encoded_address}";
-
-    // Initialize cURL
     $ch = curl_init();
-
-    // Set cURL options
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'YourAppName/1.0'); // Nominatim requires a valid User-Agent
-
-    // Execute cURL request
+    curl_setopt($ch, CURLOPT_USERAGENT, 'YumiisAdmin/1.0'); // Replace with your application's name and version
     $response = curl_exec($ch);
-
     if (curl_errno($ch)) {
         log_error_markdown("cURL Error: " . curl_error($ch), "Geocoding Address: {$address}");
         curl_close($ch);
         return [null, null];
     }
-
     curl_close($ch);
-
     $data = json_decode($response, true);
-
     if (isset($data[0])) {
         return [$data[0]['lat'], $data[0]['lon']];
     } else {
@@ -157,64 +260,238 @@ function geocodeAddress($address)
     }
 }
 
-// Function to update order's latitude and longitude
+/**
+ * Update the latitude and longitude of an order based on its address.
+ */
 function updateOrderCoordinates($pdo, $order_id, $address)
 {
     list($latitude, $longitude) = geocodeAddress($address);
-
     if ($latitude && $longitude) {
         $stmt = $pdo->prepare("UPDATE orders SET latitude = ?, longitude = ? WHERE id = ?");
         $stmt->execute([$latitude, $longitude, $order_id]);
     }
 }
 
+/**
+ * Fetch all possible statuses.
+ */
+function getAllStatuses($pdo)
+{
+    return $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Fetch all active orders with necessary details, including tip information
+ */
+function getActiveOrders($pdo, $user_role, $user_id)
+{
+    if ($user_role === 'admin') {
+        $stmt = $pdo->prepare('
+            SELECT 
+                o.*, 
+                os.status, 
+                t.name AS tip_name, 
+                t.percentage AS tip_percentage, 
+                t.amount AS tip_fixed_amount, 
+                c.order_count, 
+                u.username AS delivery_username 
+            FROM orders o 
+            JOIN order_statuses os ON o.status_id = os.id 
+            LEFT JOIN tips t ON o.tip_id = t.id 
+            JOIN (
+                SELECT 
+                    COALESCE(customer_email, "") AS customer_email, 
+                    COALESCE(customer_phone, "") AS customer_phone, 
+                    COUNT(*) AS order_count 
+                FROM orders 
+                WHERE deleted_at IS NULL 
+                GROUP BY customer_email, customer_phone
+            ) c ON (o.customer_email = c.customer_email OR o.customer_phone = c.customer_phone) 
+            LEFT JOIN users u ON o.delivery_user_id = u.id 
+            WHERE o.deleted_at IS NULL 
+            ORDER BY os.id ASC, o.created_at DESC
+        ');
+        $stmt->execute();
+    } elseif ($user_role === 'delivery') {
+        // Delivery personnel see only their assigned orders
+        $stmt = $pdo->prepare('
+            SELECT 
+                o.*, 
+                os.status, 
+                t.name AS tip_name, 
+                t.percentage AS tip_percentage, 
+                t.amount AS tip_fixed_amount, 
+                c.order_count, 
+                u.username AS delivery_username 
+            FROM orders o 
+            JOIN order_statuses os ON o.status_id = os.id 
+            LEFT JOIN tips t ON o.tip_id = t.id 
+            JOIN (
+                SELECT 
+                    COALESCE(customer_email, "") AS customer_email, 
+                    COALESCE(customer_phone, "") AS customer_phone, 
+                    COUNT(*) AS order_count 
+                FROM orders 
+                WHERE deleted_at IS NULL 
+                GROUP BY customer_email, customer_phone
+            ) c ON (o.customer_email = c.customer_email OR o.customer_phone = c.customer_phone) 
+            LEFT JOIN users u ON o.delivery_user_id = u.id 
+            WHERE o.deleted_at IS NULL AND o.delivery_user_id = ? 
+            ORDER BY os.id ASC, o.created_at DESC
+        ');
+        $stmt->execute([$user_id]);
+    } else {
+        // For other roles like 'waiter', you can define similar queries or restrict access
+        return [];
+    }
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Fetch all active orders with necessary details for delivery users
+ */
+function getDeliveryOrders($pdo, $user_id)
+{
+    $stmt = $pdo->prepare('
+        SELECT 
+            o.*, 
+            os.status, 
+            t.name AS tip_name, 
+            t.percentage AS tip_percentage, 
+            t.amount AS tip_fixed_amount 
+        FROM orders o 
+        JOIN order_statuses os ON o.status_id = os.id 
+        LEFT JOIN tips t ON o.tip_id = t.id 
+        WHERE o.deleted_at IS NULL AND o.delivery_user_id = ? 
+        ORDER BY o.created_at DESC
+    ');
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Fetch all active orders with necessary details for admin
+ */
+function getAdminOrders($pdo)
+{
+    return getActiveOrders($pdo, 'admin', null);
+}
+
+/**
+ * Fetch all active orders with necessary details for delivery
+ */
+function getDeliveryOrdersForUser($pdo, $user_id)
+{
+    return getActiveOrders($pdo, 'delivery', $user_id);
+}
+
+// Determine the user's role and ID
+$user_role = $_SESSION['role'] ?? '';
+$user_id = $_SESSION['user_id'] ?? 0;
+
 // Initialize variables
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 
-// Handle different actions using switch statement
+// Enforce role-based access control
+$allowed_actions_admin = ['view', 'update_status', 'delete', 'permanent_delete', 'restore', 'view_trash', 'view_details', 'update_status_form', 'customer_counts', 'manage_ratings', 'delete_rating', 'send_delay_notification'];
+$allowed_actions_delivery = ['view', 'view_details', 'update_status', 'send_delay_notification'];
+
+if ($user_role === 'admin') {
+    $allowed_actions = $allowed_actions_admin;
+} elseif ($user_role === 'delivery') {
+    $allowed_actions = $allowed_actions_delivery;
+} else {
+    // If role is not recognized, deny access
+    header('HTTP/1.1 403 Forbidden');
+    echo "<h1>403 Forbidden</h1><p>You do not have permission to access this page.</p>";
+    require_once 'includes/footer.php';
+    exit();
+}
+
+// Check if the requested action is allowed for the user's role
+if (!in_array($action, $allowed_actions)) {
+    header('HTTP/1.1 403 Forbidden');
+    echo "<h1>403 Forbidden</h1><p>You do not have permission to perform this action.</p>";
+    require_once 'includes/footer.php';
+    exit();
+}
+
+// Handle different actions
 switch ($action) {
     case 'update_status':
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
             $status_id = $_POST['status_id'] ?? 0;
-            $delivery_user_id = $_POST['delivery_user_id'] ?? null; // New field for delivery person
+            $delivery_user_id = $_POST['delivery_user_id'] ?? null;
+            $scheduled_date = $_POST['scheduled_date'] ?? null;
+            $scheduled_time = $_POST['scheduled_time'] ?? null;
+
+            // Validate scheduled date and time
+            if ($scheduled_date && $scheduled_time) {
+                $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
+                $current_datetime = new DateTime();
+                if (!$scheduled_datetime || $scheduled_datetime < $current_datetime) {
+                    $msg = 'Invalid scheduled date and time.';
+                    header('Location: orders.php?action=update_status_form&id=' . $id . '&message=' . urlencode($msg));
+                    exit();
+                }
+            }
 
             if ($status_id && is_numeric($status_id)) {
-                // Fetch new status
+                // Fetch the new status
                 $stmt = $pdo->prepare('SELECT status FROM order_statuses WHERE id = ?');
                 $stmt->execute([$status_id]);
                 $new_status = $stmt->fetchColumn();
-
                 if ($new_status) {
-                    // Fetch customer details
-                    $stmt = $pdo->prepare('SELECT customer_email, customer_name, delivery_address FROM orders WHERE id = ? AND deleted_at IS NULL');
+                    // Fetch order details including latitude and longitude
+                    $stmt = $pdo->prepare('SELECT customer_email, customer_name, delivery_address, latitude, longitude FROM orders WHERE id = ? AND deleted_at IS NULL');
                     $stmt->execute([$id]);
                     $order = $stmt->fetch(PDO::FETCH_ASSOC);
-
                     if ($order) {
-                        // Geocode address if not already done
-                        if (is_null($order['latitude']) || is_null($order['longitude'])) {
-                            updateOrderCoordinates($pdo, $id, $order['delivery_address']);
+                        // For delivery role, ensure they can only update to specific statuses
+                        if ($user_role === 'delivery') {
+                            // Define allowed statuses for delivery role
+                            $allowed_delivery_statuses = ['Delivered']; // Adjust as per your statuses
+                            if (!in_array($new_status, $allowed_delivery_statuses)) {
+                                $msg = 'You do not have permission to set this status.';
+                                header('Location: orders.php?action=view&message=' . urlencode($msg));
+                                exit();
+                            }
+                            // Ensure the order is assigned to the delivery user
+                            if ($order['delivery_address'] && $order['delivery_user_id'] != $user_id) {
+                                $msg = 'You are not assigned to this order.';
+                                header('Location: orders.php?action=view&message=' . urlencode($msg));
+                                exit();
+                            }
+                        }
 
-                            // Re-fetch the updated order details
+                        // Check if latitude or longitude is null
+                        if (is_null($order['latitude']) || is_null($order['longitude'])) {
+                            // Geocode the address and update coordinates
+                            updateOrderCoordinates($pdo, $id, $order['delivery_address']);
+                            // Re-fetch the updated order
                             $stmt->execute([$id]);
                             $order = $stmt->fetch(PDO::FETCH_ASSOC);
                         }
 
-                        // Update order status and assign delivery person
-                        $update = $pdo->prepare('UPDATE orders SET status_id = ?, delivery_user_id = ? WHERE id = ?');
-                        if ($update->execute([$status_id, $delivery_user_id ?: null, $id])) {
-                            // Insert into order_status_history
+                        // Update status, delivery user, scheduled_date, and scheduled_time
+                        $update = $pdo->prepare('UPDATE orders SET status_id = ?, delivery_user_id = ?, scheduled_date = ?, scheduled_time = ? WHERE id = ?');
+                        if ($update->execute([$status_id, $delivery_user_id ?: null, $scheduled_date, $scheduled_time, $id])) {
+                            // Insert into status history
                             $history = $pdo->prepare('INSERT INTO order_status_history (order_id, status_id, delivery_user_id) VALUES (?, ?, ?)');
                             $history->execute([$id, $status_id, $delivery_user_id ?: null]);
 
-                            // Send email notification to customer
-                            sendStatusUpdateEmail($order['customer_email'], $order['customer_name'], $id, $new_status);
+                            // Fetch updated order details for email
+                            $stmt = $pdo->prepare('SELECT customer_email, customer_name, delivery_address, delivery_user_id FROM orders WHERE id = ?');
+                            $stmt->execute([$id]);
+                            $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                            // Notify delivery person if assigned
-                            if ($delivery_user_id) {
-                                // Fetch delivery user details
+                            // Send emails
+                            sendStatusUpdateEmail($order['customer_email'], $order['customer_name'], $id, $new_status, $scheduled_date, $scheduled_time);
+
+                            if ($delivery_user_id && $user_role === 'admin') {
+                                // Only admin can notify delivery person
                                 $stmt = $pdo->prepare('SELECT email, username FROM users WHERE id = ?');
                                 $stmt->execute([$delivery_user_id]);
                                 $delivery_user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -223,6 +500,7 @@ switch ($action) {
                                 }
                             }
 
+                            // Redirect with success message
                             $msg = 'Order status updated successfully.';
                             header('Location: orders.php?action=view&message=' . urlencode($msg));
                             exit();
@@ -230,6 +508,8 @@ switch ($action) {
                     }
                 }
             }
+
+            // Redirect with failure message
             $msg = 'Failed to update status.';
             header('Location: orders.php?action=update_status_form&id=' . $id . '&message=' . urlencode($msg));
             exit();
@@ -237,72 +517,78 @@ switch ($action) {
         break;
 
     case 'delete':
-        if ($id > 0) {
-            // Move the order to Trash by updating the deleted_at field
+        if ($user_role === 'admin' && $id > 0) {
             $delete = $pdo->prepare('UPDATE orders SET deleted_at = NOW() WHERE id = ?');
             $success = $delete->execute([$id]);
-            $msg = $success ? 'Porosia është zhvendosur në Trash.' : 'Deshtoi zhvendosja e porosisë në Trash.';
+            $msg = $success ? 'Order has been moved to Trash.' : 'Failed to move the order to Trash.';
             header('Location: orders.php?action=view&message=' . urlencode($msg));
             exit();
         }
         break;
 
     case 'permanent_delete':
-        if ($id > 0) {
-            // Permanently delete the order from the database
+        if ($user_role === 'admin' && $id > 0) {
             $perm_delete = $pdo->prepare('DELETE FROM orders WHERE id = ?');
             $success = $perm_delete->execute([$id]);
-            $msg = $success ? 'Porosia është fshirë përfundimisht.' : 'Deshtoi fshirja përfundimtare e porosisë.';
+            $msg = $success ? 'Order has been permanently deleted.' : 'Failed to permanently delete the order.';
             header('Location: orders.php?action=view_trash&message=' . urlencode($msg));
             exit();
         }
         break;
 
     case 'restore':
-        if ($id > 0) {
-            // Restore the order by setting deleted_at to NULL
+        if ($user_role === 'admin' && $id > 0) {
             $restore = $pdo->prepare('UPDATE orders SET deleted_at = NULL WHERE id = ?');
             $success = $restore->execute([$id]);
-            $msg = $success ? 'Porosia është rikthyer.' : 'Deshtoi rikthimi i porosisë.';
+            $msg = $success ? 'Order has been restored.' : 'Failed to restore the order.';
             header('Location: orders.php?action=view_trash&message=' . urlencode($msg));
             exit();
         }
         break;
 
     case 'view_trash':
-        try {
-            // Fetch all deleted orders
-            $stmt = $pdo->prepare('
-                SELECT o.*, os.status, u.username AS delivery_username
-                FROM orders o
-                JOIN order_statuses os ON o.status_id = os.id
-                LEFT JOIN users u ON o.delivery_user_id = u.id
-                WHERE o.deleted_at IS NOT NULL
-                ORDER BY o.deleted_at DESC
-            ');
-            $stmt->execute();
-            $trash_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            $trash_orders = [];
-            $message = '<div class="alert alert-danger">Deshtoi marrja e porosive në Trash.</div>';
+        if ($user_role === 'admin') {
+            try {
+                $stmt = $pdo->prepare('
+                    SELECT o.*, os.status, u.username AS delivery_username 
+                    FROM orders o 
+                    JOIN order_statuses os ON o.status_id = os.id 
+                    LEFT JOIN users u ON o.delivery_user_id = u.id 
+                    WHERE o.deleted_at IS NOT NULL 
+                    ORDER BY o.deleted_at DESC
+                ');
+                $stmt->execute();
+                $trash_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                $trash_orders = [];
+                $message = '<div class="alert alert-danger">Failed to retrieve orders from Trash.</div>';
+            }
         }
         break;
 
     case 'view_details':
         if ($id > 0) {
             try {
-                // Fetch order details only if not in Trash
-                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ? AND o.deleted_at IS NULL');
+                // Fetch order details including latitude, longitude, and tip information
+                $stmt = $pdo->prepare('
+                    SELECT 
+                        o.*, 
+                        os.status, 
+                        t.name AS tip_name, 
+                        t.percentage AS tip_percentage, 
+                        t.amount AS tip_fixed_amount 
+                    FROM orders o 
+                    JOIN order_statuses os ON o.status_id = os.id 
+                    LEFT JOIN tips t ON o.tip_id = t.id 
+                    WHERE o.id = ? AND o.deleted_at IS NULL
+                ');
                 $stmt->execute([$id]);
                 $order = $stmt->fetch(PDO::FETCH_ASSOC);
-
                 if ($order) {
-                    // Check if latitude or longitude is missing
+                    // Geocode if necessary
                     if (is_null($order['latitude']) || is_null($order['longitude'])) {
-                        // Attempt to geocode the address
                         updateOrderCoordinates($pdo, $id, $order['delivery_address']);
-
-                        // Re-fetch the updated order details
+                        // Re-fetch the updated order
                         $stmt->execute([$id]);
                         $order = $stmt->fetch(PDO::FETCH_ASSOC);
                     }
@@ -344,12 +630,12 @@ switch ($action) {
                     // Fetch status history
                     $status_history = getOrderStatusHistory($pdo, $id);
                 } else {
-                    $message = '<div class="alert alert-warning">Porosia nuk ekziston ose është në Trash.</div>';
+                    $message = '<div class="alert alert-warning">The order does not exist or is in Trash.</div>';
                     require_once 'includes/footer.php';
                     exit();
                 }
             } catch (PDOException $e) {
-                $message = '<div class="alert alert-danger">Deshtoi marrja e detajeve të porosisë.</div>';
+                $message = '<div class="alert alert-danger">Failed to retrieve order details.</div>';
                 require_once 'includes/footer.php';
                 exit();
             }
@@ -359,27 +645,39 @@ switch ($action) {
     case 'update_status_form':
         if ($id > 0) {
             try {
-                // Fetch order details
-                $stmt = $pdo->prepare('SELECT o.*, os.status FROM orders o JOIN order_statuses os ON o.status_id = os.id WHERE o.id = ? AND o.deleted_at IS NULL');
+                // Fetch order details including latitude, longitude, and tip information
+                $stmt = $pdo->prepare('
+                    SELECT 
+                        o.*, 
+                        os.status, 
+                        t.name AS tip_name, 
+                        t.percentage AS tip_percentage, 
+                        t.amount AS tip_fixed_amount 
+                    FROM orders o 
+                    JOIN order_statuses os ON o.status_id = os.id 
+                    LEFT JOIN tips t ON o.tip_id = t.id 
+                    WHERE o.id = ? AND o.deleted_at IS NULL
+                ');
                 $stmt->execute([$id]);
                 $order = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($order) {
+                    // Fetch all possible statuses
+                    $statuses = getAllStatuses($pdo);
 
-                if (!$order) {
-                    $message = '<div class="alert alert-warning">Porosia nuk ekziston ose është në Trash.</div>';
+                    // Fetch active delivery users (only for admin)
+                    if ($user_role === 'admin') {
+                        $delivery_users = getDeliveryUsers($pdo);
+                    }
+
+                    // Capture any messages passed via GET
+                    $message = $_GET['message'] ?? '';
+                } else {
+                    $message = '<div class="alert alert-warning">The order does not exist or is in Trash.</div>';
                     require_once 'includes/footer.php';
                     exit();
                 }
-
-                // Fetch all statuses
-                $statuses = $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
-
-                // Fetch delivery users
-                $delivery_users = getDeliveryUsers($pdo);
-
-                // Fetch any messages
-                $message = $_GET['message'] ?? '';
             } catch (PDOException $e) {
-                $message = '<div class="alert alert-danger">Deshtoi marrja e të dhënave.</div>';
+                $message = '<div class="alert alert-danger">Failed to retrieve data.</div>';
                 require_once 'includes/footer.php';
                 exit();
             }
@@ -388,70 +686,97 @@ switch ($action) {
 
     case 'customer_counts':
         try {
-            // Fetch customer order counts excluding Trash
-            $customer_counts = $pdo->query('
+            $stmt = $pdo->prepare('
                 SELECT customer_name, customer_email, customer_phone, COUNT(*) AS order_count 
                 FROM orders 
-                WHERE deleted_at IS NULL
+                WHERE deleted_at IS NULL 
                 GROUP BY customer_email, customer_phone 
                 ORDER BY order_count DESC
-            ')->fetchAll(PDO::FETCH_ASSOC);
+            ');
+            $stmt->execute();
+            $customer_counts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $customer_counts = [];
-            $message = '<div class="alert alert-danger">Deshtoi marrja e numrave të porosive të klientëve.</div>';
+            $message = '<div class="alert alert-danger">Failed to retrieve customer order counts.</div>';
         }
         break;
 
     case 'manage_ratings':
-        try {
-            // Fetch all ratings
-            $stmt = $pdo->prepare('SELECT * FROM ratings ORDER BY created_at DESC');
-            $stmt->execute();
-            $ratings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            $ratings = [];
-            $message = '<div class="alert alert-danger">Deshtoi marrja e vlerësimeve.</div>';
+        if ($user_role === 'admin') {
+            try {
+                $stmt = $pdo->prepare('SELECT * FROM ratings ORDER BY created_at DESC');
+                $stmt->execute();
+                $ratings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                $ratings = [];
+                $message = '<div class="alert alert-danger">Failed to retrieve ratings.</div>';
+            }
         }
         break;
 
     case 'delete_rating':
-        if ($id > 0) {
-            // Delete rating
-            $delete = $pdo->prepare('DELETE FROM ratings WHERE id = ?');
-            $success = $delete->execute([$id]);
-            $msg = $success ? 'Vlerësimi është fshirë me sukses.' : 'Deshtoi fshirja e vlerësimit.';
-            header('Location: orders.php?action=manage_ratings&message=' . urlencode($msg));
-            exit();
+        if ($user_role === 'admin' && $id > 0) {
+            try {
+                $delete = $pdo->prepare('DELETE FROM ratings WHERE id = ?');
+                $success = $delete->execute([$id]);
+                $msg = $success ? 'Rating has been successfully deleted.' : 'Failed to delete the rating.';
+                header('Location: orders.php?action=manage_ratings&message=' . urlencode($msg));
+                exit();
+            } catch (PDOException $e) {
+                $msg = 'Failed to delete the rating.';
+                header('Location: orders.php?action=manage_ratings&message=' . urlencode($msg));
+                exit();
+            }
+        }
+        break;
+
+    case 'send_delay_notification':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
+            $additional_time = (int)($_POST['additional_time'] ?? 0);
+            if ($additional_time > 0) {
+                try {
+                    // Fetch order details
+                    $stmt = $pdo->prepare('SELECT customer_email, customer_name FROM orders WHERE id = ? AND deleted_at IS NULL');
+                    $stmt->execute([$id]);
+                    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($order) {
+                        // Send delay notification email
+                        sendDelayNotificationEmail($order['customer_email'], $order['customer_name'], $id, $additional_time);
+                        $msg = 'Delay notification has been sent successfully.';
+                        header('Location: orders.php?action=view&message=' . urlencode($msg));
+                        exit();
+                    } else {
+                        $msg = 'The order does not exist or is in Trash.';
+                        header('Location: orders.php?action=view&message=' . urlencode($msg));
+                        exit();
+                    }
+                } catch (PDOException $e) {
+                    $msg = 'Failed to send delay notification.';
+                    header('Location: orders.php?action=view&message=' . urlencode($msg));
+                    exit();
+                }
+            } else {
+                $msg = 'Please enter a valid additional time.';
+                header('Location: orders.php?action=view&message=' . urlencode($msg));
+                exit();
+            }
         }
         break;
 
     case 'view':
     default:
         try {
-            // Fetch all active orders with order_count using subquery and COALESCE to handle NULLs
-            $stmt = $pdo->prepare('
-                SELECT o.*, os.status, c.order_count, u.username AS delivery_username
-                FROM orders o
-                JOIN order_statuses os ON o.status_id = os.id
-                JOIN (
-                    SELECT 
-                        COALESCE(customer_email, "") AS customer_email, 
-                        COALESCE(customer_phone, "") AS customer_phone, 
-                        COUNT(*) AS order_count
-                    FROM orders
-                    WHERE deleted_at IS NULL
-                    GROUP BY customer_email, customer_phone
-                ) c 
-                ON (o.customer_email = c.customer_email OR o.customer_phone = c.customer_phone)
-                LEFT JOIN users u ON o.delivery_user_id = u.id
-                WHERE o.deleted_at IS NULL
-                ORDER BY os.id ASC, o.created_at DESC
-            ');
-            $stmt->execute();
-            $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Fetch all active orders based on user role
+            if ($user_role === 'admin') {
+                $orders = getAdminOrders($pdo);
+            } elseif ($user_role === 'delivery') {
+                $orders = getDeliveryOrdersForUser($pdo, $user_id);
+            } else {
+                $orders = [];
+            }
 
-            // Fetch all statuses
-            $statuses = $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+            // Fetch all possible statuses
+            $statuses = getAllStatuses($pdo);
 
             // Group orders by status
             $grouped_orders = [];
@@ -463,23 +788,17 @@ switch ($action) {
             }
         } catch (PDOException $e) {
             $grouped_orders = [];
-            $message = '<div class="alert alert-danger">Deshtoi marrja e porosive.</div>';
+            $message = '<div class="alert alert-danger">Failed to retrieve orders.</div>';
         }
         break;
 }
 
-// Fetch Ratings if Managing Ratings
-if ($action === 'manage_ratings') {
-    // Ratings have been fetched in the 'manage_ratings' case
-}
+// HTML Content Starts Here
 ?>
-
-<!-- Main Container -->
-<div class="container-fluid">
-
-    <!-- Display Messages -->
+<div class="container-fluid mt-4">
+    <!-- Display Success or Error Messages -->
     <?php if (isset($_GET['message'])): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <div class="alert alert-<?= (strpos($_GET['message'], 'successfully') !== false || strpos($_GET['message'], 'sukses') !== false || strpos($_GET['message'], 'suksesshëm') !== false) ? 'success' : 'danger' ?> alert-dismissible fade show" role="alert">
             <?= htmlspecialchars($_GET['message']) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
@@ -487,44 +806,52 @@ if ($action === 'manage_ratings') {
         <?= $message ?>
     <?php endif; ?>
 
+    <!-- Handle Different Actions -->
     <?php if ($action === 'view'): ?>
-        <!-- Orders Management Section -->
+        <!-- Orders View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Porositë</h2>
-            <div>
-                <a href="orders.php?action=customer_counts" class="btn btn-primary">
-                    <i class="fas fa-chart-bar"></i> Numrat e Porosive të Klientëve
-                </a>
-                <a href="orders.php?action=manage_ratings" class="btn btn-warning ms-2">
-                    <i class="fas fa-star"></i> Menaxho Vlerësimet
-                </a>
-                <a href="orders.php?action=view_trash" class="btn btn-danger ms-2">
-                    <i class="fas fa-trash"></i> Trash
-                </a>
-            </div>
+            <h2>Orders</h2>
+            <?php if ($user_role === 'admin'): ?>
+                <div>
+                    <a href="orders.php?action=customer_counts" class="btn btn-primary me-2">
+                        <i class="fas fa-chart-bar"></i> Customer Order Counts
+                    </a>
+                    <a href="orders.php?action=manage_ratings" class="btn btn-warning me-2">
+                        <i class="fas fa-star"></i> Manage Ratings
+                    </a>
+                    <a href="orders.php?action=view_trash" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Trash
+                    </a>
+                </div>
+            <?php endif; ?>
         </div>
 
         <?php foreach ($grouped_orders as $status => $orders): ?>
-            <div class="card mb-4">
-                <div class="card-header bg-secondary text-white">
-                    <i class="fas fa-tag"></i> <?= htmlspecialchars($status) ?> Porositë
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-tag"></i> <?= htmlspecialchars($status) ?> Orders</span>
+                    <span class="badge bg-primary"><?= count($orders) ?></span>
                 </div>
                 <div class="card-body">
                     <?php if (count($orders) > 0): ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-bordered data-table">
-                                <thead>
+                            <table class="table table-striped table-hover table-bordered data-table">
+                                <thead class="table-dark">
                                     <tr>
                                         <th>ID</th>
-                                        <th>Klienti</th>
+                                        <th>Customer Name</th>
                                         <th>Email</th>
-                                        <th>Telefoni</th>
-                                        <th>Adresë</th>
-                                        <th>Totali (€)</th>
-                                        <th>Krijuar Më</th>
-                                        <th>Numri i Porosive</th>
-                                        <th>Personi i Dërgesës</th>
-                                        <th>Veprime</th>
+                                        <th>Phone</th>
+                                        <th>Address</th>
+                                        <th>Total (€)</th>
+                                        <th>Tip</th>
+                                        <th>Tip Amount (€)</th>
+                                        <th>Scheduled Date</th>
+                                        <th>Scheduled Time</th>
+                                        <th>Created At</th>
+                                        <th>Order Count</th>
+                                        <th>Delivery Person</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -536,120 +863,175 @@ if ($action === 'manage_ratings') {
                                             <td><?= htmlspecialchars($order['customer_phone']) ?></td>
                                             <td><?= htmlspecialchars($order['delivery_address']) ?></td>
                                             <td><?= number_format($order['total_amount'], 2) ?>€</td>
+                                            <td>
+                                                <?php
+                                                if ($order['tip_name']) {
+                                                    $tip_details = $order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€';
+                                                    echo "<span class='badge bg-info' data-bs-toggle='tooltip' data-bs-placement='top' title='Selected Tip: {$tip_details}'>" . htmlspecialchars($order['tip_name']) . "</span>";
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </td>
+                                            <td>
+                                                <?php
+                                                if ($order['tip_amount'] > 0) {
+                                                    echo "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>";
+                                                } else {
+                                                    echo '0.00€';
+                                                }
+                                                ?>
+                                            </td>
+                                            <td><?= htmlspecialchars($order['scheduled_date'] ?? 'N/A') ?></td>
+                                            <td><?= htmlspecialchars($order['scheduled_time'] ?? 'N/A') ?></td>
                                             <td><?= htmlspecialchars($order['created_at']) ?></td>
                                             <td>
                                                 <?= htmlspecialchars($order['order_count']) ?>
                                                 <?php if ($order['order_count'] > 1): ?>
-                                                    <span class="badge bg-primary">Ripërsëritje</span>
+                                                    <span class="badge bg-primary">Repeat</span>
                                                 <?php endif; ?>
                                             </td>
+                                            <td><?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?></td>
                                             <td>
-                                                <?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?>
-                                            </td>
-                                            <td>
-                                                <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="Shiko">
+                                                <!-- Action Buttons -->
+                                                <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="View">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
-                                                <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Përditëso Statusin">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                                                <!-- Delete Button triggers Modal -->
-                                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Fshije">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </button>
 
-                                                <!-- Delete Confirmation Modal -->
-                                                <div class="modal fade" id="deleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
-                                                    <div class="modal-dialog modal-dialog-centered">
-                                                        <div class="modal-content">
-                                                            <div class="modal-header bg-danger text-white">
-                                                                <h5 class="modal-title" id="deleteModalLabel<?= $order['id'] ?>">Fshije Porosinë</h5>
-                                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                A jeni të sigurt që dëshironi të fshini këtë porosi?
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Jo</button>
-                                                                <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-danger">Po, fshije</a>
-                                                            </div>
+                                                <?php if ($user_role === 'admin' || ($user_role === 'delivery' && in_array($order['status'], ['Assigned', 'Processing']))) : ?>
+                                                    <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Update Status">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                <?php endif; ?>
+
+                                                <?php if ($user_role === 'admin'): ?>
+                                                    <button type="button" class="btn btn-sm btn-danger me-1" data-bs-toggle="modal" data-bs-target="#deleteModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Delete">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#delayNotificationModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Delay Notification">
+                                                        <i class="fas fa-clock"></i>
+                                                    </button>
+                                                <?php elseif ($user_role === 'delivery'): ?>
+                                                    <!-- Delivery users can mark as delivered -->
+                                                    <?php if ($order['status'] !== 'Delivered'): ?>
+                                                        <a href="orders.php?action=update_status&id=<?= $order['id'] ?>&status_id=<?= getDeliveredStatusId($pdo) ?>" class="btn btn-sm btn-success me-1" data-bs-toggle="tooltip" title="Mark as Delivered">
+                                                            <i class="fas fa-check-circle"></i>
+                                                        </a>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Delete Order Modal (Admin Only) -->
+                                        <?php if ($user_role === 'admin'): ?>
+                                            <div class="modal fade" id="deleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-danger text-white">
+                                                            <h5 class="modal-title" id="deleteModalLabel<?= $order['id'] ?>">Delete Order</h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            Are you sure you want to delete this order?
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                                                            <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-danger">Yes, Delete</a>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </td>
-                                        </tr>
+                                            </div>
+
+                                            <!-- Send Delay Notification Modal (Admin Only) -->
+                                            <div class="modal fade" id="delayNotificationModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="delayNotificationModalLabel<?= $order['id'] ?>" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-warning text-dark">
+                                                            <h5 class="modal-title" id="delayNotificationModalLabel<?= $order['id'] ?>">Send Delay Notification - Order #<?= $order['id'] ?></h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <form method="POST" action="orders.php?action=send_delay_notification&id=<?= $order['id'] ?>">
+                                                            <div class="modal-body">
+                                                                <div class="mb-3">
+                                                                    <label for="additional_time_<?= $order['id'] ?>" class="form-label">Additional Time (in hours)</label>
+                                                                    <input type="number" class="form-control" id="additional_time_<?= $order['id'] ?>" name="additional_time" min="1" required>
+                                                                </div>
+                                                                <p>Are you sure you want to send a delay notification for this order?</p>
+                                                            </div>
+                                                            <div class="modal-footer">
+                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                                                                <button type="submit" class="btn btn-warning">Yes, Send</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endif; ?>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
                     <?php else: ?>
-                        <p>Nuk ka porosi në këtë kategori.</p>
+                        <p>No orders in this category.</p>
                     <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
 
-    <?php elseif ($action === 'manage_ratings'): ?>
-        <!-- Manage Ratings Section -->
+    <?php elseif ($action === 'manage_ratings' && $user_role === 'admin'): ?>
+        <!-- Manage Ratings View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Menaxho Vlerësimet e Klientëve</h2>
+            <h2>Manage Customer Ratings</h2>
             <a href="orders.php?action=view" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu në Porositë
+                <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
         </div>
-
-        <?php if ($ratings): ?>
+        <?php if (isset($ratings) && count($ratings) > 0): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-bordered data-table">
-                    <thead>
+                <table class="table table-striped table-hover table-bordered data-table">
+                    <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Emri i Plotë</th>
+                            <th>Full Name</th>
                             <th>Email</th>
-                            <th>Telefoni</th>
-                            <th>Anonim</th>
-                            <th>Vlerësimi</th>
-                            <th>Komentet</th>
-                            <th>Paraqitur Më</th>
-                            <th>Veprime</th>
+                            <th>Phone</th>
+                            <th>Anonymous</th>
+                            <th>Rating</th>
+                            <th>Comments</th>
+                            <th>Submitted At</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($ratings as $rating): ?>
                             <tr>
                                 <td><?= htmlspecialchars($rating['id']) ?></td>
-                                <td><?= $rating['anonymous'] ? 'Anonim' : htmlspecialchars($rating['full_name']) ?></td>
+                                <td><?= $rating['anonymous'] ? 'Anonymous' : htmlspecialchars($rating['full_name']) ?></td>
                                 <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['email']) ?></td>
                                 <td><?= $rating['anonymous'] ? 'N/A' : htmlspecialchars($rating['phone'] ?? 'N/A') ?></td>
-                                <td>
-                                    <?= $rating['anonymous'] ?
-                                        '<span class="badge bg-secondary">Po</span>' :
-                                        '<span class="badge bg-success">Jo</span>'
-                                    ?>
-                                </td>
+                                <td><?= $rating['anonymous'] ? '<span class="badge bg-secondary">Yes</span>' : '<span class="badge bg-success">No</span>' ?></td>
                                 <td><?= str_repeat('⭐', $rating['rating']) ?></td>
-                                <td><?= htmlspecialchars($rating['comments'] ?? 'Pa komente') ?></td>
+                                <td><?= htmlspecialchars($rating['comments'] ?? 'No comments') ?></td>
                                 <td><?= htmlspecialchars($rating['created_at']) ?></td>
                                 <td>
-                                    <!-- Delete Rating Button triggers Modal -->
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteRatingModal<?= $rating['id'] ?>" data-bs-toggle="tooltip" title="Fshije">
+                                    <!-- Delete Rating Button -->
+                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteRatingModal<?= $rating['id'] ?>" data-bs-toggle="tooltip" title="Delete">
                                         <i class="fas fa-trash-alt"></i>
                                     </button>
-
-                                    <!-- Delete Rating Confirmation Modal -->
+                                    <!-- Delete Rating Modal -->
                                     <div class="modal fade" id="deleteRatingModal<?= $rating['id'] ?>" tabindex="-1" aria-labelledby="deleteRatingModalLabel<?= $rating['id'] ?>" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
                                                 <div class="modal-header bg-danger text-white">
-                                                    <h5 class="modal-title" id="deleteRatingModalLabel<?= $rating['id'] ?>">Fshije Vlerësimin</h5>
+                                                    <h5 class="modal-title" id="deleteRatingModalLabel<?= $rating['id'] ?>">Delete Rating</h5>
                                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
                                                 <div class="modal-body">
-                                                    A jeni të sigurt që dëshironi të fshini këtë vlerësim?
+                                                    Are you sure you want to delete this rating?
                                                 </div>
                                                 <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Jo</button>
-                                                    <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-danger">Po, fshije</a>
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                                                    <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-danger">Yes, Delete</a>
                                                 </div>
                                             </div>
                                         </div>
@@ -661,66 +1043,93 @@ if ($action === 'manage_ratings') {
                 </table>
             </div>
         <?php else: ?>
-            <p>Nuk ka vlerësime të paraqitura ende.</p>
+            <p>No ratings submitted yet.</p>
         <?php endif; ?>
+
     <?php elseif ($action === 'view_details' && $id > 0): ?>
-        <!-- Order Details Section -->
+        <!-- View Order Details -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Detajet e Porosisë - ID: <?= htmlspecialchars($order['id']) ?></h2>
+            <h2>Order Details - ID: <?= htmlspecialchars($order['id']) ?></h2>
             <a href="orders.php?action=view" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu në Porositë
+                <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
         </div>
-
         <!-- Order Information Card -->
-        <div class="card mb-4">
-            <div class="card-header bg-info text-white">
-                <i class="fas fa-info-circle"></i> Informacione të Porosisë
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-info-circle"></i> Order Information</span>
+                <span class="badge bg-primary"><?= htmlspecialchars($order['status']) ?></span>
             </div>
             <div class="card-body">
                 <div class="row">
-                    <!-- Left Column -->
+                    <!-- Customer Information -->
                     <div class="col-md-6">
-                        <p><strong>Emri i Klientit:</strong> <?= htmlspecialchars($order['customer_name']) ?></p>
+                        <p><strong>Customer Name:</strong> <?= htmlspecialchars($order['customer_name']) ?></p>
                         <p><strong>Email:</strong> <?= htmlspecialchars($order['customer_email']) ?></p>
-                        <p><strong>Telefoni:</strong> <?= htmlspecialchars($order['customer_phone']) ?></p>
-                        <p><strong>Adresa:</strong> <?= nl2br(htmlspecialchars($order['delivery_address'])) ?></p>
+                        <p><strong>Phone:</strong> <?= htmlspecialchars($order['customer_phone']) ?></p>
+                        <p><strong>Address:</strong> <?= nl2br(htmlspecialchars($order['delivery_address'])) ?></p>
                     </div>
-                    <!-- Right Column -->
+                    <!-- Order Details -->
                     <div class="col-md-6">
-                        <p><strong>Shuma Totale:</strong> <?= number_format($order['total_amount'], 2) ?>€</p>
-                        <p><strong>Statusi:</strong> <?= htmlspecialchars($order['status']) ?></p>
-                        <p><strong>Krijuar Më:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
-                        <?php if ($order['delivery_user_id']):
-                            // Fetch delivery user details
+                        <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?>€</p>
+                        <p><strong>Status:</strong> <?= htmlspecialchars($order['status']) ?></p>
+                        <p><strong>Tip:</strong>
+                            <?php
+                            if ($order['tip_name']) {
+                                $tip_details = $order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€';
+                                echo "<span class='badge bg-info' data-bs-toggle='tooltip' data-bs-placement='top' title='Selected Tip: {$tip_details}'>" . htmlspecialchars($order['tip_name']) . "</span>";
+                            } else {
+                                echo 'N/A';
+                            }
+                            ?>
+                        </p>
+                        <p><strong>Tip Amount:</strong>
+                            <?php
+                            if ($order['tip_amount'] > 0) {
+                                echo "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>";
+                            } else {
+                                echo '0.00€';
+                            }
+                            ?>
+                        </p>
+                        <p><strong>Created At:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
+                        <?php if ($order['delivery_user_id']): ?>
+                            <?php
                             $stmt = $pdo->prepare('SELECT username, email FROM users WHERE id = ?');
                             $stmt->execute([$order['delivery_user_id']]);
                             $delivery_user = $stmt->fetch(PDO::FETCH_ASSOC);
-                        ?>
-                            <p><strong>Personi i Dërgesës:</strong> <?= htmlspecialchars($delivery_user['username']) ?> (<?= htmlspecialchars($delivery_user['email']) ?>)</p>
+                            ?>
+                            <p><strong>Delivery Person:</strong> <?= htmlspecialchars($delivery_user['username']) ?> (<?= htmlspecialchars($delivery_user['email']) ?>)</p>
+                        <?php endif; ?>
+                        <!-- Scheduled Date and Time -->
+                        <?php if ($order['scheduled_date'] || $order['scheduled_time']): ?>
+                            <p><strong>Scheduled Delivery:</strong>
+                                <?= htmlspecialchars($order['scheduled_date'] ?? 'N/A') ?>
+                                <?= htmlspecialchars($order['scheduled_time'] ?? '') ?>
+                            </p>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Order Items Section -->
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white">
-                <i class="fas fa-boxes"></i> Pajisjet e Porosisë
+        <!-- Order Items Card -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-boxes"></i> Order Items</span>
+                <span class="badge bg-primary"><?= count($items) ?> Item<?= count($items) > 1 ? 's' : '' ?></span>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped table-bordered">
-                        <thead>
+                    <table class="table table-striped table-hover table-bordered">
+                        <thead class="table-dark">
                             <tr>
-                                <th>Produkti</th>
-                                <th>Madhësia</th>
-                                <th>Shuma</th>
-                                <th>Çmimi (€)</th>
+                                <th>Product</th>
+                                <th>Size</th>
+                                <th>Quantity</th>
+                                <th>Price (€)</th>
                                 <th>Extras</th>
-                                <th>Pijes</th>
-                                <th>Udhëzime Speciale</th>
+                                <th>Drinks</th>
+                                <th>Special Instructions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -754,57 +1163,75 @@ if ($action === 'manage_ratings') {
                         </tbody>
                     </table>
                 </div>
+                <!-- Tip Summary -->
+                <div class="mt-3">
+                    <h5>Selected Tip</h5>
+                    <p>
+                        <strong>Tip:</strong>
+                        <?php
+                        if ($order['tip_name']) {
+                            $tip_details = $order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€';
+                            echo "<span class='badge bg-info' data-bs-toggle='tooltip' data-bs-placement='top' title='Selected Tip: {$tip_details}'>" . htmlspecialchars($order['tip_name']) . "</span>";
+                        } else {
+                            echo 'N/A';
+                        }
+                        ?>
+                        <br>
+                        <strong>Tip Amount:</strong>
+                        <?php
+                        if ($order['tip_amount'] > 0) {
+                            echo "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>";
+                        } else {
+                            echo '0.00€';
+                        }
+                        ?>
+                    </p>
+                </div>
             </div>
         </div>
-
-        <!-- Map Section -->
-        <?php if (isset($order['latitude'], $order['longitude']) && $order['latitude'] && $order['longitude']): ?>
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <i class="fas fa-map-marker-alt"></i> Adresa e Dërgesës
+        <!-- Delivery Address Map Card -->
+        <?php if (!empty($order['latitude']) && !empty($order['longitude'])): ?>
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-map-marker-alt"></i> Delivery Address</span>
                 </div>
                 <div class="card-body">
                     <div id="map" style="height: 400px;"></div>
                 </div>
             </div>
-
+            <!-- Leaflet Map Script -->
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    // Initialize the map
                     var map = L.map('map').setView([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>], 15);
-
-                    // Set up the OpenStreetMap tiles
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 19,
                         attribution: '© OpenStreetMap'
                     }).addTo(map);
-
-                    // Add a marker for the delivery address
-                    L.marker([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>]).addTo(map)
-                        .bindPopup("<b>Adresa e Dërgesës</b><br><?= htmlspecialchars($order['delivery_address']) ?>")
+                    L.marker([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>])
+                        .addTo(map)
+                        .bindPopup("<b>Delivery Address</b><br><?= htmlspecialchars($order['delivery_address']) ?>")
                         .openPopup();
                 });
             </script>
         <?php else: ?>
-            <div class="alert alert-warning">
-                Adresa e dërgesës nuk është përcaktuar ose nuk mund të gjejë koordinatat.
-            </div>
+            <div class="alert alert-warning">The delivery address is not set or could not be geocoded.</div>
         <?php endif; ?>
-
-        <!-- Status History Section -->
-        <div class="card mb-4">
-            <div class="card-header bg-dark text-white">
-                <i class="fas fa-history"></i> Historia e Statusit të Porosisë
+        <!-- Order Status History Card -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-history"></i> Order Status History</span>
+                <span class="badge bg-primary"><?= count($status_history) ?> Changes</span>
             </div>
             <div class="card-body">
-                <?php if ($status_history): ?>
+                <?php if (isset($status_history) && count($status_history) > 0): ?>
                     <div class="table-responsive">
-                        <table class="table table-striped table-bordered data-table">
-                            <thead>
+                        <table class="table table-striped table-hover table-bordered data-table">
+                            <thead class="table-dark">
                                 <tr>
-                                    <th>Statusi</th>
-                                    <th>Personi i Dërgesës</th>
-                                    <th>Ndryshuar Më</th>
+                                    <th>Status</th>
+                                    <th>Delivery Person</th>
+                                    <th>Changed At</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -812,10 +1239,7 @@ if ($action === 'manage_ratings') {
                                     <tr>
                                         <td><?= htmlspecialchars($history['status']) ?></td>
                                         <td>
-                                            <?= $history['delivery_username'] ?
-                                                htmlspecialchars($history['delivery_username']) . ' (' . htmlspecialchars($history['delivery_email']) . ')' :
-                                                'N/A'
-                                            ?>
+                                            <?= $history['delivery_username'] ? htmlspecialchars($history['delivery_username']) . ' (' . htmlspecialchars($history['delivery_email']) . ')' : 'N/A' ?>
                                         </td>
                                         <td><?= htmlspecialchars($history['changed_at']) ?></td>
                                     </tr>
@@ -824,79 +1248,93 @@ if ($action === 'manage_ratings') {
                         </table>
                     </div>
                 <?php else: ?>
-                    <p>Asnjë histori statusi nuk është regjistruar.</p>
+                    <p>No status history recorded.</p>
                 <?php endif; ?>
             </div>
         </div>
 
     <?php elseif ($action === 'update_status_form' && $id > 0): ?>
-        <!-- Update Status Form Section -->
+        <!-- Update Order Status Form -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Update Status Porosisë - ID: <?= htmlspecialchars($order['id']) ?></h2>
+            <h2>Update Order Status - ID: <?= htmlspecialchars($order['id']) ?></h2>
             <a href="orders.php?action=view" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu në Porositë
+                <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
         </div>
-
-        <?php if ($message): ?>
-            <div class="alert alert-danger">
-                <?= htmlspecialchars($message) ?>
-            </div>
+        <?php if (!empty($message)): ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
-
-        <div class="card">
+        <div class="card shadow-sm">
             <div class="card-body">
                 <form method="POST" action="orders.php?action=update_status&id=<?= $id ?>">
                     <div class="mb-3">
-                        <label for="status_id" class="form-label">Zgjidh Statusin e Ri</label>
+                        <label for="status_id" class="form-label">Select New Status</label>
                         <select class="form-select" id="status_id" name="status_id" required>
                             <?php foreach ($statuses as $status_option): ?>
+                                <?php
+                                // For delivery users, restrict available statuses
+                                if ($user_role === 'delivery') {
+                                    $allowed_statuses_delivery = ['Delivered']; // Adjust based on your status names
+                                    if (!in_array($status_option['status'], $allowed_statuses_delivery)) {
+                                        continue;
+                                    }
+                                }
+                                ?>
                                 <option value="<?= htmlspecialchars($status_option['id']) ?>" <?= ($order['status_id'] == $status_option['id']) ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($status_option['status']) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <?php if ($user_role === 'admin'): ?>
+                        <div class="mb-3">
+                            <label for="delivery_user_id" class="form-label">Assign Delivery Person</label>
+                            <select class="form-select" id="delivery_user_id" name="delivery_user_id">
+                                <option value="">-- Select Delivery Person --</option>
+                                <?php foreach ($delivery_users as $user): ?>
+                                    <option value="<?= htmlspecialchars($user['id']) ?>" <?= ($order['delivery_user_id'] == $user['id']) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($user['username']) ?> (<?= htmlspecialchars($user['email']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Optional for certain statuses.</div>
+                        </div>
+                    <?php endif; ?>
                     <div class="mb-3">
-                        <label for="delivery_user_id" class="form-label">Zgjidh Personin e Dërgesës</label>
-                        <select class="form-select" id="delivery_user_id" name="delivery_user_id">
-                            <option value="">-- Zgjidh Personin e Dërgesës --</option>
-                            <?php foreach ($delivery_users as $user): ?>
-                                <option value="<?= htmlspecialchars($user['id']) ?>" <?= ($order['delivery_user_id'] == $user['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($user['username']) ?> (<?= htmlspecialchars($user['email']) ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div class="form-text">Opsionale për disa statuse.</div>
+                        <label for="scheduled_date" class="form-label">Scheduled Delivery Date</label>
+                        <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" value="<?= htmlspecialchars($order['scheduled_date'] ?? '') ?>" required min="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label for="scheduled_time" class="form-label">Scheduled Delivery Time</label>
+                        <input type="time" class="form-control" id="scheduled_time" name="scheduled_time" value="<?= htmlspecialchars($order['scheduled_time'] ?? '') ?>" required>
                     </div>
                     <button type="submit" class="btn btn-success">
-                        <i class="fas fa-check-circle"></i> Përditëso Statusin
+                        <i class="fas fa-check-circle"></i> Update Status
                     </button>
                     <a href="orders.php?action=view" class="btn btn-secondary">
-                        <i class="fas fa-times-circle"></i> Anulo
+                        <i class="fas fa-times-circle"></i> Cancel
                     </a>
                 </form>
             </div>
         </div>
 
-    <?php elseif ($action === 'customer_counts'): ?>
-        <!-- Customer Counts Section -->
+    <?php elseif ($action === 'customer_counts' && $user_role === 'admin'): ?>
+        <!-- Customer Order Counts View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Numrat e Porosive të Klientëve</h2>
+            <h2>Customer Order Counts</h2>
             <a href="orders.php?action=view" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu në Porositë
+                <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
         </div>
-
-        <?php if ($customer_counts): ?>
+        <?php if (isset($customer_counts) && count($customer_counts) > 0): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-bordered data-table">
-                    <thead>
+                <table class="table table-striped table-hover table-bordered data-table">
+                    <thead class="table-dark">
                         <tr>
-                            <th>Emri i Klientit</th>
+                            <th>Customer Name</th>
                             <th>Email</th>
-                            <th>Telefoni</th>
-                            <th>Numri Total i Porosive</th>
+                            <th>Phone</th>
+                            <th>Total Orders</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -912,33 +1350,32 @@ if ($action === 'manage_ratings') {
                 </table>
             </div>
         <?php else: ?>
-            <p>Nuk ka porosi të regjistruara për klientët.</p>
+            <p>No orders recorded for customers.</p>
         <?php endif; ?>
 
-    <?php elseif ($action === 'view_trash'): ?>
-        <!-- Trash Management Section -->
+    <?php elseif ($action === 'view_trash' && $user_role === 'admin'): ?>
+        <!-- Trash Orders View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Trash - Porositë e Fshira</h2>
+            <h2>Trash - Deleted Orders</h2>
             <a href="orders.php?action=view" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu në Porositë
+                <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
         </div>
-
-        <?php if ($trash_orders): ?>
+        <?php if (isset($trash_orders) && count($trash_orders) > 0): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-bordered data-table">
-                    <thead>
+                <table class="table table-striped table-hover table-bordered data-table">
+                    <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Emri i Klientit</th>
+                            <th>Customer Name</th>
                             <th>Email</th>
-                            <th>Telefoni</th>
-                            <th>Adresë</th>
-                            <th>Shuma Totale (€)</th>
-                            <th>Fshihet Më</th>
-                            <th>Statusi</th>
-                            <th>Personi i Dërgesës</th>
-                            <th>Veprime</th>
+                            <th>Phone</th>
+                            <th>Address</th>
+                            <th>Total (€)</th>
+                            <th>Deleted At</th>
+                            <th>Status</th>
+                            <th>Delivery Person</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -952,85 +1389,86 @@ if ($action === 'manage_ratings') {
                                 <td><?= number_format($order['total_amount'], 2) ?>€</td>
                                 <td><?= htmlspecialchars($order['deleted_at']) ?></td>
                                 <td><?= htmlspecialchars($order['status']) ?></td>
+                                <td><?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?></td>
                                 <td>
-                                    <?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?>
-                                </td>
-                                <td>
-                                    <!-- Restore Button triggers Modal -->
-                                    <button type="button" class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#restoreModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Rikthe">
+                                    <!-- Restore Order Button -->
+                                    <button type="button" class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#restoreModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Restore">
                                         <i class="fas fa-undo"></i>
                                     </button>
-                                    <!-- Permanent Delete Button triggers Modal -->
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#permanentDeleteModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Fshije Përfundimisht">
+                                    <!-- Permanently Delete Order Button -->
+                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#permanentDeleteModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Permanently Delete">
                                         <i class="fas fa-trash-alt"></i>
                                     </button>
-
-                                    <!-- Restore Confirmation Modal -->
-                                    <div class="modal fade" id="restoreModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="restoreModalLabel<?= $order['id'] ?>" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content">
-                                                <div class="modal-header bg-success text-white">
-                                                    <h5 class="modal-title" id="restoreModalLabel<?= $order['id'] ?>">Rikthe Porosinë</h5>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    A jeni të sigurt që dëshironi të riktheni këtë porosi?
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Jo</button>
-                                                    <a href="orders.php?action=restore&id=<?= $order['id'] ?>" class="btn btn-success">Po, rikthe</a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Permanent Delete Confirmation Modal -->
-                                    <div class="modal fade" id="permanentDeleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="permanentDeleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content">
-                                                <div class="modal-header bg-danger text-white">
-                                                    <h5 class="modal-title" id="permanentDeleteModalLabel<?= $order['id'] ?>">Fshije Porosinë Përfundimisht</h5>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    A jeni të sigurt që dëshironi të fshini këtë porosi përfundimisht? Kjo nuk mund të rikthehet.
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Jo</button>
-                                                    <a href="orders.php?action=permanent_delete&id=<?= $order['id'] ?>" class="btn btn-danger">Po, fshije</a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </td>
                             </tr>
+
+                            <!-- Restore Order Modal -->
+                            <div class="modal fade" id="restoreModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="restoreModalLabel<?= $order['id'] ?>" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-success text-white">
+                                            <h5 class="modal-title" id="restoreModalLabel<?= $order['id'] ?>">Restore Order</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            Are you sure you want to restore this order?
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                                            <a href="orders.php?action=restore&id=<?= $order['id'] ?>" class="btn btn-success">Yes, Restore</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Permanently Delete Order Modal -->
+                            <div class="modal fade" id="permanentDeleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="permanentDeleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title" id="permanentDeleteModalLabel<?= $order['id'] ?>">Permanently Delete Order</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            Are you sure you want to permanently delete this order? This action cannot be undone.
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                                            <a href="orders.php?action=permanent_delete&id=<?= $order['id'] ?>" class="btn btn-danger">Yes, Delete</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
         <?php else: ?>
-            <p>Trash është bosh.</p>
+            <p>Trash is empty.</p>
         <?php endif; ?>
 
     <?php endif; ?>
-
 </div>
 
-<?php if ($action === 'view_details' && $id > 0): ?>
-    <!-- Order Details Section Continued -->
-    <?php if (isset($order['latitude'], $order['longitude']) && $order['latitude'] && $order['longitude']): ?>
-        <!-- Map Initialization Script -->
-        <!-- Leaflet.js JS is already included in the head -->
-    <?php endif; ?>
+<?php
+// Leaflet CSS for map if viewing order details
+if ($action === 'view_details' && $id > 0): ?>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <?php endif; ?>
 
-<!-- DataTables Initialization and Bootstrap Tooltips -->
+<!-- Initialize DataTables and Tooltips -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     $(document).ready(function() {
         // Initialize DataTables
         $('.data-table').DataTable({
             "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/algerian.json" // Adjust language as needed
+                "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/English.json" // Adjust language as needed
             },
             "paging": true,
             "searching": true,
@@ -1038,12 +1476,22 @@ if ($action === 'manage_ratings') {
             "responsive": true
         });
 
-        // Initialize Bootstrap Tooltips
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        // Initialize Bootstrap tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
+            return new bootstrap.Tooltip(tooltipTriggerEl);
         });
     });
 </script>
 
-<?php require_once 'includes/footer.php'; ?>
+<?php
+// Function to get the status ID for 'Delivered' status (used by delivery users)
+function getDeliveredStatusId($pdo)
+{
+    $stmt = $pdo->prepare("SELECT id FROM order_statuses WHERE status = 'Delivered' LIMIT 1");
+    $stmt->execute();
+    return $stmt->fetchColumn();
+}
+
+require_once 'includes/footer.php';
+?>
