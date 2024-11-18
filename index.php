@@ -1,4 +1,6 @@
 <?php
+require 'vendor/autoload.php'; // Ensure Composer's autoload is included
+\Stripe\Stripe::setApiKey('sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2'); // Replace with your actual Stripe secret key
 session_start();
 require 'db.php';
 // Enable error reporting for debugging (disable in production)
@@ -400,6 +402,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     // Retrieve the scheduled date and time
     $scheduled_date = $_POST['scheduled_date'];
     $scheduled_time = $_POST['scheduled_time'];
+    // Retrieve payment method
+    $payment_method = $_POST['payment_method'] ?? '';
+    // Validate payment method
+    $allowed_payment_methods = ['stripe', 'pickup', 'cash'];
+    if (!in_array($payment_method, $allowed_payment_methods)) {
+        header("Location: index.php?error=invalid_payment_method");
+        exit;
+    }
     // Validate scheduled date and time
     $scheduled_datetime = new DateTime("$scheduled_date $scheduled_time");
     $current_datetime = new DateTime();
@@ -434,8 +444,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         // Begin transaction
         $pdo->beginTransaction();
         // Insert into orders table
-        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time]);
+        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method]);
         $order_id = $pdo->lastInsertId();
         // Prepare statements for order items, extras, and drinks
         $stmt_item = $pdo->prepare("INSERT INTO order_items (order_id, product_id, size_id, quantity, price, extras, special_instructions) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -482,6 +492,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         }
         // Commit transaction
         $pdo->commit();
+        if ($payment_method === 'stripe') {
+            // Retrieve the Payment Method ID from POST data
+            $stripe_payment_method = $_POST['stripe_payment_method'] ?? '';
+
+            if (!$stripe_payment_method) {
+                throw new Exception("Stripe payment method ID is missing.");
+            }
+
+            // Calculate the amount in cents
+            $amount_cents = intval(round($total_amount * 100));
+
+            // Create a PaymentIntent with Stripe
+            $payment_intent = \Stripe\PaymentIntent::create([
+                'amount' => $amount_cents,
+                'currency' => 'eur', // Change to your currency
+                'payment_method' => $stripe_payment_method,
+                'confirmation_method' => 'manual',
+                'confirm' => true,
+                'description' => "Order ID: $order_id",
+                'metadata' => [
+                    'order_id' => $order_id
+                ],
+            ]);
+
+            // Handle Payment Intent status
+            if ($payment_intent->status == 'requires_action' && $payment_intent->next_action->type == 'use_stripe_sdk') {
+                // Tell the client to handle the action
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'requires_action' => true,
+                    'payment_intent_client_secret' => $payment_intent->client_secret
+                ]);
+                exit;
+            } elseif ($payment_intent->status == 'succeeded') {
+                // The payment is complete, update order status to 'paid'
+                $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
+                $stmt->execute([5, $order_id]); // Assuming status_id 5 is 'Paid'
+            } else {
+                // Invalid status
+                throw new Exception("Invalid PaymentIntent status: " . $payment_intent->status);
+            }
+        }
+        if ($payment_method === 'pickup') {
+            // Set order status to 'Ready for Pickup'
+            $new_status_id = 3; // Example: 3 represents 'Ready for Pickup'
+            $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
+            $stmt->execute([$new_status_id, $order_id]);
+        } elseif ($payment_method === 'cash') {
+            // Set order status to 'Pending Cash Payment'
+            $new_status_id = 4; // Example: 4 represents 'Pending Cash Payment'
+            $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
+            $stmt->execute([$new_status_id, $order_id]);
+        }
+
         // Clear cart and selected tip
         $_SESSION['cart'] = [];
         $_SESSION['selected_tip'] = null;
@@ -621,6 +685,7 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -650,40 +715,49 @@ try {
             justify-content: center;
             align-items: center;
         }
+
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
+
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
+
         .offers-section .card-title {
             font-size: 1.25rem;
             font-weight: 600;
         }
+
         .offers-section .card-text {
             font-size: 0.95rem;
             color: #555;
         }
+
         @media (max-width: 768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
+
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
+
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
+
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
+
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -691,11 +765,14 @@ try {
             position: sticky;
             top: 20px;
         }
+
         .order-title {
             margin-bottom: 15px;
         }
     </style>
+    <script src="https://js.stripe.com/v3/"></script>
 </head>
+
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
@@ -1201,7 +1278,7 @@ try {
     <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
-                <form method="POST" action="index.php">
+                <form method="POST" action="index.php" id="checkoutForm">
                     <div class="modal-header">
                         <h5 class="modal-title" id="checkoutModalLabel">Checkout</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1248,6 +1325,36 @@ try {
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <!-- Payment Method Selection -->
+                        <div class="mb-3">
+                            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+                            <div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentStripe" value="stripe" required>
+                                    <label class="form-check-label" for="paymentStripe">
+                                        Stripe (Online Payment)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentPickup" value="pickup" required>
+                                    <label class="form-check-label" for="paymentPickup">
+                                        Pick-Up (Pay on Collection)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentCash" value="cash" required>
+                                    <label class="form-check-label" for="paymentCash">
+                                        Cash on Delivery
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Stripe Payment Elements (Hidden by Default) -->
+                        <div id="stripe-payment-section" class="mb-3" style="display: none;">
+                            <label class="form-label">Credit or Debit Card</label>
+                            <div id="card-element"><!-- A Stripe Element will be inserted here. --></div>
+                            <div id="card-errors" role="alert" class="text-danger mt-2"></div>
+                        </div>
                         <h5>Order Summary</h5>
                         <ul class="list-group mb-3">
                             <?php foreach ($_SESSION['cart'] as $item): ?>
@@ -1275,6 +1382,13 @@ try {
     </div>
     <!-- Order Success Modal -->
     <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
+        <?php
+        // Fetch the last order to get payment method
+        $stmt = $pdo->prepare("SELECT payment_method FROM orders WHERE id = (SELECT MAX(id) FROM orders)");
+        $stmt->execute();
+        $last_order = $stmt->fetch(PDO::FETCH_ASSOC);
+        $payment_method = $last_order['payment_method'] ?? 'cash';
+        ?>
         <div class="modal fade show" tabindex="-1" style="display: block;" aria-modal="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
@@ -1283,7 +1397,17 @@ try {
                         <a href="index.php" class="btn-close" aria-label="Close"></a>
                     </div>
                     <div class="modal-body">
-                        <p>Your order has been placed successfully. It will be delivered on <strong><?= htmlspecialchars($_GET['scheduled_date']) ?></strong> at <strong><?= htmlspecialchars($_GET['scheduled_time']) ?></strong>.</p>
+                        <p>Your order has been placed successfully.</p>
+                        <p>
+                            <?php if ($payment_method === 'stripe'): ?>
+                                <strong>Payment Method:</strong> Online Payment via Stripe.
+                            <?php elseif ($payment_method === 'pickup'): ?>
+                                <strong>Payment Method:</strong> Pay on Collection.
+                            <?php elseif ($payment_method === 'cash'): ?>
+                                <strong>Payment Method:</strong> Cash on Delivery.
+                            <?php endif; ?>
+                        </p>
+                        <p>It will be delivered on <strong><?= htmlspecialchars($_GET['scheduled_date']) ?></strong> at <strong><?= htmlspecialchars($_GET['scheduled_time']) ?></strong>.</p>
                     </div>
                     <div class="modal-footer">
                         <a href="index.php" class="btn btn-primary">Close</a>
@@ -1292,6 +1416,7 @@ try {
             </div>
         </div>
     <?php endif; ?>
+
     <!-- Toast Notifications -->
     <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
         <div class="toast-container position-fixed bottom-0 end-0 p-3">
@@ -1646,6 +1771,7 @@ try {
             <?php endif; ?>
             // Handle Store Closed Status
             let storeClosedModalInstance = null;
+
             function checkStoreStatus() {
                 $.getJSON('check_store_status.php', function(data) {
                     if (data.is_closed) {
@@ -1679,5 +1805,65 @@ try {
             setInterval(checkStoreStatus, 60000); // Check every 60 seconds
         });
     </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const paymentStripe = document.getElementById('paymentStripe');
+            const paymentPickup = document.getElementById('paymentPickup');
+            const paymentCash = document.getElementById('paymentCash');
+            const stripePaymentSection = document.getElementById('stripe-payment-section');
+            const checkoutForm = document.getElementById('checkoutForm');
+            const submitButton = checkoutForm.querySelector('button[type="submit"]');
+            // Initialize Stripe
+            const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym  '); // Replace with your Stripe publishable key
+            const elements = stripe.elements();
+            const cardElement = elements.create('card');
+            cardElement.mount('#card-element');
+            // Handle payment method change
+            const paymentMethods = document.getElementsByName('payment_method');
+            paymentMethods.forEach(function(method) {
+                method.addEventListener('change', function() {
+                    if (paymentStripe.checked) {
+                        stripePaymentSection.style.display = 'block';
+                    } else {
+                        stripePaymentSection.style.display = 'none';
+                    }
+                });
+            });
+            // Handle form submission
+            checkoutForm.addEventListener('submit', function(e) {
+                if (paymentStripe.checked) {
+                    e.preventDefault();
+                    submitButton.disabled = true;
+                    stripe.createPaymentMethod({
+                        type: 'card',
+                        card: cardElement,
+                        billing_details: {
+                            name: document.getElementById('customer_name').value,
+                            email: document.getElementById('customer_email').value,
+                            phone: document.getElementById('customer_phone').value,
+                            address: {
+                                line1: document.getElementById('delivery_address').value
+                            }
+                        }
+                    }).then(function(result) {
+                        if (result.error) {
+                            // Display error in #card-errors
+                            document.getElementById('card-errors').textContent = result.error.message;
+                            submitButton.disabled = false;
+                        } else {
+                            // Append payment_method ID to the form and submit
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.setAttribute('type', 'hidden');
+                            hiddenInput.setAttribute('name', 'stripe_payment_method');
+                            hiddenInput.setAttribute('value', result.paymentMethod.id);
+                            checkoutForm.appendChild(hiddenInput);
+                            checkoutForm.submit();
+                        }
+                    });
+                }
+            });
+        });
+    </script>
 </body>
+
 </html>

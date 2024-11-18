@@ -1,27 +1,26 @@
 <?php
-// db.php
+// config.php
 
-$host = 'localhost';         // Your database host
-$db   = 'dbfood';            // Your database name
-$user = 'root';              // Your database username
-$pass = '';                  // Your database password
+// Load environment variables (you can use libraries like vlucas/phpdotenv)
+$stripe_secret_key = getenv('sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2');
+$stripe_publishable_key = getenv('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym');
+
+// Database configuration
+$host = 'localhost';
+$db   = 'dbfood';
+$user = 'root';
+$pass = '';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Enable exceptions
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // Fetch associative arrays
-    PDO::ATTR_EMULATE_PREPARES   => false,                  // Disable emulation
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES   => false,
 ];
-
 try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
+     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    // Since headers might already be sent, avoid sending headers here
-    // Instead, handle this in place_order.php or wherever db.php is included
-    // Optionally, log the error and handle it gracefully in the calling script
-    error_log("Database Connection Failed: " . $e->getMessage());
-    // It's better to let the calling script handle the response
-    exit;
+     throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
 ?>
