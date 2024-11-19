@@ -1,1 +1,30 @@
-[2024-11-19 09:48:45] Error fetching payments from Stripe: No API key provided.  (HINT: set your API key using "Stripe::setApiKey(<API-KEY>)".  You can generate API keys from the Stripe web interface.  See https://stripe.com/api for details, or email support@stripe.com if you have any questions. | Context: Stripe API
+[2024-11-19 22:51:24] Error fetching payments from Stripe: Invalid API Key provided: sk_test_*************************** | Context: Stripe API
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMuS0E4KNNCb6nu0gxjtmnN | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmshE4KNNCb6nu1LYHFxWF | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmrnE4KNNCb6nu0k7KsjcB | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmoXE4KNNCb6nu0ORHw7nF | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmjmE4KNNCb6nu16r8z7ey | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmfHE4KNNCb6nu1EHgGziL | Context: Sales Dashboard
+[2024-11-19 22:51:40] Missing latest_charge or payment_method_details for Payment ID pi_3QMmePE4KNNCb6nu1Uva0JGA | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMuS0E4KNNCb6nu0gxjtmnN | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmshE4KNNCb6nu1LYHFxWF | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmrnE4KNNCb6nu0k7KsjcB | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmoXE4KNNCb6nu0ORHw7nF | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmjmE4KNNCb6nu16r8z7ey | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmfHE4KNNCb6nu1EHgGziL | Context: Sales Dashboard
+[2024-11-19 22:53:21] Missing latest_charge or payment_method_details for Payment ID pi_3QMmePE4KNNCb6nu1Uva0JGA | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMuS0E4KNNCb6nu0gxjtmnN | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmshE4KNNCb6nu1LYHFxWF | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmrnE4KNNCb6nu0k7KsjcB | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmoXE4KNNCb6nu0ORHw7nF | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmjmE4KNNCb6nu16r8z7ey | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmfHE4KNNCb6nu1EHgGziL | Context: Sales Dashboard
+[2024-11-19 22:55:58] Missing latest_charge or payment_method_details for Payment ID pi_3QMmePE4KNNCb6nu1Uva0JGA | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMuS0E4KNNCb6nu0gxjtmnN | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmshE4KNNCb6nu1LYHFxWF | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmrnE4KNNCb6nu0k7KsjcB | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmoXE4KNNCb6nu0ORHw7nF | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmjmE4KNNCb6nu16r8z7ey | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmfHE4KNNCb6nu1EHgGziL | Context: Sales Dashboard
+[2024-11-19 22:57:11] Missing latest_charge or payment_method_details for Payment ID pi_3QMmePE4KNNCb6nu1Uva0JGA | Context: Sales Dashboard
+[2024-11-19 23:16:49] ERROR: Message could not be sent. Mailer Error: SMTP Error: Could not connect to SMTP host. Failed to connect to serverSMTP server error: Failed to connect to server Additional SMTP info: php_network_getaddresses: getaddrinfo for smtp.example.com failed: No such host is known.  | Context: Email Sending
