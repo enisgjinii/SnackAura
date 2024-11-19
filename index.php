@@ -1,6 +1,6 @@
 <?php
 require 'vendor/autoload.php'; // Ensure Composer's autoload is included
-\Stripe\Stripe::setApiKey('sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2'); // Replace with your actual Stripe secret key
+\Stripe\Stripe::setApiKey("sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2"); // Securely set your Stripe secret key using environment variables
 session_start();
 require 'db.php';
 // Enable error reporting for debugging (disable in production)
@@ -393,32 +393,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         header("Location: index.php?error=empty_cart");
         exit;
     }
-    // Fetch customer details
-    $customer_name = trim($_POST['customer_name']);
-    $customer_email = trim($_POST['customer_email']);
-    $customer_phone = trim($_POST['customer_phone']);
-    $delivery_address = trim($_POST['delivery_address']);
-    $selected_tip_id = isset($_POST['selected_tip']) ? (int)$_POST['selected_tip'] : null;
-    // Retrieve the scheduled date and time
-    $scheduled_date = $_POST['scheduled_date'];
-    $scheduled_time = $_POST['scheduled_time'];
-    // Retrieve payment method
-    $payment_method = $_POST['payment_method'] ?? '';
-    // Validate payment method
-    $allowed_payment_methods = ['stripe', 'pickup', 'cash'];
-    if (!in_array($payment_method, $allowed_payment_methods)) {
-        header("Location: index.php?error=invalid_payment_method");
+    // CSRF Token Validation
+    if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
+        header("Location: index.php?error=invalid_csrf_token");
         exit;
     }
-    // Validate scheduled date and time
-    $scheduled_datetime = new DateTime("$scheduled_date $scheduled_time");
+    // Fetch and validate customer details
+    $customer_name = trim($_POST['customer_name'] ?? '');
+    $customer_email = trim($_POST['customer_email'] ?? '');
+    $customer_phone = trim($_POST['customer_phone'] ?? '');
+    $delivery_address = trim($_POST['delivery_address'] ?? '');
+    $selected_tip_id = isset($_POST['selected_tip']) ? (int)$_POST['selected_tip'] : null;
+    // Retrieve and validate scheduled date and time
+    $scheduled_date = $_POST['scheduled_date'] ?? '';
+    $scheduled_time = $_POST['scheduled_time'] ?? '';
+    if (empty($scheduled_date) || empty($scheduled_time)) {
+        header("Location: index.php?error=missing_scheduled_time");
+        exit;
+    }
+    $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
+    if (!$scheduled_datetime) {
+        header("Location: index.php?error=invalid_scheduled_datetime");
+        exit;
+    }
     $current_datetime = new DateTime();
     if ($scheduled_datetime < $current_datetime) {
         header("Location: index.php?error=invalid_scheduled_time");
         exit;
     }
+    // Validate payment method
+    $payment_method = $_POST['payment_method'] ?? '';
+    $allowed_payment_methods = ['stripe', 'pickup', 'cash'];
+    if (!in_array($payment_method, $allowed_payment_methods)) {
+        header("Location: index.php?error=invalid_payment_method");
+        exit;
+    }
     // Validate order details
-    if (!$customer_name || !$customer_email || !$customer_phone || !$delivery_address) {
+    if (empty($customer_name) || empty($customer_email) || empty($customer_phone) || empty($delivery_address)) {
         header("Location: index.php?error=invalid_order_details");
         exit;
     }
@@ -428,7 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     $tip_amount = 0.00;
     if ($selected_tip_id) {
         foreach ($tip_options as $tip) {
-            if ($tip['id'] === $selected_tip_id) {
+            if ($tip['id'] == $selected_tip_id) {
                 if ($tip['percentage']) {
                     $tip_amount = $cart_total * ($tip['percentage'] / 100);
                 } elseif ($tip['amount']) {
@@ -490,20 +501,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 ]);
             }
         }
-        // Commit transaction
-        $pdo->commit();
+        // Process payment based on payment method
         if ($payment_method === 'stripe') {
             // Retrieve the Payment Method ID from POST data
             $stripe_payment_method = $_POST['stripe_payment_method'] ?? '';
-
-            if (!$stripe_payment_method) {
+            if (empty($stripe_payment_method)) {
                 throw new Exception("Stripe payment method ID is missing.");
             }
-
             // Calculate the amount in cents
             $amount_cents = intval(round($total_amount * 100));
-
-            // Create a PaymentIntent with Stripe
+            // Define your return_url dynamically based on scheduled_date and scheduled_time
+            $return_url = 'http://' . $_SERVER['HTTP_HOST'] . '/arber-dobruna/index.php?order=success&scheduled_date=' . urlencode($scheduled_date) . '&scheduled_time=' . urlencode($scheduled_time);
+            // Create a PaymentIntent with Stripe, including return_url
             $payment_intent = \Stripe\PaymentIntent::create([
                 'amount' => $amount_cents,
                 'currency' => 'eur', // Change to your currency
@@ -514,8 +523,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 'metadata' => [
                     'order_id' => $order_id
                 ],
+                'return_url' => $return_url, // Added return_url
             ]);
-
             // Handle Payment Intent status
             if ($payment_intent->status == 'requires_action' && $payment_intent->next_action->type == 'use_stripe_sdk') {
                 // Tell the client to handle the action
@@ -526,15 +535,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 ]);
                 exit;
             } elseif ($payment_intent->status == 'succeeded') {
-                // The payment is complete, update order status to 'paid'
+                // The payment is complete, update order status to 'Paid'
                 $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
                 $stmt->execute([5, $order_id]); // Assuming status_id 5 is 'Paid'
+                // Commit transaction before sending response
+                $pdo->commit();
+                // Clear cart and selected tip
+                $_SESSION['cart'] = [];
+                $_SESSION['selected_tip'] = null;
+                // Send JSON response indicating success and redirect URL
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'redirect_url' => $return_url
+                ]);
+                exit;
             } else {
                 // Invalid status
                 throw new Exception("Invalid PaymentIntent status: " . $payment_intent->status);
             }
-        }
-        if ($payment_method === 'pickup') {
+        } elseif ($payment_method === 'pickup') {
             // Set order status to 'Ready for Pickup'
             $new_status_id = 3; // Example: 3 represents 'Ready for Pickup'
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
@@ -545,16 +565,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         }
-
-        // Clear cart and selected tip
-        $_SESSION['cart'] = [];
-        $_SESSION['selected_tip'] = null;
-        // Redirect to success page
-        header("Location: index.php?order=success&scheduled_date=$scheduled_date&scheduled_time=$scheduled_time");
-        exit;
+        // Commit transaction after successful payment and status update
+        if ($payment_method !== 'stripe') {
+            $pdo->commit();
+            // Clear cart and selected tip
+            $_SESSION['cart'] = [];
+            $_SESSION['selected_tip'] = null;
+            // Redirect to success page
+            header("Location: index.php?order=success&scheduled_date=$scheduled_date&scheduled_time=$scheduled_time");
+            exit;
+        }
     } catch (Exception $e) {
-        // Rollback transaction on error
-        $pdo->rollBack();
+        // Check if a transaction is active before attempting to rollback
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         log_error_markdown("Order Placement Failed: " . $e->getMessage(), "Checkout Process");
         header("Location: index.php?error=order_failed");
         exit;
@@ -685,7 +710,6 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -715,49 +739,40 @@ try {
             justify-content: center;
             align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
-
         .offers-section .card-title {
             font-size: 1.25rem;
             font-weight: 600;
         }
-
         .offers-section .card-text {
             font-size: 0.95rem;
             color: #555;
         }
-
         @media (max-width: 768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
-
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -765,14 +780,12 @@ try {
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
-
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
@@ -1284,46 +1297,30 @@ try {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
+                        <!-- Customer Details Fields -->
                         <div class="mb-3">
-                            <label for="customer_name" class="form-label">Name</label>
+                            <label for="customer_name" class="form-label">Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="customer_name" name="customer_name" required>
                         </div>
                         <div class="mb-3">
-                            <label for="customer_email" class="form-label">Email</label>
+                            <label for="customer_email" class="form-label">Email <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" id="customer_email" name="customer_email" required>
                         </div>
                         <div class="mb-3">
-                            <label for="customer_phone" class="form-label">Phone</label>
+                            <label for="customer_phone" class="form-label">Phone <span class="text-danger">*</span></label>
                             <input type="tel" class="form-control" id="customer_phone" name="customer_phone" required>
                         </div>
                         <div class="mb-3">
-                            <label for="delivery_address" class="form-label">Delivery Address</label>
+                            <label for="delivery_address" class="form-label">Delivery Address <span class="text-danger">*</span></label>
                             <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" required></textarea>
                         </div>
                         <div class="mb-3">
-                            <label for="scheduled_date" class="form-label">Preferred Delivery Date</label>
+                            <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" required min="<?= date('Y-m-d') ?>">
                         </div>
                         <div class="mb-3">
-                            <label for="scheduled_time" class="form-label">Preferred Delivery Time</label>
+                            <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
                             <input type="time" class="form-control" id="scheduled_time" name="scheduled_time" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="tip_selection" class="form-label">Select Tip</label>
-                            <select class="form-select" id="tip_selection" name="selected_tip">
-                                <option value="">No Tip</option>
-                                <?php foreach ($tip_options as $tip): ?>
-                                    <option value="<?= htmlspecialchars($tip['id']) ?>" <?= ($selected_tip == $tip['id']) ? 'selected' : '' ?>>
-                                        <?php
-                                        if ($tip['percentage']) {
-                                            echo htmlspecialchars($tip['name']) . " (" . htmlspecialchars($tip['percentage']) . "%)";
-                                        } elseif ($tip['amount']) {
-                                            echo htmlspecialchars($tip['name']) . " (+" . number_format($tip['amount'], 2) . "€)";
-                                        }
-                                        ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
                         </div>
                         <!-- Payment Method Selection -->
                         <div class="mb-3">
@@ -1355,6 +1352,25 @@ try {
                             <div id="card-element"><!-- A Stripe Element will be inserted here. --></div>
                             <div id="card-errors" role="alert" class="text-danger mt-2"></div>
                         </div>
+                        <!-- Tip Selection -->
+                        <div class="mb-3">
+                            <label for="tip_selection" class="form-label">Select Tip</label>
+                            <select class="form-select" id="tip_selection" name="selected_tip">
+                                <option value="">No Tip</option>
+                                <?php foreach ($tip_options as $tip): ?>
+                                    <option value="<?= htmlspecialchars($tip['id']) ?>" <?= ($selected_tip == $tip['id']) ? 'selected' : '' ?>>
+                                        <?php
+                                        if ($tip['percentage']) {
+                                            echo htmlspecialchars($tip['name']) . " (" . htmlspecialchars($tip['percentage']) . "%)";
+                                        } elseif ($tip['amount']) {
+                                            echo htmlspecialchars($tip['name']) . " (+" . number_format($tip['amount'], 2) . "€)";
+                                        }
+                                        ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <!-- Order Summary -->
                         <h5>Order Summary</h5>
                         <ul class="list-group mb-3">
                             <?php foreach ($_SESSION['cart'] as $item): ?>
@@ -1371,10 +1387,13 @@ try {
                             <?php endif; ?>
                         </ul>
                         <h5>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h5>
+                        <!-- CSRF Token -->
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     </div>
                     <div class="modal-footer">
+                        <input type="hidden" name="checkout" value="1">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" name="checkout">Place Order</button>
+                        <button type="submit" class="btn btn-primary">Place Order</button>
                     </div>
                 </form>
             </div>
@@ -1416,7 +1435,6 @@ try {
             </div>
         </div>
     <?php endif; ?>
-
     <!-- Toast Notifications -->
     <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
         <div class="toast-container position-fixed bottom-0 end-0 p-3">
@@ -1771,7 +1789,6 @@ try {
             <?php endif; ?>
             // Handle Store Closed Status
             let storeClosedModalInstance = null;
-
             function checkStoreStatus() {
                 $.getJSON('check_store_status.php', function(data) {
                     if (data.is_closed) {
@@ -1807,14 +1824,8 @@ try {
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const paymentStripe = document.getElementById('paymentStripe');
-            const paymentPickup = document.getElementById('paymentPickup');
-            const paymentCash = document.getElementById('paymentCash');
-            const stripePaymentSection = document.getElementById('stripe-payment-section');
-            const checkoutForm = document.getElementById('checkoutForm');
-            const submitButton = checkoutForm.querySelector('button[type="submit"]');
             // Initialize Stripe
-            const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym  '); // Replace with your Stripe publishable key
+            const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym'); // Replace with your actual Stripe publishable key
             const elements = stripe.elements();
             const cardElement = elements.create('card');
             cardElement.mount('#card-element');
@@ -1822,16 +1833,18 @@ try {
             const paymentMethods = document.getElementsByName('payment_method');
             paymentMethods.forEach(function(method) {
                 method.addEventListener('change', function() {
-                    if (paymentStripe.checked) {
-                        stripePaymentSection.style.display = 'block';
+                    if (document.getElementById('paymentStripe').checked) {
+                        document.getElementById('stripe-payment-section').style.display = 'block';
                     } else {
-                        stripePaymentSection.style.display = 'none';
+                        document.getElementById('stripe-payment-section').style.display = 'none';
                     }
                 });
             });
             // Handle form submission
+            const checkoutForm = document.getElementById('checkoutForm');
+            const submitButton = checkoutForm.querySelector('button[type="submit"]');
             checkoutForm.addEventListener('submit', function(e) {
-                if (paymentStripe.checked) {
+                if (document.getElementById('paymentStripe').checked) {
                     e.preventDefault();
                     submitButton.disabled = true;
                     stripe.createPaymentMethod({
@@ -1851,13 +1864,49 @@ try {
                             document.getElementById('card-errors').textContent = result.error.message;
                             submitButton.disabled = false;
                         } else {
-                            // Append payment_method ID to the form and submit
+                            // Append payment_method ID to the form and submit via AJAX
                             const hiddenInput = document.createElement('input');
                             hiddenInput.setAttribute('type', 'hidden');
                             hiddenInput.setAttribute('name', 'stripe_payment_method');
                             hiddenInput.setAttribute('value', result.paymentMethod.id);
                             checkoutForm.appendChild(hiddenInput);
-                            checkoutForm.submit();
+                            // Submit the form via AJAX using Fetch API
+                            fetch('index.php', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded'
+                                    },
+                                    body: new URLSearchParams(new FormData(checkoutForm))
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.requires_action) {
+                                        // Handle required action (e.g., 3D Secure)
+                                        stripe.confirmCardPayment(data.payment_intent_client_secret).then(function(confirmResult) {
+                                            if (confirmResult.error) {
+                                                // Show error to the customer
+                                                document.getElementById('card-errors').textContent = confirmResult.error.message;
+                                                submitButton.disabled = false;
+                                            } else {
+                                                if (confirmResult.paymentIntent.status === 'succeeded') {
+                                                    // Redirect to success page
+                                                    window.location.href = data.redirect_url;
+                                                }
+                                            }
+                                        });
+                                    } else if (data.success) {
+                                        // Payment succeeded, redirect to success page
+                                        window.location.href = data.redirect_url;
+                                    }
+                                })
+                                .catch(() => {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Error',
+                                        text: 'There was an issue processing your payment. Please try again.',
+                                    });
+                                    submitButton.disabled = false;
+                                });
                         }
                     });
                 }
@@ -1865,5 +1914,4 @@ try {
         });
     </script>
 </body>
-
 </html>
