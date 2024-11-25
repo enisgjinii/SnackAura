@@ -1,22 +1,18 @@
 <?php
+ob_start();
 // orders.php - Admin and Delivery Orders Management Page
-
 // Include necessary libraries and files
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require 'vendor/autoload.php';
-
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-
 // Start the session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 // Define the error log file
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-
 /**
  * Log errors in a Markdown file for better readability.
  */
@@ -32,7 +28,6 @@ function log_error_markdown($error_message, $context = '')
     $formatted_message .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted_message, FILE_APPEND | LOCK_EX);
 }
-
 /**
  * Send an email using PHPMailer.
  */
@@ -48,23 +43,19 @@ function sendEmail($recipientEmail, $recipientName, $subject, $body)
         $mail->Password = 'axnjsldfudhohipv';   // Replace with your SMTP password or app-specific password
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
-
         // Sender and recipient settings
         $mail->setFrom('egjini17@gmail.com', 'Yumiis');
         $mail->addAddress($recipientEmail, $recipientName);
-
         // Email content settings
         $mail->isHTML(true);
         $mail->CharSet = 'UTF-8';
         $mail->Subject = $subject;
         $mail->Body    = $body;
-
         $mail->send();
     } catch (Exception $e) {
         log_error_markdown("Mail Error: " . $mail->ErrorInfo, "Sending Email to: {$recipientEmail}");
     }
 }
-
 /**
  * Send a status update email to the customer.
  */
@@ -108,7 +99,6 @@ function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_dat
     ";
     sendEmail($email, $name, $subject, $body);
 }
-
 /**
  * Notify the delivery person about the new order assignment.
  */
@@ -147,7 +137,6 @@ function notifyDeliveryPerson($email, $name, $order_id, $status)
     ";
     sendEmail($email, $name, $subject, $body);
 }
-
 /**
  * Send a delay notification email to the customer.
  */
@@ -188,7 +177,6 @@ function sendDelayNotificationEmail($email, $name, $order_id, $additional_time)
     ";
     sendEmail($email, $name, $order_id, $additional_time);
 }
-
 /**
  * Custom exception handler to log uncaught exceptions.
  */
@@ -197,7 +185,6 @@ set_exception_handler(function ($exception) {
     header("Location: orders.php?action=view&message=unknown_error");
     exit;
 });
-
 /**
  * Custom error handler to convert errors to exceptions.
  */
@@ -205,7 +192,6 @@ set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-
 /**
  * Fetch active delivery users from the database.
  */
@@ -215,7 +201,6 @@ function getDeliveryUsers($pdo)
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 /**
  * Fetch the status history of a specific order.
  */
@@ -232,7 +217,6 @@ function getOrderStatusHistory($pdo, $order_id)
     $stmt->execute([$order_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 /**
  * Geocode an address to obtain latitude and longitude using OpenStreetMap's Nominatim.
  */
@@ -259,7 +243,6 @@ function geocodeAddress($address)
         return [null, null];
     }
 }
-
 /**
  * Update the latitude and longitude of an order based on its address.
  */
@@ -271,7 +254,6 @@ function updateOrderCoordinates($pdo, $order_id, $address)
         $stmt->execute([$latitude, $longitude, $order_id]);
     }
 }
-
 /**
  * Fetch all possible statuses.
  */
@@ -279,7 +261,6 @@ function getAllStatuses($pdo)
 {
     return $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
 }
-
 /**
  * Fetch all active orders with necessary details, including tip information
  */
@@ -346,7 +327,6 @@ function getActiveOrders($pdo, $user_role, $user_id)
     }
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 /**
  * Fetch all active orders with necessary details for delivery users
  */
@@ -368,7 +348,6 @@ function getDeliveryOrders($pdo, $user_id)
     $stmt->execute([$user_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 /**
  * Fetch all active orders with necessary details for admin
  */
@@ -376,7 +355,6 @@ function getAdminOrders($pdo)
 {
     return getActiveOrders($pdo, 'admin', null);
 }
-
 /**
  * Fetch all active orders with necessary details for delivery
  */
@@ -384,20 +362,16 @@ function getDeliveryOrdersForUser($pdo, $user_id)
 {
     return getActiveOrders($pdo, 'delivery', $user_id);
 }
-
 // Determine the user's role and ID
 $user_role = $_SESSION['role'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
-
 // Initialize variables
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
-
 // Enforce role-based access control
 $allowed_actions_admin = ['view', 'update_status', 'delete', 'permanent_delete', 'restore', 'view_trash', 'view_details', 'update_status_form', 'customer_counts', 'manage_ratings', 'delete_rating', 'send_delay_notification'];
 $allowed_actions_delivery = ['view', 'view_details', 'update_status', 'send_delay_notification'];
-
 if ($user_role === 'admin') {
     $allowed_actions = $allowed_actions_admin;
 } elseif ($user_role === 'delivery') {
@@ -409,7 +383,6 @@ if ($user_role === 'admin') {
     require_once 'includes/footer.php';
     exit();
 }
-
 // Check if the requested action is allowed for the user's role
 if (!in_array($action, $allowed_actions)) {
     header('HTTP/1.1 403 Forbidden');
@@ -417,7 +390,6 @@ if (!in_array($action, $allowed_actions)) {
     require_once 'includes/footer.php';
     exit();
 }
-
 // Handle different actions
 switch ($action) {
     case 'update_status':
@@ -426,7 +398,6 @@ switch ($action) {
             $delivery_user_id = $_POST['delivery_user_id'] ?? null;
             $scheduled_date = $_POST['scheduled_date'] ?? null;
             $scheduled_time = $_POST['scheduled_time'] ?? null;
-
             // Validate scheduled date and time
             if ($scheduled_date && $scheduled_time) {
                 $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
@@ -437,7 +408,6 @@ switch ($action) {
                     exit();
                 }
             }
-
             if ($status_id && is_numeric($status_id)) {
                 // Fetch the new status
                 $stmt = $pdo->prepare('SELECT status FROM order_statuses WHERE id = ?');
@@ -465,7 +435,6 @@ switch ($action) {
                                 exit();
                             }
                         }
-
                         // Check if latitude or longitude is null
                         if (is_null($order['latitude']) || is_null($order['longitude'])) {
                             // Geocode the address and update coordinates
@@ -474,22 +443,18 @@ switch ($action) {
                             $stmt->execute([$id]);
                             $order = $stmt->fetch(PDO::FETCH_ASSOC);
                         }
-
                         // Update status, delivery user, scheduled_date, and scheduled_time
                         $update = $pdo->prepare('UPDATE orders SET status_id = ?, delivery_user_id = ?, scheduled_date = ?, scheduled_time = ? WHERE id = ?');
                         if ($update->execute([$status_id, $delivery_user_id ?: null, $scheduled_date, $scheduled_time, $id])) {
                             // Insert into status history
                             $history = $pdo->prepare('INSERT INTO order_status_history (order_id, status_id, delivery_user_id) VALUES (?, ?, ?)');
                             $history->execute([$id, $status_id, $delivery_user_id ?: null]);
-
                             // Fetch updated order details for email
                             $stmt = $pdo->prepare('SELECT customer_email, customer_name, delivery_address, delivery_user_id FROM orders WHERE id = ?');
                             $stmt->execute([$id]);
                             $order = $stmt->fetch(PDO::FETCH_ASSOC);
-
                             // Send emails
                             sendStatusUpdateEmail($order['customer_email'], $order['customer_name'], $id, $new_status, $scheduled_date, $scheduled_time);
-
                             if ($delivery_user_id && $user_role === 'admin') {
                                 // Only admin can notify delivery person
                                 $stmt = $pdo->prepare('SELECT email, username FROM users WHERE id = ?');
@@ -499,7 +464,6 @@ switch ($action) {
                                     notifyDeliveryPerson($delivery_user['email'], $delivery_user['username'], $id, $new_status);
                                 }
                             }
-
                             // Redirect with success message
                             $msg = 'Order status updated successfully.';
                             header('Location: orders.php?action=view&message=' . urlencode($msg));
@@ -508,14 +472,12 @@ switch ($action) {
                     }
                 }
             }
-
             // Redirect with failure message
             $msg = 'Failed to update status.';
             header('Location: orders.php?action=update_status_form&id=' . $id . '&message=' . urlencode($msg));
             exit();
         }
         break;
-
     case 'delete':
         if ($user_role === 'admin' && $id > 0) {
             $delete = $pdo->prepare('UPDATE orders SET deleted_at = NOW() WHERE id = ?');
@@ -525,7 +487,6 @@ switch ($action) {
             exit();
         }
         break;
-
     case 'permanent_delete':
         if ($user_role === 'admin' && $id > 0) {
             $perm_delete = $pdo->prepare('DELETE FROM orders WHERE id = ?');
@@ -535,7 +496,6 @@ switch ($action) {
             exit();
         }
         break;
-
     case 'restore':
         if ($user_role === 'admin' && $id > 0) {
             $restore = $pdo->prepare('UPDATE orders SET deleted_at = NULL WHERE id = ?');
@@ -545,7 +505,6 @@ switch ($action) {
             exit();
         }
         break;
-
     case 'view_trash':
         if ($user_role === 'admin') {
             try {
@@ -565,7 +524,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'view_details':
         if ($id > 0) {
             try {
@@ -592,7 +550,6 @@ switch ($action) {
                         $stmt->execute([$id]);
                         $order = $stmt->fetch(PDO::FETCH_ASSOC);
                     }
-
                     // Fetch order items
                     $stmt = $pdo->prepare('
                         SELECT oi.*, p.name AS product_name, s.name AS size_name 
@@ -603,7 +560,6 @@ switch ($action) {
                     ');
                     $stmt->execute([$id]);
                     $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
                     // Fetch extras and drinks for each item
                     foreach ($items as &$item) {
                         // Fetch extras
@@ -615,7 +571,6 @@ switch ($action) {
                         ');
                         $stmt_extras->execute([$item['id']]);
                         $item['extras'] = $stmt_extras->fetchAll(PDO::FETCH_ASSOC);
-
                         // Fetch drinks
                         $stmt_drinks = $pdo->prepare('
                             SELECT d.name, od.quantity, od.unit_price, od.total_price 
@@ -626,7 +581,6 @@ switch ($action) {
                         $stmt_drinks->execute([$item['id']]);
                         $item['drinks'] = $stmt_drinks->fetchAll(PDO::FETCH_ASSOC);
                     }
-
                     // Fetch status history
                     $status_history = getOrderStatusHistory($pdo, $id);
                 } else {
@@ -641,7 +595,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'update_status_form':
         if ($id > 0) {
             try {
@@ -663,12 +616,10 @@ switch ($action) {
                 if ($order) {
                     // Fetch all possible statuses
                     $statuses = getAllStatuses($pdo);
-
                     // Fetch active delivery users (only for admin)
                     if ($user_role === 'admin') {
                         $delivery_users = getDeliveryUsers($pdo);
                     }
-
                     // Capture any messages passed via GET
                     $message = $_GET['message'] ?? '';
                 } else {
@@ -683,7 +634,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'customer_counts':
         try {
             $stmt = $pdo->prepare('
@@ -700,7 +650,6 @@ switch ($action) {
             $message = '<div class="alert alert-danger">Failed to retrieve customer order counts.</div>';
         }
         break;
-
     case 'manage_ratings':
         if ($user_role === 'admin') {
             try {
@@ -713,7 +662,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'delete_rating':
         if ($user_role === 'admin' && $id > 0) {
             try {
@@ -729,7 +677,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'send_delay_notification':
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
             $additional_time = (int)($_POST['additional_time'] ?? 0);
@@ -762,7 +709,6 @@ switch ($action) {
             }
         }
         break;
-
     case 'view':
     default:
         try {
@@ -774,10 +720,8 @@ switch ($action) {
             } else {
                 $orders = [];
             }
-
             // Fetch all possible statuses
             $statuses = getAllStatuses($pdo);
-
             // Group orders by status
             $grouped_orders = [];
             foreach ($statuses as $status) {
@@ -792,7 +736,6 @@ switch ($action) {
         }
         break;
 }
-
 // HTML Content Starts Here
 ?>
 <div class="container-fluid mt-4">
@@ -805,7 +748,6 @@ switch ($action) {
     <?php elseif (isset($message)): ?>
         <?= $message ?>
     <?php endif; ?>
-
     <!-- Handle Different Actions -->
     <?php if ($action === 'view'): ?>
         <!-- Orders View -->
@@ -825,7 +767,6 @@ switch ($action) {
                 </div>
             <?php endif; ?>
         </div>
-
         <?php foreach ($grouped_orders as $status => $orders): ?>
             <div class="card mb-4 shadow-sm">
                 <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
@@ -897,13 +838,11 @@ switch ($action) {
                                                 <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="View">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
-
                                                 <?php if ($user_role === 'admin' || ($user_role === 'delivery' && in_array($order['status'], ['Assigned', 'Processing']))) : ?>
                                                     <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Update Status">
                                                         <i class="fas fa-edit"></i>
                                                     </a>
                                                 <?php endif; ?>
-
                                                 <?php if ($user_role === 'admin'): ?>
                                                     <button type="button" class="btn btn-sm btn-danger me-1" data-bs-toggle="modal" data-bs-target="#deleteModal<?= $order['id'] ?>" data-bs-toggle="tooltip" title="Delete">
                                                         <i class="fas fa-trash-alt"></i>
@@ -921,7 +860,6 @@ switch ($action) {
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
-
                                         <!-- Delete Order Modal (Admin Only) -->
                                         <?php if ($user_role === 'admin'): ?>
                                             <div class="modal fade" id="deleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
@@ -941,7 +879,6 @@ switch ($action) {
                                                     </div>
                                                 </div>
                                             </div>
-
                                             <!-- Send Delay Notification Modal (Admin Only) -->
                                             <div class="modal fade" id="delayNotificationModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="delayNotificationModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                                 <div class="modal-dialog modal-dialog-centered">
@@ -977,7 +914,6 @@ switch ($action) {
                 </div>
             </div>
         <?php endforeach; ?>
-
     <?php elseif ($action === 'manage_ratings' && $user_role === 'admin'): ?>
         <!-- Manage Ratings View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1045,7 +981,6 @@ switch ($action) {
         <?php else: ?>
             <p>No ratings submitted yet.</p>
         <?php endif; ?>
-
     <?php elseif ($action === 'view_details' && $id > 0): ?>
         <!-- View Order Details -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1252,7 +1187,6 @@ switch ($action) {
                 <?php endif; ?>
             </div>
         </div>
-
     <?php elseif ($action === 'update_status_form' && $id > 0): ?>
         <!-- Update Order Status Form -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1317,7 +1251,6 @@ switch ($action) {
                 </form>
             </div>
         </div>
-
     <?php elseif ($action === 'customer_counts' && $user_role === 'admin'): ?>
         <!-- Customer Order Counts View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1352,7 +1285,6 @@ switch ($action) {
         <?php else: ?>
             <p>No orders recorded for customers.</p>
         <?php endif; ?>
-
     <?php elseif ($action === 'view_trash' && $user_role === 'admin'): ?>
         <!-- Trash Orders View -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1401,7 +1333,6 @@ switch ($action) {
                                     </button>
                                 </td>
                             </tr>
-
                             <!-- Restore Order Modal -->
                             <div class="modal fade" id="restoreModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="restoreModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
@@ -1420,7 +1351,6 @@ switch ($action) {
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Permanently Delete Order Modal -->
                             <div class="modal fade" id="permanentDeleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="permanentDeleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
@@ -1446,23 +1376,19 @@ switch ($action) {
         <?php else: ?>
             <p>Trash is empty.</p>
         <?php endif; ?>
-
     <?php endif; ?>
 </div>
-
 <?php
 // Leaflet CSS for map if viewing order details
 if ($action === 'view_details' && $id > 0): ?>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <?php endif; ?>
-
 <!-- Initialize DataTables and Tooltips -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
     $(document).ready(function() {
         // Initialize DataTables
@@ -1475,7 +1401,6 @@ if ($action === 'view_details' && $id > 0): ?>
             "ordering": true,
             "responsive": true
         });
-
         // Initialize Bootstrap tooltips
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -1483,7 +1408,6 @@ if ($action === 'view_details' && $id > 0): ?>
         });
     });
 </script>
-
 <?php
 // Function to get the status ID for 'Delivered' status (used by delivery users)
 function getDeliveredStatusId($pdo)
@@ -1492,6 +1416,5 @@ function getDeliveredStatusId($pdo)
     $stmt->execute();
     return $stmt->fetchColumn();
 }
-
 require_once 'includes/footer.php';
 ?>

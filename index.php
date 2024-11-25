@@ -1,8 +1,12 @@
 <?php
+ob_start(); // Start output buffering
 require 'vendor/autoload.php'; // Ensure Composer's autoload is included
 \Stripe\Stripe::setApiKey("sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2"); // Securely set your Stripe secret key using environment variables
 session_start();
-require 'db.php';
+require 'db.php'; // Initialize CSRF token if not already set
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 // Enable error reporting for debugging (disable in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -404,22 +408,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     $customer_phone = trim($_POST['customer_phone'] ?? '');
     $delivery_address = trim($_POST['delivery_address'] ?? '');
     $selected_tip_id = isset($_POST['selected_tip']) ? (int)$_POST['selected_tip'] : null;
+    // Check if 'is_event' checkbox was selected
+    $is_event = isset($_POST['is_event']) && $_POST['is_event'] == '1';
     // Retrieve and validate scheduled date and time
     $scheduled_date = $_POST['scheduled_date'] ?? '';
     $scheduled_time = $_POST['scheduled_time'] ?? '';
-    if (empty($scheduled_date) || empty($scheduled_time)) {
-        header("Location: index.php?error=missing_scheduled_time");
-        exit;
-    }
-    $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
-    if (!$scheduled_datetime) {
-        header("Location: index.php?error=invalid_scheduled_datetime");
-        exit;
-    }
-    $current_datetime = new DateTime();
-    if ($scheduled_datetime < $current_datetime) {
-        header("Location: index.php?error=invalid_scheduled_time");
-        exit;
+    if ($is_event) {
+        if (empty($scheduled_date) || empty($scheduled_time)) {
+            header("Location: index.php?error=missing_scheduled_time");
+            exit;
+        }
+        // Validate that scheduled_date and scheduled_time are in the future
+        $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
+        if (!$scheduled_datetime) {
+            header("Location: index.php?error=invalid_scheduled_datetime");
+            exit;
+        }
+        $current_datetime = new DateTime();
+        if ($scheduled_datetime < $current_datetime) {
+            header("Location: index.php?error=invalid_scheduled_time");
+            exit;
+        }
+    } else {
+        // If not an event, set scheduled_date and scheduled_time to null or defaults
+        $scheduled_date = null;
+        $scheduled_time = null;
     }
     // Validate payment method
     $payment_method = $_POST['payment_method'] ?? '';
@@ -511,7 +524,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             // Calculate the amount in cents
             $amount_cents = intval(round($total_amount * 100));
             // Define your return_url dynamically based on scheduled_date and scheduled_time
-            $return_url = 'http://' . $_SERVER['HTTP_HOST'] . '/arber-dobruna/index.php?order=success&scheduled_date=' . urlencode($scheduled_date) . '&scheduled_time=' . urlencode($scheduled_time);
+            $return_url = 'http://' . $_SERVER['HTTP_HOST'] . '/index.php?order=success&scheduled_date=' . urlencode($scheduled_date) . '&scheduled_time=' . urlencode($scheduled_time);
             // Create a PaymentIntent with Stripe, including return_url
             $payment_intent = \Stripe\PaymentIntent::create([
                 'amount' => $amount_cents,
@@ -537,7 +550,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             } elseif ($payment_intent->status == 'succeeded') {
                 // The payment is complete, update order status to 'Paid'
                 $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
-                $stmt->execute([5, $order_id]); // Assuming status_id 5 is 'Paid'
+                $stmt->execute([2, $order_id]); // Assuming status_id 5 is 'Paid'
                 // Commit transaction before sending response
                 $pdo->commit();
                 // Clear cart and selected tip
@@ -556,12 +569,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             }
         } elseif ($payment_method === 'pickup') {
             // Set order status to 'Ready for Pickup'
-            $new_status_id = 3; // Example: 3 represents 'Ready for Pickup'
+            $new_status_id = 2; // Example: 3 represents 'Ready for Pickup'
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         } elseif ($payment_method === 'cash') {
             // Set order status to 'Pending Cash Payment'
-            $new_status_id = 4; // Example: 4 represents 'Pending Cash Payment'
+            $new_status_id = 2; // Example: 4 represents 'Pending Cash Payment'
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         }
@@ -710,6 +723,7 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -739,40 +753,49 @@ try {
             justify-content: center;
             align-items: center;
         }
+
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
+
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
+
         .offers-section .card-title {
             font-size: 1.25rem;
             font-weight: 600;
         }
+
         .offers-section .card-text {
             font-size: 0.95rem;
             color: #555;
         }
+
         @media (max-width: 768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
+
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
+
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
+
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
+
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -780,12 +803,14 @@ try {
             position: sticky;
             top: 20px;
         }
+
         .order-title {
             margin-bottom: 15px;
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
+
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
@@ -895,15 +920,16 @@ try {
     <header class="position-relative">
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
             <div class="container d-flex justify-content-between align-items-center">
-                <a class="navbar-brand d-flex align-items-center" href="index.php">
+                <a class="d-flex align-items-center" href="index.php">
                     <!-- Display Cart Logo -->
                     <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
                         <div class="mb-3 text-center">
-                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo" class="img-fluid cart-logo" id="cart-logo" loading="lazy" width="40" height="40" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
+                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo" style="width: 100%; height: 80px;object-fit: cover" id="cart-logo" loading="lazy" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
                         </div>
                     <?php endif; ?>
-                    <span class="restaurant-name ms-2">Restaurant</span>
+                    <!-- <span class="restaurant-name ms-2">Restaurant</span> -->
                 </a>
+
                 <div class="d-flex align-items-center">
                     <button class="btn btn-outline-primary position-relative me-3 btn-add-to-cart" type="button" id="cart-button" aria-label="View Cart" data-bs-toggle="modal" data-bs-target="#cartModal">
                         <i class="bi bi-cart fs-4"></i>
@@ -1315,13 +1341,38 @@ try {
                             <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" required></textarea>
                         </div>
                         <div class="mb-3">
-                            <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" required min="<?= date('Y-m-d') ?>">
+                            <label>
+                                <input class="form-check-input" type="radio" id="event_checkbox"> Event
+                            </label>
                         </div>
-                        <div class="mb-3">
-                            <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
-                            <input type="time" class="form-control" id="scheduled_time" name="scheduled_time" required>
+                        <div id="event_details" style="display: none;">
+                            <div class="mb-3">
+                                <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" min="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="scheduled_time" name="scheduled_time">
+                            </div>
                         </div>
+                        <script>
+                            document.getElementById('event_checkbox').addEventListener('change', function() {
+                                const eventDetails = document.getElementById('event_details');
+                                const scheduledDate = document.getElementById('scheduled_date');
+                                const scheduledTime = document.getElementById('scheduled_time');
+                                if (this.checked) {
+                                    eventDetails.style.display = 'block';
+                                    // Set required attribute for inputs when checkbox is checked
+                                    scheduledDate.setAttribute('required', 'required');
+                                    scheduledTime.setAttribute('required', 'required');
+                                } else {
+                                    eventDetails.style.display = 'none';
+                                    // Remove required attribute for inputs when checkbox is unchecked
+                                    scheduledDate.removeAttribute('required');
+                                    scheduledTime.removeAttribute('required');
+                                }
+                            });
+                        </script>
                         <!-- Payment Method Selection -->
                         <div class="mb-3">
                             <label class="form-label">Payment Method <span class="text-danger">*</span></label>
@@ -1356,7 +1407,6 @@ try {
                         <div class="mb-3">
                             <label for="tip_selection" class="form-label">Select Tip</label>
                             <select class="form-select" id="tip_selection" name="selected_tip">
-                                <option value="">No Tip</option>
                                 <?php foreach ($tip_options as $tip): ?>
                                     <option value="<?= htmlspecialchars($tip['id']) ?>" <?= ($selected_tip == $tip['id']) ? 'selected' : '' ?>>
                                         <?php
@@ -1789,6 +1839,7 @@ try {
             <?php endif; ?>
             // Handle Store Closed Status
             let storeClosedModalInstance = null;
+
             function checkStoreStatus() {
                 $.getJSON('check_store_status.php', function(data) {
                     if (data.is_closed) {
@@ -1914,4 +1965,7 @@ try {
         });
     </script>
 </body>
+
 </html>
+<?php ob_end_flush();
+?>
