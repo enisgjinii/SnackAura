@@ -3,19 +3,15 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
 // Start output buffering and session
 ob_start();
-
 // Include necessary files
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 // Define action and product ID
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
-
 // Helper Functions
 function getCategories($pdo)
 {
@@ -25,7 +21,6 @@ function getCategories($pdo)
         return [];
     }
 }
-
 function getExtras($pdo)
 {
     try {
@@ -34,7 +29,6 @@ function getExtras($pdo)
         return [];
     }
 }
-
 function getSauces($pdo)
 {
     try {
@@ -43,7 +37,6 @@ function getSauces($pdo)
         return [];
     }
 }
-
 function getTop10Products($pdo, $completed_status_id = 3)
 {
     try {
@@ -64,7 +57,6 @@ function getTop10Products($pdo, $completed_status_id = 3)
         return [];
     }
 }
-
 function getMixedProducts($pdo, $exclude_product_id = null)
 {
     try {
@@ -81,17 +73,14 @@ function getMixedProducts($pdo, $exclude_product_id = null)
         return [];
     }
 }
-
 function sanitizeInput($data)
 {
     return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
 }
-
 // Fetch Categories, Extras, Sauces
 $categories = getCategories($pdo);
 $extras = getExtras($pdo);
 $sauces = getSauces($pdo);
-
 // Handle Actions
 switch ($action) {
     case 'add':
@@ -107,16 +96,13 @@ switch ($action) {
                 $message = '<div class="alert alert-danger">Product not found.</div>';
                 break;
             }
-
             // Fetch associated extras, sauces, mixes
             $stmt_extras = $pdo->prepare('SELECT extra_id FROM product_extras WHERE product_id = ?');
             $stmt_extras->execute([$id]);
             $selected_extras = $stmt_extras->fetchAll(PDO::FETCH_COLUMN);
-
             $stmt_sauces = $pdo->prepare('SELECT sauce_id FROM product_sauces WHERE product_id = ?');
             $stmt_sauces->execute([$id]);
             $selected_sauces = $stmt_sauces->fetchAll(PDO::FETCH_COLUMN);
-
             $stmt_mixes = $pdo->prepare('SELECT mixed_product_id FROM product_mixes WHERE main_product_id = ?');
             $stmt_mixes->execute([$id]);
             $selected_mixes = $stmt_mixes->fetchAll(PDO::FETCH_COLUMN);
@@ -127,7 +113,6 @@ switch ($action) {
             $selected_mixes = [];
             $product = [];
         }
-
         // Handle Form Submission
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Sanitize and validate inputs
@@ -144,12 +129,10 @@ switch ($action) {
             $selected_extras = $_POST['extras'] ?? [];
             $selected_sauces = $_POST['sauces'] ?? [];
             $selected_mixes = $_POST['mixes'] ?? [];
-
             // Initialize image variables
             $image_url = '';
             $upload_success = false;
             $url_success = false;
-
             // Handle Image Source
             if ($image_source === 'upload') {
                 if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] === UPLOAD_ERR_OK) {
@@ -157,7 +140,6 @@ switch ($action) {
                     $file_name = basename($_FILES['image_file']['name']);
                     $file_size = $_FILES['image_file']['size'];
                     $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-
                     $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif'];
                     if (in_array($file_ext, $allowed_extensions)) {
                         if ($file_size <= 2 * 1024 * 1024) { // 2MB limit
@@ -208,7 +190,6 @@ switch ($action) {
                     $message = '<div class="alert alert-danger">Please enter a valid image URL.</div>';
                 }
             }
-
             // Proceed if image handling was successful or retained
             if (($image_source === 'upload' && $upload_success) || ($image_source === 'url' && $url_success) || $is_edit) {
                 // Validate required fields
@@ -232,20 +213,16 @@ switch ($action) {
                                 $sql = 'INSERT INTO products (product_code, category_id, name, price, description, allergies, image_url, is_new, is_offer, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
                                 $params = [$product_code, $category_id, $name, $price, $description, $allergies, $image_url, $is_new, $is_offer, $is_active];
                             }
-
                             $stmt = $pdo->prepare($sql);
                             $stmt->execute($params);
-
                             // Get product ID
                             $product_id = $is_edit ? $id : $pdo->lastInsertId();
-
                             // Handle image replacement (delete old image if uploaded new one)
                             if ($is_edit && $image_source === 'upload' && $upload_success && strpos($product['image_url'], 'uploads/') === 0) {
                                 if (file_exists($product['image_url'])) {
                                     unlink($product['image_url']);
                                 }
                             }
-
                             // Update Extras
                             $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?')->execute([$product_id]);
                             if (!empty($selected_extras)) {
@@ -254,7 +231,6 @@ switch ($action) {
                                     $stmt_extras->execute([$product_id, (int)$extra_id]);
                                 }
                             }
-
                             // Update Sauces
                             $pdo->prepare('DELETE FROM product_sauces WHERE product_id = ?')->execute([$product_id]);
                             if (!empty($selected_sauces)) {
@@ -263,7 +239,6 @@ switch ($action) {
                                     $stmt_sauces->execute([$product_id, (int)$sauce_id]);
                                 }
                             }
-
                             // Update Mixes
                             $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id = ?')->execute([$product_id]);
                             if (!empty($selected_mixes)) {
@@ -272,7 +247,6 @@ switch ($action) {
                                     $stmt_mixes->execute([$product_id, (int)$mixed_product_id]);
                                 }
                             }
-
                             // Redirect to product list with success message
                             $_SESSION['message'] = '<div class="alert alert-success">Product ' . ($is_edit ? 'updated' : 'added') . ' successfully.</div>';
                             header('Location: products.php');
@@ -284,7 +258,6 @@ switch ($action) {
                 }
             }
         }
-
         // Prepare Mix Options excluding current product if editing
         $mixes = getMixedProducts($pdo, $is_edit ? $id : null);
 ?>
@@ -315,7 +288,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Category -->
                 <div class="col-md-6">
@@ -348,7 +320,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <!-- Image Source Selection -->
             <div class="row g-3 mt-3">
                 <div class="col-md-12">
@@ -369,7 +340,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <!-- Image Upload Field -->
             <div class="row g-3 mt-3" id="image_upload_field" style="display: <?= (
                                                                                     ($is_edit && !empty($product['image_url']) && strpos($product['image_url'], 'uploads/') === 0) ||
@@ -390,7 +360,6 @@ switch ($action) {
                     <?php endif; ?>
                 </div>
             </div>
-
             <!-- Image URL Field -->
             <div class="row g-3 mt-3" id="image_url_field" style="display: <?= (
                                                                                 ($is_edit && !empty($product['image_url']) && strpos($product['image_url'], 'uploads/') !== 0) ||
@@ -411,7 +380,6 @@ switch ($action) {
                     <?php endif; ?>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Allergies -->
                 <div class="col-md-6">
@@ -435,7 +403,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- Extras -->
                 <div class="col-md-4">
@@ -483,7 +450,6 @@ switch ($action) {
                     <div class="form-text">Select products to mix with this product.</div>
                 </div>
             </div>
-
             <div class="row g-3 mt-3">
                 <!-- New Product Checkbox -->
                 <div class="col-md-4">
@@ -523,7 +489,6 @@ switch ($action) {
                     </div>
                 </div>
             </div>
-
             <!-- Form Actions -->
             <div class="mt-4">
                 <button type="submit" class="btn btn-success me-2" data-bs-toggle="tooltip" title="<?= $action === 'add' ? 'Add new product' : 'Update product' ?>">
@@ -534,7 +499,6 @@ switch ($action) {
                 </a>
             </div>
         </form>
-
         <!-- Success and Error Messages via Session -->
         <?php if (isset($_SESSION['message'])): ?>
             <div class="mt-3">
@@ -542,7 +506,6 @@ switch ($action) {
             </div>
             <?php unset($_SESSION['message']); ?>
         <?php endif; ?>
-
         <!-- Scripts -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -559,7 +522,6 @@ switch ($action) {
                     placeholder: "Select options",
                     allowClear: true
                 });
-
                 // Handle image source toggle
                 $('input[name="image_source"]').change(function() {
                     if ($(this).val() === 'upload') {
@@ -574,10 +536,8 @@ switch ($action) {
                         $('#image_url').prop('required', true).prop('disabled', false);
                     }
                 });
-
                 // Trigger change event on page load to set the correct fields
                 $('input[name="image_source"]:checked').trigger('change');
-
                 // Initialize tooltips
                 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
                 var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -587,31 +547,25 @@ switch ($action) {
         </script>
     <?php
         break;
-
     case 'delete':
         if ($id > 0) {
             try {
                 // Begin transaction
                 $pdo->beginTransaction();
-
                 // Fetch image URL
                 $stmt_image = $pdo->prepare('SELECT image_url FROM products WHERE id = ?');
                 $stmt_image->execute([$id]);
                 $image_url = $stmt_image->fetchColumn();
-
                 // Delete associated records
                 $pdo->prepare('DELETE FROM product_extras WHERE product_id = ?')->execute([$id]);
                 $pdo->prepare('DELETE FROM product_sauces WHERE product_id = ?')->execute([$id]);
                 $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id = ?')->execute([$id]);
-
                 // Delete product
                 $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
-
                 // Delete image file if stored locally
                 if ($image_url && strpos($image_url, 'uploads/') === 0 && file_exists($image_url)) {
                     unlink($image_url);
                 }
-
                 // Commit transaction and redirect
                 $pdo->commit();
                 $_SESSION['message'] = '<div class="alert alert-success">Product deleted successfully.</div>';
@@ -630,7 +584,6 @@ switch ($action) {
         <a href="products.php" class="btn btn-secondary">Return to Products</a>
     <?php
         break;
-
     case 'top10':
         $topProducts = getTop10Products($pdo);
     ?>
@@ -638,11 +591,9 @@ switch ($action) {
         <?php if ($message): ?>
             <?= $message ?>
         <?php endif; ?>
-
         <?php if (!empty($topProducts)): ?>
             <!-- Chart -->
             <canvas id="topProductsChart" width="400" height="200" class="mb-4"></canvas>
-
             <!-- Top 10 Table -->
             <div class="table-responsive">
                 <table id="top10Table" class="table table-striped table-hover align-middle">
@@ -689,7 +640,6 @@ switch ($action) {
                     </tbody>
                 </table>
             </div>
-
             <!-- Chart.js -->
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
@@ -714,7 +664,6 @@ switch ($action) {
                             "search": "Search:"
                         }
                     });
-
                     // Prepare data for Chart.js
                     var labels = [
                         <?php foreach ($topProducts as $product): ?> '<?= addslashes(sanitizeInput($product['name'])) ?>',
@@ -725,7 +674,6 @@ switch ($action) {
                             <?= sanitizeInput($product['total_sold']) ?>,
                         <?php endforeach; ?>
                     ];
-
                     // Create Chart
                     var ctx = document.getElementById('topProductsChart').getContext('2d');
                     var topProductsChart = new Chart(ctx, {
@@ -758,7 +706,6 @@ switch ($action) {
                             }
                         }
                     });
-
                     // Initialize tooltips
                     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
                     var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -770,11 +717,9 @@ switch ($action) {
             <div class="alert alert-info">No sales data available.</div>
             <a href="products.php" class="btn btn-secondary">Return to Products</a>
         <?php endif; ?>
-
         <a href="products.php" class="btn btn-secondary mt-3">Return to Products</a>
     <?php
         break;
-
     case 'view':
     default:
         try {
@@ -796,7 +741,6 @@ switch ($action) {
         <?php if ($message): ?>
             <?= $message ?>
         <?php endif; ?>
-
         <!-- Action Buttons -->
         <div class="mb-3">
             <a href="products.php?action=add" class="btn btn-success me-2" data-bs-toggle="tooltip" title="Add a new product">
@@ -806,7 +750,6 @@ switch ($action) {
                 <i class="fas fa-chart-line"></i> Top 10 Products
             </a>
         </div>
-
         <!-- Products Table -->
         <div class="table-responsive">
             <table id="productsTable" class="table table-striped table-hover align-middle">
@@ -912,7 +855,6 @@ switch ($action) {
                 </tbody>
             </table>
         </div>
-
         <!-- Delete Confirmation Modal -->
         <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
             <div class="modal-dialog">
@@ -939,7 +881,6 @@ switch ($action) {
                 </form>
             </div>
         </div>
-
         <!-- Scripts -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -971,13 +912,11 @@ switch ($action) {
                         "search": "Filter records:"
                     }
                 });
-
                 // Initialize Select2 for multiple selects (if any)
                 $('#extras, #sauces, #mixes').select2({
                     placeholder: "Select options",
                     allowClear: true
                 });
-
                 // Handle image source toggle
                 $('input[name="image_source"]').change(function() {
                     if ($(this).val() === 'upload') {
@@ -992,17 +931,14 @@ switch ($action) {
                         $('#image_url').prop('required', true).prop('disabled', false);
                     }
                 });
-
                 // Trigger change event on page load to set the correct fields
                 $('input[name="image_source"]:checked').trigger('change');
-
                 // Initialize tooltips
                 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
                 var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
                     return new bootstrap.Tooltip(tooltipTriggerEl);
                 });
             });
-
             // Function to show delete modal with product ID
             function showDeleteModal(id) {
                 $('#deleteProductId').val(id);
@@ -1013,7 +949,6 @@ switch ($action) {
 <?php
         break;
 }
-
 // Include Footer
 require_once 'includes/footer.php';
 ?>

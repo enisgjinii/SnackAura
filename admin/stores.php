@@ -1,12 +1,10 @@
 <?php
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 $action = $_GET['action'] ?? 'list';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 $perPage = 10;
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create') {
         $name = trim($_POST['name'] ?? '');
@@ -14,7 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $manager_id = isset($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
-
         if (empty($name) || empty($address) || empty($phone) || empty($email)) {
             $message = '<div class="alert alert-danger">All fields are required.</div>';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -43,7 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $manager_id = isset($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
         $is_active = isset($_POST['is_active']) ? 1 : 0;
-
         if (empty($name) || empty($address) || empty($phone) || empty($email)) {
             $message = '<div class="alert alert-danger">All fields are required.</div>';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -141,7 +137,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
 if ($action === 'list') {
     $search = trim($_GET['search'] ?? '');
     $search_query = '';
@@ -150,7 +145,6 @@ if ($action === 'list') {
         $search_query = ' WHERE s.name LIKE :search OR s.address LIKE :search ';
         $params[':search'] = '%' . $search . '%';
     }
-
     $sort = $_GET['sort'] ?? 'created_at';
     $allowed_sort = ['name', 'created_at', 'is_active'];
     if (!in_array($sort, $allowed_sort)) {
@@ -158,10 +152,8 @@ if ($action === 'list') {
     }
     $order = $_GET['order'] ?? 'DESC';
     $order = ($order === 'ASC') ? 'ASC' : 'DESC';
-
     $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
     $offset = ($page - 1) * $perPage;
-
     try {
         $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM stores s {$search_query}");
         $count_stmt->execute($params);
@@ -170,7 +162,6 @@ if ($action === 'list') {
         error_log("Error counting stores: " . $e->getMessage());
         $total = 0;
     }
-
     try {
         $stmt = $pdo->prepare("SELECT s.id, s.name, s.address, s.phone, s.email, u.username AS manager, s.is_active, s.created_at FROM stores s LEFT JOIN users u ON s.manager_id = u.id {$search_query} ORDER BY s.{$sort} {$order} LIMIT :limit OFFSET :offset");
         foreach ($params as $key => &$val) {
@@ -185,7 +176,6 @@ if ($action === 'list') {
         $stores = [];
         $message = '<div class="alert alert-danger">Failed to fetch stores. Please try again later.</div>';
     }
-
     $totalPages = ceil($total / $perPage);
 } elseif ($action === 'edit' && $id > 0) {
     $stmt = $pdo->prepare('SELECT * FROM stores WHERE id = ?');
@@ -223,81 +213,79 @@ if ($action === 'list') {
 }
 ?>
 <?php if ($action === 'list'): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4">Menaxhimi i Pikave të Dyqanit</h2>
-        <?php if (isset($_GET['message'])): ?>
-            <div class="alert alert-info"><?= htmlspecialchars($_GET['message']) ?></div>
-        <?php elseif ($message): ?>
-            <?= $message ?>
-        <?php endif; ?>
-        <div class="d-flex justify-content-between mb-3">
-            <div>
-                <a href="stores.php?action=create" class="btn btn-primary me-2">
-                    <i class="fas fa-plus"></i> Krijo Pikë të Re
-                </a>
-                <a href="stores.php?action=export" class="btn btn-secondary">
-                    <i class="fas fa-file-export"></i> Eksporto CSV
-                </a>
-            </div>
+    <h2 class="mb-4">Menaxhimi i Pikave të Dyqanit</h2>
+    <?php if (isset($_GET['message'])): ?>
+        <div class="alert alert-info"><?= htmlspecialchars($_GET['message']) ?></div>
+    <?php elseif ($message): ?>
+        <?= $message ?>
+    <?php endif; ?>
+    <div class="d-flex justify-content-between mb-3">
+        <div>
+            <a href="stores.php?action=create" class="btn btn-primary me-2">
+                <i class="fas fa-plus"></i> Krijo Pikë të Re
+            </a>
+            <a href="stores.php?action=export" class="btn btn-secondary">
+                <i class="fas fa-file-export"></i> Eksporto CSV
+            </a>
         </div>
-        <div class="table-responsive">
-            <table id="storesTable" class="table table-striped table-hover">
-                <thead class="table-dark">
+    </div>
+    <div class="table-responsive">
+        <table id="storesTable" class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Emri</th>
+                    <th>Adresa</th>
+                    <th>Telefoni</th>
+                    <th>Email</th>
+                    <th>Menaxher</th>
+                    <th>Statusi</th>
+                    <th>Krijuar</th>
+                    <th>Veprime</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($stores)): ?>
                     <tr>
-                        <th>Emri</th>
-                        <th>Adresa</th>
-                        <th>Telefoni</th>
-                        <th>Email</th>
-                        <th>Menaxher</th>
-                        <th>Statusi</th>
-                        <th>Krijuar</th>
-                        <th>Veprime</th>
+                        <td colspan="8" class="text-center">Nuk u gjetën pika të dyqanit.</td>
                     </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($stores)): ?>
+                <?php else: ?>
+                    <?php foreach ($stores as $store): ?>
                         <tr>
-                            <td colspan="8" class="text-center">Nuk u gjetën pika të dyqanit.</td>
+                            <td><?= htmlspecialchars($store['name']) ?></td>
+                            <td><?= htmlspecialchars($store['address']) ?></td>
+                            <td><?= htmlspecialchars($store['phone']) ?></td>
+                            <td><?= htmlspecialchars($store['email']) ?></td>
+                            <td><?= htmlspecialchars($store['manager'] ?? 'N/A') ?></td>
+                            <td>
+                                <span class="badge <?= $store['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
+                                    <?= $store['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
+                                </span>
+                            </td>
+                            <td><?= htmlspecialchars($store['created_at']) ?></td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <a href="stores.php?action=view&id=<?= $store['id'] ?>" class="btn btn-sm btn-info" title="Shiko">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="stores.php?action=edit&id=<?= $store['id'] ?>" class="btn btn-sm btn-warning" title="Ndrysho">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="stores.php?action=delete&id=<?= $store['id'] ?>" class="btn btn-sm btn-danger" title="Fshij" onclick="return confirm('A jeni i sigurtë që dëshironi të fshini këtë pikë të dyqanit?');">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </a>
+                                    <a href="stores.php?action=toggle_status&id=<?= $store['id'] ?>" class="btn btn-sm <?= $store['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $store['is_active'] ? 'Deaktivizo' : 'Aktivizo' ?>">
+                                        <i class="fas <?= $store['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
+                                    </a>
+                                    <a href="stores.php?action=assign_admin&id=<?= $store['id'] ?>" class="btn btn-sm btn-primary" title="Cakto Admin">
+                                        <i class="fas fa-user-cog"></i>
+                                    </a>
+                                </div>
+                            </td>
                         </tr>
-                    <?php else: ?>
-                        <?php foreach ($stores as $store): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($store['name']) ?></td>
-                                <td><?= htmlspecialchars($store['address']) ?></td>
-                                <td><?= htmlspecialchars($store['phone']) ?></td>
-                                <td><?= htmlspecialchars($store['email']) ?></td>
-                                <td><?= htmlspecialchars($store['manager'] ?? 'N/A') ?></td>
-                                <td>
-                                    <span class="badge <?= $store['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
-                                        <?= $store['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
-                                    </span>
-                                </td>
-                                <td><?= htmlspecialchars($store['created_at']) ?></td>
-                                <td>
-                                    <div class="d-flex flex-wrap gap-1">
-                                        <a href="stores.php?action=view&id=<?= $store['id'] ?>" class="btn btn-sm btn-info" title="Shiko">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="stores.php?action=edit&id=<?= $store['id'] ?>" class="btn btn-sm btn-warning" title="Ndrysho">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        <a href="stores.php?action=delete&id=<?= $store['id'] ?>" class="btn btn-sm btn-danger" title="Fshij" onclick="return confirm('A jeni i sigurtë që dëshironi të fshini këtë pikë të dyqanit?');">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </a>
-                                        <a href="stores.php?action=toggle_status&id=<?= $store['id'] ?>" class="btn btn-sm <?= $store['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $store['is_active'] ? 'Deaktivizo' : 'Aktivizo' ?>">
-                                            <i class="fas <?= $store['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
-                                        </a>
-                                        <a href="stores.php?action=assign_admin&id=<?= $store['id'] ?>" class="btn btn-sm btn-primary" title="Cakto Admin">
-                                            <i class="fas fa-user-cog"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
         <!-- Pagination (Optional if using DataTables) -->
         <?php if ($totalPages > 1): ?>
             <nav>
@@ -529,7 +517,6 @@ if ($action === 'list') {
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
@@ -542,7 +529,6 @@ if ($action === 'list') {
             theme: 'bootstrap-5',
             width: '100%'
         });
-
         $('#storesTable').DataTable({
             "paging": false,
             "searching": true,
@@ -555,7 +541,6 @@ if ($action === 'list') {
         });
     });
 </script>
-
 <?php
 require_once 'includes/footer.php';
 ?>

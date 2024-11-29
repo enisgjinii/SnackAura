@@ -1,8 +1,168 @@
-### [2024-11-19 09:27:43] Error
+### [2024-11-28 23:55:31] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;csrf_token&quot;
+**Message:** Uncaught Exception: Undefined variable $stores
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1378
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:33] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:33] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:33] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
+
+---
+
+### [2024-11-28 23:55:33] Error
+
+**Message:** Uncaught Exception: Undefined variable $stores
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 857
 
 ---
 

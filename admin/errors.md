@@ -254,3 +254,159 @@
 
 ---
 
+### [2024-11-26 21:22:35] Error
+
+**Message:** Geocoding Failed for Address: Eius earum ut repreh
+
+**Context:** No results returned.
+
+---
+
+### [2024-11-26 21:25:44] Error
+
+**Message:** Invalid scheduled date and time format: 2024-11-26 09:47:00
+
+**Context:** Order ID: 75
+
+---
+
+### [2024-11-26 21:34:30] Error
+
+**Message:** Invalid scheduled date and time format provided: 2024-11-26 23:00:00
+
+**Context:** Order ID: 75
+
+---
+
+### [2024-11-26 21:37:07] Error
+
+**Message:** Invalid scheduled date and time format: 2024-11-26 09:47:00
+**Context:** Order ID: 75
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:31] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+
+### [2024-11-29 00:22:32] Error
+
+**Message:** Uncaught Exception: Undefined variable $last_order_id
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 1319
+---
+

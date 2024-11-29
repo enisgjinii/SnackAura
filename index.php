@@ -7,6 +7,34 @@ require 'db.php'; // Initialize CSRF token if not already set
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+// Fetch available stores if not already selected
+if (!isset($_SESSION['selected_store'])) {
+    $stmt = $pdo->query('SELECT id, name FROM stores WHERE is_active = 1 ORDER BY name ASC');
+    $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Handle Store Selection Form Submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
+    // Sanitize and validate the store_id
+    $selected_store_id = (int)$_POST['store_id'];
+
+    // Fetch the store name from the database
+    $stmt = $pdo->prepare('SELECT name FROM stores WHERE id = ? AND is_active = 1');
+    $stmt->execute([$selected_store_id]);
+    $store = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($store) {
+        // Store the selected store in the session
+        $_SESSION['selected_store'] = $selected_store_id;
+        $_SESSION['store_name'] = $store['name'];
+        header('Location: index.php');
+        exit();
+    } else {
+        // Handle error: store not found or inactive
+        $error_message = "Selected store is not available.";
+    }
+}
+
 // Enable error reporting for debugging (disable in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -48,11 +76,11 @@ $current_day = $current_datetime->format('l');
 $current_time = $current_datetime->format('H:i:s');
 // Fetch operational hours
 $query = "
-    SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week
-    FROM operational_hours
-    WHERE (type = 'holiday' AND date = :current_date)
-       OR (type = 'regular' AND day_of_week = :current_day)
-    LIMIT 1
+SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week
+FROM operational_hours
+WHERE (type = 'holiday' AND date = :current_date)
+OR (type = 'regular' AND day_of_week = :current_day)
+LIMIT 1
 ";
 $stmt = $pdo->prepare($query);
 $stmt->execute(['current_date' => $current_date, 'current_day' => $current_day]);
@@ -112,17 +140,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $selected_sauces = $_POST['sauces'] ?? [];
     // Fetch product details
     $product_query = "
-        SELECT p.*, 
-               ps.size_id, s.name AS size_name, ps.price AS size_price,
-               e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
-               psu.sauce_id
-        FROM products p
-        LEFT JOIN product_sizes ps ON p.id = ps.product_id
-        LEFT JOIN sizes s ON ps.size_id = s.id
-        LEFT JOIN product_extras pe ON p.id = pe.product_id
-        LEFT JOIN extras e ON pe.extra_id = e.id
-        LEFT JOIN product_sauces psu ON p.id = psu.product_id
-        WHERE p.id = :product_id AND p.is_active = 1
+    SELECT p.*,
+    ps.size_id, s.name AS size_name, ps.price AS size_price,
+    e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
+    psu.sauce_id
+    FROM products p
+    LEFT JOIN product_sizes ps ON p.id = ps.product_id
+    LEFT JOIN sizes s ON ps.size_id = s.id
+    LEFT JOIN product_extras pe ON p.id = pe.product_id
+    LEFT JOIN extras e ON pe.extra_id = e.id
+    LEFT JOIN product_sauces psu ON p.id = psu.product_id
+    WHERE p.id = :product_id AND p.is_active = 1
     ";
     $stmt = $pdo->prepare($product_query);
     $stmt->execute(['product_id' => $product_id]);
@@ -270,18 +298,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         $product_id = $_SESSION['cart'][$item_index]['product_id'];
         // Fetch product details
         $product_query = "
-            SELECT p.*, 
-                   ps.size_id, s.name AS size_name, ps.price AS size_price,
-                   e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
-                   psu.sauce_id
-            FROM products p
-            LEFT JOIN product_sizes ps ON p.id = ps.product_id
-            LEFT JOIN sizes s ON ps.size_id = s.id
-            LEFT JOIN product_extras pe ON p.id = pe.product_id
-            LEFT JOIN extras e ON pe.extra_id = e.id
-            LEFT JOIN product_sauces psu ON p.id = psu.product_id
-            WHERE p.id = :product_id AND p.is_active = 1
-        ";
+    SELECT p.*,
+    ps.size_id, s.name AS size_name, ps.price AS size_price,
+    e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
+    psu.sauce_id
+    FROM products p
+    LEFT JOIN product_sizes ps ON p.id = ps.product_id
+    LEFT JOIN sizes s ON ps.size_id = s.id
+    LEFT JOIN product_extras pe ON p.id = pe.product_id
+    LEFT JOIN extras e ON pe.extra_id = e.id
+    LEFT JOIN product_sauces psu ON p.id = psu.product_id
+    WHERE p.id = :product_id AND p.is_active = 1
+    ";
         $stmt = $pdo->prepare($product_query);
         $stmt->execute(['product_id' => $product_id]);
         $product_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -468,8 +496,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         // Begin transaction
         $pdo->beginTransaction();
         // Insert into orders table
-        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method]);
+        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method,store_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method, $store_id]);
         $order_id = $pdo->lastInsertId();
         // Prepare statements for order items, extras, and drinks
         $stmt_item = $pdo->prepare("INSERT INTO order_items (order_id, product_id, size_id, quantity, price, extras, special_instructions) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -599,27 +627,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     }
 }
 // Fetch categories
-$stmt = $pdo->prepare("SELECT * FROM categories ORDER BY name ASC");
+$stmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC, name ASC");
 $stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Determine selected category
 $selected_category_id = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
 // Fetch products based on category
 $product_query = "
-    SELECT 
+        SELECT
         p.id AS product_id, p.name AS product_name, p.description, p.image_url, p.is_new, p.is_offer, p.allergies, p.price AS base_price,
         ps.size_id, s.name AS size_name, ps.price AS size_price,
         e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
         psu.sauce_id
-    FROM products p
-    LEFT JOIN product_sizes ps ON p.id = ps.product_id
-    LEFT JOIN sizes s ON ps.size_id = s.id
-    LEFT JOIN product_extras pe ON p.id = pe.product_id
-    LEFT JOIN extras e ON pe.extra_id = e.id
-    LEFT JOIN product_sauces psu ON p.id = psu.product_id
-    WHERE p.is_active = 1" . ($selected_category_id > 0 ? " AND p.category_id = :category_id" : "") . " 
-    ORDER BY p.name ASC, s.name ASC, e.name ASC
-";
+        FROM products p
+        LEFT JOIN product_sizes ps ON p.id = ps.product_id
+        LEFT JOIN sizes s ON ps.size_id = s.id
+        LEFT JOIN product_extras pe ON p.id = pe.product_id
+        LEFT JOIN extras e ON pe.extra_id = e.id
+        LEFT JOIN product_sauces psu ON p.id = psu.product_id
+        WHERE p.is_active = 1" . ($selected_category_id > 0 ? " AND p.category_id = :category_id" : "") . "
+        ORDER BY p.name ASC, s.name ASC, e.name ASC
+        ";
 $stmt = $pdo->prepare($product_query);
 if ($selected_category_id > 0) {
     $stmt->bindParam(':category_id', $selected_category_id, PDO::PARAM_INT);
@@ -713,7 +741,7 @@ try {
 // Fetch active offers
 try {
     $current_date = date('Y-m-d');
-    $stmt = $pdo->prepare("SELECT * FROM offers WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) ORDER BY created_at DESC");
+    $stmt = $pdo->prepare("SELECT * FROM offers WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date>= ?) ORDER BY created_at DESC");
     $stmt->execute([$current_date, $current_date]);
     $active_offers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -816,6 +844,57 @@ try {
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
+    <?php if (!isset($_SESSION['selected_store'])): ?>
+        <!-- Store Selection Modal -->
+        <div class="modal fade" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form method="POST">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="storeModalLabel">Select a Store</h5>
+                        </div>
+                        <div class="modal-body">
+                            <?php if (isset($error_message)): ?>
+                                <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
+                            <?php endif; ?>
+                            <div class="mb-3">
+                                <label for="store_id" class="form-label">Choose a Store:</label>
+                                <select name="store_id" id="store_id" class="form-select" required>
+                                    <option value="" selected>Select Store</option>
+                                    <?php foreach ($stores as $store): ?>
+                                        <option value="<?= htmlspecialchars($store['id']) ?>">
+                                            <?= htmlspecialchars($store['name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary">Confirm</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <!-- Include jQuery and Bootstrap JS -->
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            // Show the modal on page load
+            $(document).ready(function() {
+                $('#storeModal').modal('show');
+            });
+        </script>
+    <?php else: ?>
+        <div class="container mt-4">
+            <!-- <h1>Welcome to the Store Management System</h1> -->
+            <p>You have selected store ID: <?= htmlspecialchars($_SESSION['selected_store']) ?></p>
+            <p>Name of the store: <?= htmlspecialchars($_SESSION['store_name']) ?></p>
+        </div>
+    <?php endif; ?>
+
+
+
     <!-- Store Closed Modal -->
     <div class="modal fade" id="storeClosedModal" tabindex="-1" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -920,41 +999,51 @@ try {
     <header class="position-relative">
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
             <div class="container d-flex justify-content-between align-items-center">
-                <a class="d-flex align-items-center" href="index.php">
-                    <!-- Display Cart Logo -->
+                <!-- Logo Section -->
+                <a href="index.php" class="d-flex align-items-center">
                     <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
-                        <div class="mb-3 text-center">
-                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo" style="width: 100%; height: 80px;object-fit: cover" id="cart-logo" loading="lazy" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
-                        </div>
+                        <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo"
+                            style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy"
+                            onerror="this.src='https://via.placeholder.com/150?text=Logo';">
                     <?php endif; ?>
-                    <!-- <span class="restaurant-name ms-2">Restaurant</span> -->
                 </a>
 
+                <!-- Action Buttons -->
                 <div class="d-flex align-items-center">
-                    <button class="btn btn-outline-primary position-relative me-3 btn-add-to-cart" type="button" id="cart-button" aria-label="View Cart" data-bs-toggle="modal" data-bs-target="#cartModal">
+                    <!-- Cart Button -->
+                    <button class="btn btn-secondary position-relative me-3 btn-add-to-cart" id="cart-button"
+                        data-bs-toggle="modal" data-bs-target="#cartModal" aria-label="View Cart">
                         <i class="bi bi-cart fs-4"></i>
-                        <?php if (count($_SESSION['cart']) > 0): ?>
+                        <?php if (!empty($_SESSION['cart'])): ?>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cart-count">
                                 <?= count($_SESSION['cart']) ?>
-                                <span class="visually-hidden">items in cart</span>
                             </span>
                         <?php endif; ?>
                     </button>
-                    <button type="button" class="btn btn-outline-success me-3" data-bs-toggle="modal" data-bs-target="#reservationModal">
+
+                    <!-- Reservation Button -->
+                    <button class="btn btn-secondary border-1 me-3" data-bs-toggle="modal" data-bs-target="#reservationModal">
                         <i class="bi bi-calendar-plus fs-4"></i> Rezervo
                     </button>
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ratingsModal">
+
+                    <!-- Ratings Button -->
+                    <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#ratingsModal">
                         <i class="bi bi-star fs-4"></i>
                     </button>
+
+                    <!-- Cart Total -->
                     <span class="fw-bold fs-5 ms-3" id="cart-total"><?= number_format($cart_total_with_tip, 2) ?>€</span>
                 </div>
             </div>
         </nav>
+
+        <!-- Language Switcher -->
         <div class="language-switcher">
             <a href="#" class="me-2"><span class="flag-icon flag-icon-us"></span></a>
             <a href="#"><span class="flag-icon flag-icon-al"></span></a>
         </div>
     </header>
+
     <!-- Reservation Modal -->
     <div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1092,7 +1181,7 @@ try {
                             <div class="col-md-4 mb-4">
                                 <div class="card menu-item h-100 shadow-sm">
                                     <div class="image-container position-relative">
-                                        <img src="<?= htmlspecialchars($product['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($product['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                        <img src="admin/<?= htmlspecialchars($product['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($product['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
                                         <?php if ($product['is_new']): ?>
                                             <span class="badge bg-success position-absolute top-0 end-0 m-2">New</span>
                                         <?php endif; ?>
