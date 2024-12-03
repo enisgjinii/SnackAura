@@ -12,29 +12,41 @@ if (!isset($_SESSION['selected_store'])) {
     $stmt = $pdo->query('SELECT id, name FROM stores WHERE is_active = 1 ORDER BY name ASC');
     $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 // Handle Store Selection Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
     // Sanitize and validate the store_id
     $selected_store_id = (int)$_POST['store_id'];
-
     // Fetch the store name from the database
     $stmt = $pdo->prepare('SELECT name FROM stores WHERE id = ? AND is_active = 1');
     $stmt->execute([$selected_store_id]);
     $store = $stmt->fetch(PDO::FETCH_ASSOC);
-
     if ($store) {
-        // Store the selected store in the session
-        $_SESSION['selected_store'] = $selected_store_id;
-        $_SESSION['store_name'] = $store['name'];
-        header('Location: index.php');
-        exit();
+        // Sanitize and validate address inputs
+        $delivery_address = trim($_POST['delivery_address'] ?? '');
+        $latitude = trim($_POST['latitude'] ?? '');
+        $longitude = trim($_POST['longitude'] ?? '');
+        if (empty($delivery_address) || empty($latitude) || empty($longitude)) {
+            $error_message = "Please provide a valid delivery address and select your location on the map.";
+        } else {
+            // Optionally, further validate latitude and longitude
+            if (!is_numeric($latitude) || !is_numeric($longitude)) {
+                $error_message = "Invalid location coordinates.";
+            } else {
+                // Store the selected store and address in the session
+                $_SESSION['selected_store'] = $selected_store_id;
+                $_SESSION['store_name'] = $store['name'];
+                $_SESSION['delivery_address'] = $delivery_address;
+                $_SESSION['latitude'] = $latitude;
+                $_SESSION['longitude'] = $longitude;
+                header('Location: index.php');
+                exit();
+            }
+        }
     } else {
         // Handle error: store not found or inactive
         $error_message = "Selected store is not available.";
     }
 }
-
 // Enable error reporting for debugging (disable in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -430,6 +442,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         header("Location: index.php?error=invalid_csrf_token");
         exit;
     }
+    $store_id = $_SESSION['selected_store'] ?? null;
     // Fetch and validate customer details
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_email = trim($_POST['customer_email'] ?? '');
@@ -768,6 +781,9 @@ try {
     <link rel="stylesheet" href="style.css">
     <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
+        <link rel="icon" type="image/png" href="<?php echo $cart_logo; ?>">
+    <?php endif; ?>
     <style>
         .loading-overlay {
             position: fixed;
@@ -837,6 +853,8 @@ try {
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 
 <body>
@@ -847,18 +865,21 @@ try {
     <?php if (!isset($_SESSION['selected_store'])): ?>
         <!-- Store Selection Modal -->
         <div class="modal fade" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg"> <!-- Increased size for map -->
                 <div class="modal-content">
-                    <form method="POST">
+                    <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
-                            <h5 class="modal-title" id="storeModalLabel">Select a Store</h5>
+                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo"
+                                style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy"
+                                onerror="this.src='https://via.placeholder.com/150?text=Logo';">
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
                             <?php if (isset($error_message)): ?>
                                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
                             <?php endif; ?>
                             <div class="mb-3">
-                                <label for="store_id" class="form-label">Choose a Store:</label>
+                                <label for="store_id" class="form-label">Choose a store</label>
                                 <select name="store_id" id="store_id" class="form-select" required>
                                     <option value="" selected>Select Store</option>
                                     <?php foreach ($stores as $store): ?>
@@ -868,6 +889,19 @@ try {
                                     <?php endforeach; ?>
                                 </select>
                             </div>
+                            <!-- Address Input -->
+                            <div class="mb-3">
+                                <label for="delivery_address" class="form-label">Delivery Address</label>
+                                <input type="text" class="form-control" id="delivery_address" name="delivery_address" placeholder="Enter your address" required>
+                            </div>
+                            <!-- Leaflet Map -->
+                            <div class="mb-3">
+                                <label class="form-label">Select Location on Map</label>
+                                <div id="map" style="height: 300px;"></div>
+                            </div>
+                            <!-- Hidden Inputs for Latitude and Longitude -->
+                            <input type="hidden" id="latitude" name="latitude">
+                            <input type="hidden" id="longitude" name="longitude">
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary">Confirm</button>
@@ -876,13 +910,74 @@ try {
                 </div>
             </div>
         </div>
-        <!-- Include jQuery and Bootstrap JS -->
+        <!-- Include jQuery and Bootstrap JS if not already included -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
-            // Show the modal on page load
             $(document).ready(function() {
                 $('#storeModal').modal('show');
+                // Initialize Leaflet Map
+                var map = L.map('map').setView([51.505, -0.09], 13); // Default to London
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+                var marker;
+                // Function to handle map clicks
+                function onMapClick(e) {
+                    if (marker) {
+                        map.removeLayer(marker);
+                    }
+                    marker = L.marker(e.latlng).addTo(map);
+                    $('#latitude').val(e.latlng.lat);
+                    $('#longitude').val(e.latlng.lng);
+                    // Optionally, reverse geocode to fill the address input
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.display_name) {
+                                $('#delivery_address').val(data.display_name);
+                            }
+                        })
+                        .catch(error => console.error('Error:', error));
+                }
+                map.on('click', onMapClick);
+                // Optional: Autofill address when address input changes using geocoding
+                $('#delivery_address').on('change', function() {
+                    var address = $(this).val();
+                    if (address.length > 5) { // Basic validation
+                        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data && data.length > 0) {
+                                    var firstResult = data[0];
+                                    var lat = firstResult.lat;
+                                    var lon = firstResult.lon;
+                                    if (marker) {
+                                        map.removeLayer(marker);
+                                    }
+                                    marker = L.marker([lat, lon]).addTo(map);
+                                    map.setView([lat, lon], 13);
+                                    $('#latitude').val(lat);
+                                    $('#longitude').val(lon);
+                                } else {
+                                    alert('Address not found. Please try again.');
+                                }
+                            })
+                            .catch(error => console.error('Error:', error));
+                    }
+                });
+                // Form submission validation
+                $('#storeSelectionForm').on('submit', function(e) {
+                    var address = $('#delivery_address').val().trim();
+                    var lat = $('#latitude').val();
+                    var lon = $('#longitude').val();
+                    if (address === '' || lat === '' || lon === '') {
+                        e.preventDefault();
+                        alert('Please enter a valid address and select your location on the map.');
+                    }
+                });
             });
         </script>
     <?php else: ?>
@@ -892,273 +987,29 @@ try {
             <p>Name of the store: <?= htmlspecialchars($_SESSION['store_name']) ?></p>
         </div>
     <?php endif; ?>
-
-
-
-    <!-- Store Closed Modal -->
-    <div class="modal fade" id="storeClosedModal" tabindex="-1" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="storeClosedModalLabel">Store Closed</h5>
-                </div>
-                <div class="modal-body">
-                    <p id="storeClosedMessage">The store is currently closed. Please wait until we reopen.</p>
-                    <p id="storeClosedEndTime" class="text-muted"></p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Edit Cart Modals -->
-    <?php foreach ($_SESSION['cart'] as $index => $item): ?>
-        <div class="modal fade" id="editCartModal<?= $index ?>" tabindex="-1" aria-labelledby="editCartModalLabel<?= $index ?>" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-                <div class="modal-content">
-                    <form method="POST" action="index.php">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="editCartModalLabel<?= $index ?>">Edit <?= htmlspecialchars($item['name']) ?></h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label for="quantity<?= $index ?>" class="form-label">Quantity</label>
-                                <input type="number" class="form-control" id="quantity<?= $index ?>" name="quantity" value="<?= htmlspecialchars($item['quantity']) ?>" min="1" max="99" required>
-                            </div>
-                            <?php if (!empty($products[$item['product_id']]['sizes'])): ?>
-                                <div class="mb-3">
-                                    <label for="size<?= $index ?>" class="form-label">Size</label>
-                                    <select class="form-select" id="size<?= $index ?>" name="size" required>
-                                        <option value="">Choose a size</option>
-                                        <?php foreach ($products[$item['product_id']]['sizes'] as $size): ?>
-                                            <option value="<?= htmlspecialchars($size['id']) ?>" <?= ($item['size_id'] === (int)$size['id']) ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($size['name']) ?> (+<?= number_format($size['price'], 2) ?>€)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($products[$item['product_id']]['extras']): ?>
-                                <div class="mb-3">
-                                    <label class="form-label">Extras</label>
-                                    <div>
-                                        <?php foreach ($products[$item['product_id']]['extras'] as $extra): ?>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="edit_extra<?= $index ?>_<?= $extra['id'] ?>" name="extras[]" value="<?= htmlspecialchars($extra['id']) ?>" <?= in_array($extra['id'], array_column($item['extras'], 'id')) ? 'checked' : '' ?>>
-                                                <label class="form-check-label" for="edit_extra<?= $index ?>_<?= $extra['id'] ?>"><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</label>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($products[$item['product_id']]['sauces']): ?>
-                                <div class="mb-3">
-                                    <label class="form-label">Sauces</label>
-                                    <div>
-                                        <?php foreach ($products[$item['product_id']]['sauces'] as $sauce_id): ?>
-                                            <?php if (isset($sauce_details[$sauce_id])): ?>
-                                                <?php $sauce = $sauce_details[$sauce_id]; ?>
-                                                <div class="form-check form-check-inline">
-                                                    <input class="form-check-input" type="checkbox" id="edit_sauce<?= $index ?>_<?= $sauce['id'] ?>" name="sauces[]" value="<?= htmlspecialchars($sauce['id']) ?>" <?= in_array($sauce['id'], array_column($item['sauces'], 'id')) ? 'checked' : '' ?>>
-                                                    <label class="form-check-label" for="edit_sauce<?= $index ?>_<?= $sauce['id'] ?>"><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</label>
-                                                </div>
-                                            <?php endif; ?>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($drinks): ?>
-                                <div class="mb-3">
-                                    <label class="form-label">Drinks</label>
-                                    <select class="form-select" name="drink">
-                                        <option value="">Choose a drink</option>
-                                        <?php foreach ($drinks as $drink): ?>
-                                            <option value="<?= htmlspecialchars($drink['id']) ?>" <?= ($item['drink']['id'] ?? null) === $drink['id'] ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            <?php endif; ?>
-                            <div class="mb-3">
-                                <label for="special_instructions<?= $index ?>" class="form-label">Special Instructions</label>
-                                <textarea class="form-control" id="special_instructions<?= $index ?>" name="special_instructions" rows="2" placeholder="Any special requests?"><?= htmlspecialchars($item['special_instructions']) ?></textarea>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <input type="hidden" name="item_index" value="<?= $index ?>">
-                            <input type="hidden" name="update_cart" value="1">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Update Cart</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    <?php endforeach; ?>
-    <!-- Header with Navbar -->
-    <header class="position-relative">
-        <nav class="navbar navbar-expand-lg navbar-light bg-light">
-            <div class="container d-flex justify-content-between align-items-center">
-                <!-- Logo Section -->
-                <a href="index.php" class="d-flex align-items-center">
-                    <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
-                        <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo"
-                            style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy"
-                            onerror="this.src='https://via.placeholder.com/150?text=Logo';">
-                    <?php endif; ?>
-                </a>
-
-                <!-- Action Buttons -->
-                <div class="d-flex align-items-center">
-                    <!-- Cart Button -->
-                    <button class="btn btn-secondary position-relative me-3 btn-add-to-cart" id="cart-button"
-                        data-bs-toggle="modal" data-bs-target="#cartModal" aria-label="View Cart">
-                        <i class="bi bi-cart fs-4"></i>
-                        <?php if (!empty($_SESSION['cart'])): ?>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cart-count">
-                                <?= count($_SESSION['cart']) ?>
-                            </span>
-                        <?php endif; ?>
-                    </button>
-
-                    <!-- Reservation Button -->
-                    <button class="btn btn-secondary border-1 me-3" data-bs-toggle="modal" data-bs-target="#reservationModal">
-                        <i class="bi bi-calendar-plus fs-4"></i> Rezervo
-                    </button>
-
-                    <!-- Ratings Button -->
-                    <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#ratingsModal">
-                        <i class="bi bi-star fs-4"></i>
-                    </button>
-
-                    <!-- Cart Total -->
-                    <span class="fw-bold fs-5 ms-3" id="cart-total"><?= number_format($cart_total_with_tip, 2) ?>€</span>
-                </div>
-            </div>
-        </nav>
-
-        <!-- Language Switcher -->
-        <div class="language-switcher">
-            <a href="#" class="me-2"><span class="flag-icon flag-icon-us"></span></a>
-            <a href="#"><span class="flag-icon flag-icon-al"></span></a>
-        </div>
-    </header>
-
-    <!-- Reservation Modal -->
-    <div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <form id="reservationForm">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="reservationModalLabel">Bëj Rezervim</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Mbyll"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="reservation_name" class="form-label">Emri <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="reservation_name" name="client_name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="reservation_email" class="form-label">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" id="reservation_email" name="client_email" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="reservation_date" class="form-label">Data e Rezervimit <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="reservation_date" name="reservation_date" required min="<?= date('Y-m-d') ?>">
-                        </div>
-                        <div class="mb-3">
-                            <label for="reservation_time" class="form-label">Ora e Rezervimit <span class="text-danger">*</span></label>
-                            <input type="time" class="form-control" id="reservation_time" name="reservation_time" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="number_of_people" class="form-label">Numri i Njerëzve <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="number_of_people" name="number_of_people" required min="1">
-                        </div>
-                        <div class="mb-3">
-                            <label for="reservation_message" class="form-label">Mesazh (Opsionale)</label>
-                            <textarea class="form-control" id="reservation_message" name="reservation_message" rows="3" placeholder="Shkruani ndonjë kërkesë të veçantë..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulo</button>
-                        <button type="submit" class="btn btn-success">Bëj Rezervim</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    <!-- Promotional Banners Carousel -->
-    <?php if (!empty($banners)): ?>
-        <section class="promo-banner">
-            <div id="bannersCarousel" class="carousel slide" data-bs-ride="carousel">
-                <div class="carousel-indicators">
-                    <?php foreach ($banners as $index => $banner): ?>
-                        <button type="button" data-bs-target="#bannersCarousel" data-bs-slide-to="<?= $index ?>" class="<?= $index === 0 ? 'active' : '' ?>" aria-current="<?= $index === 0 ? 'true' : 'false' ?>" aria-label="Slide <?= $index + 1 ?>"></button>
-                    <?php endforeach; ?>
-                </div>
-                <div class="carousel-inner">
-                    <?php foreach ($banners as $index => $banner): ?>
-                        <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
-                            <a href="<?= htmlspecialchars($banner['link'] ?? '#') ?>">
-                                <img src="./admin/uploads/banners/<?= htmlspecialchars($banner['image']) ?>" class="d-block w-100" alt="<?= htmlspecialchars($banner['title']) ?>" loading="lazy" onerror="this.src='https://via.placeholder.com/1200x400?text=Banner+Image';">
-                            </a>
-                            <div class="carousel-caption d-none d-md-block">
-                                <h5><?= htmlspecialchars($banner['title']) ?></h5>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                <?php if (count($banners) > 1): ?>
-                    <button class="carousel-control-prev" type="button" data-bs-target="#bannersCarousel" data-bs-slide="prev">
-                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Previous</span>
-                    </button>
-                    <button class="carousel-control-next" type="button" data-bs-target="#bannersCarousel" data-bs-slide="next">
-                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Next</span>
-                    </button>
-                <?php endif; ?>
-            </div>
-        </section>
-    <?php endif; ?>
-    <!-- Special Offers Section -->
-    <?php if (!empty($active_offers)): ?>
-        <section class="offers-section py-5">
-            <div class="container">
-                <h2 class="mb-4 text-center">Special Offers</h2>
-                <div class="row g-4">
-                    <?php foreach ($active_offers as $offer): ?>
-                        <div class="col-md-4">
-                            <div class="card h-100 shadow-sm position-relative">
-                                <?php if ($offer['image'] && file_exists($offer['image'])): ?>
-                                    <a href="offers.php?action=view&id=<?= htmlspecialchars($offer['id']) ?>">
-                                        <img src="<?= htmlspecialchars($offer['image']) ?>" class="card-img-top" alt="<?= htmlspecialchars($offer['title']) ?>" loading="lazy" onerror="this.src='https://via.placeholder.com/600x400?text=Offer+Image';">
-                                    </a>
-                                <?php else: ?>
-                                    <img src="https://via.placeholder.com/600x400?text=No+Image" class="card-img-top" alt="No Image Available" loading="lazy">
-                                <?php endif; ?>
-                                <?php if ($offer['is_active']): ?>
-                                    <span class="badge bg-success position-absolute top-0 end-0 m-2">Active</span>
-                                <?php endif; ?>
-                                <div class="card-body d-flex flex-column">
-                                    <h5 class="card-title"><?= htmlspecialchars($offer['title']) ?></h5>
-                                    <p class="card-text"><?= nl2br(htmlspecialchars($offer['description'])) ?></p>
-                                    <div class="mt-auto">
-                                        <a href="offers.php?action=view&id=<?= htmlspecialchars($offer['id']) ?>" class="btn btn-primary w-100">
-                                            View Offer
-                                        </a>
-                                    </div>
-                                </div>
-                                <div class="card-footer text-muted">
-                                    <?= htmlspecialchars($offer['start_date'] ?? 'N/A') ?> - <?= htmlspecialchars($offer['end_date'] ?? 'N/A') ?>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </section>
-    <?php endif; ?>
+    <?php
+    // Array of files to include
+    $includes = [
+        'edit_cart.php',
+        'header.php',
+        'reservation.php',
+        'promotional_banners.php',
+        'special_offers.php',
+        'checkout.php',
+        'order_success.php',
+        'cart_modal.php',
+        'toast_notifications.php',
+        'agb_modal.php',
+        'impressum_modal.php',
+        'datenschutz_modal.php',
+        'ratings.php',
+        'store_close.php'
+    ];
+    // Include each file
+    foreach ($includes as $file) {
+        include $file;
+    }
+    ?>
     <!-- Category Tabs -->
     <ul class="nav nav-tabs justify-content-center my-4" id="categoryTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -1182,11 +1033,10 @@ try {
                                 <div class="card menu-item h-100 shadow-sm">
                                     <div class="image-container position-relative">
                                         <img src="admin/<?= htmlspecialchars($product['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($product['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
-                                        <?php if ($product['is_new']): ?>
-                                            <span class="badge bg-success position-absolute top-0 end-0 m-2">New</span>
-                                        <?php endif; ?>
-                                        <?php if ($product['is_offer']): ?>
-                                            <span class="badge bg-warning text-dark position-absolute top-40 end-0 m-2">Offer</span>
+                                        <?php if ($product['is_new'] || $product['is_offer']): ?>
+                                            <span class="badge <?= $product['is_new'] ? 'bg-success' : 'bg-warning text-dark' ?> position-absolute <?= $product['is_offer'] ? 'top-40' : 'top-0' ?> end-0 m-2">
+                                                <?= $product['is_new'] ? 'New' : 'Offer' ?>
+                                            </span>
                                         <?php endif; ?>
                                         <?php if ($product['allergies']): ?>
                                             <button type="button" class="btn btn-sm btn-danger position-absolute" style="top: 10px; left: 10px;" data-bs-toggle="modal" data-bs-target="#allergiesModal<?= $product['id'] ?>">
@@ -1198,8 +1048,12 @@ try {
                                         <h5 class="card-title"><?= htmlspecialchars($product['name']) ?></h5>
                                         <p class="card-text"><?= htmlspecialchars($product['description']) ?></p>
                                         <div class="mt-auto d-flex justify-content-between align-items-center">
-                                            <strong><?= !empty($product['sizes']) ? number_format($product['sizes'][0]['price'], 2) . '€' : number_format($product['base_price'], 2) . '€' ?></strong>
-                                            <button class="btn btn-sm btn-primary btn-add-to-cart" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $product['id'] ?>"><i class="bi bi-cart-plus me-1"></i> Add to Cart</button>
+                                            <strong>
+                                                <?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?>
+                                            </strong>
+                                            <button class="btn btn-sm btn-primary btn-add-to-cart" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $product['id'] ?>">
+                                                <i class="bi bi-cart-plus me-1"></i> Add to Cart
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -1209,68 +1063,61 @@ try {
                                 <div class="modal-dialog modal-xl modal-dialog-centered">
                                     <div class="modal-content">
                                         <form method="POST" action="index.php">
-                                            <!-- <div class="modal-header">
-                                                <h5 class="modal-title" id="addToCartModalLabel<?= $product['id'] ?>">Add <?= htmlspecialchars($product['name']) ?> to Cart</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div> -->
                                             <div class="modal-body">
-                                                <!-- Product Details -->
                                                 <div class="row">
                                                     <div class="col-4">
                                                         <img src="<?= htmlspecialchars($product['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($product['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
                                                     </div>
                                                     <div class="col-8">
-                                                        <!-- All Uppercase -->
                                                         <h2 class="text-uppercase"><b><?= htmlspecialchars($product['name']) ?></b></h2>
-                                                        <hr style="width: 10%;border: 2px solid black;  border-radius: 5px;">
-                                                        <h3 style="color:#d3b213"><b><?= !empty($product['sizes']) ? number_format($product['sizes'][0]['price'], 2) . '€' : number_format($product['base_price'], 2) . '€' ?></b></h3>
+                                                        <hr style="width: 10%; border: 2px solid black; border-radius: 5px;">
+                                                        <h3 style="color:#d3b213"><b>
+                                                                <?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?>
+                                                            </b></h3>
                                                         <?php if (!empty($product['sizes'])): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Size</label>
                                                                 <select class="form-select" name="size" required>
                                                                     <option value="">Choose a size</option>
                                                                     <?php foreach ($product['sizes'] as $size): ?>
-                                                                        <option value="<?= htmlspecialchars($size['id']) ?>"><?= htmlspecialchars($size['name']) ?> (+<?= number_format($size['price'], 2) ?>€)</option>
+                                                                        <option value="<?= htmlspecialchars($size['id']) ?>">
+                                                                            <?= htmlspecialchars($size['name']) ?> (+<?= number_format($size['price'], 2) ?>€)
+                                                                        </option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
                                                         <?php endif; ?>
-                                                        <?php if ($product['extras']): ?>
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Extras</label>
-                                                                <div>
-                                                                    <?php foreach ($product['extras'] as $extra): ?>
-                                                                        <div class="form-check">
-                                                                            <input class="form-check-input" type="checkbox" id="extra<?= $product['id'] ?>_<?= $extra['id'] ?>" name="extras[]" value="<?= htmlspecialchars($extra['id']) ?>">
-                                                                            <label class="form-check-label" for="extra<?= $product['id'] ?>_<?= $extra['id'] ?>"><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</label>
-                                                                        </div>
-                                                                    <?php endforeach; ?>
-                                                                </div>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                        <?php if ($product['sauces']): ?>
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Sauces</label>
-                                                                <div>
-                                                                    <?php foreach ($product['sauces'] as $sauce_id): ?>
-                                                                        <?php if (isset($sauce_details[$sauce_id])): ?>
-                                                                            <?php $sauce = $sauce_details[$sauce_id]; ?>
+                                                        <?php foreach (['extras' => $product['extras'], 'sauces' => $product['sauces']] as $type => $items): ?>
+                                                            <?php if ($items): ?>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label"><?= ucfirst($type) ?></label>
+                                                                    <div>
+                                                                        <?php foreach ($items as $key => $item): ?>
+                                                                            <?php
+                                                                            $itemData = ($type === 'sauces') && isset($sauce_details[$item]) ? $sauce_details[$item] : $item;
+                                                                            if ($type === 'sauces' && !isset($sauce_details[$item])) continue;
+                                                                            ?>
                                                                             <div class="form-check">
-                                                                                <input class="form-check-input" type="checkbox" id="sauce<?= $product['id'] ?>_<?= $sauce['id'] ?>" name="sauces[]" value="<?= htmlspecialchars($sauce['id']) ?>">
-                                                                                <label class="form-check-label" for="sauce<?= $product['id'] ?>_<?= $sauce['id'] ?>"><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</label>
+                                                                                <input class="form-check-input" type="checkbox" id="<?= $type ?><?= $product['id'] ?>_<?= is_array($itemData) ? $itemData['id'] : $item['id'] ?>" name="<?= $type ?>[]" value="<?= htmlspecialchars(is_array($itemData) ? $itemData['id'] : $item['id']) ?>">
+                                                                                <label class="form-check-label" for="<?= $type ?><?= $product['id'] ?>_<?= is_array($itemData) ? $itemData['id'] : $item['id'] ?>">
+                                                                                    <?= htmlspecialchars(is_array($itemData) ? $itemData['name'] : $item['name']) ?>
+                                                                                    (+<?= number_format(is_array($itemData) ? $itemData['price'] : $item['price'], 2) ?>€)
+                                                                                </label>
                                                                             </div>
-                                                                        <?php endif; ?>
-                                                                    <?php endforeach; ?>
+                                                                        <?php endforeach; ?>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        <?php endif; ?>
+                                                            <?php endif; ?>
+                                                        <?php endforeach; ?>
                                                         <?php if ($drinks): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Drinks</label>
                                                                 <select class="form-select" name="drink">
                                                                     <option value="">Choose a drink</option>
                                                                     <?php foreach ($drinks as $drink): ?>
-                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>"><?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)</option>
+                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>">
+                                                                            <?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)
+                                                                        </option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
@@ -1344,42 +1191,51 @@ try {
                     <!-- Existing Order Details -->
                     <p class="card-text">
                         <strong>Working hours:</strong>
-                        <?php if (!empty($notification['message'])): ?>
-                            <?= htmlspecialchars($notification['message']) ?>
-                        <?php else: ?>
-                            <?= "10:00 - 21:45" ?>
-                        <?php endif; ?>
+                        <?= !empty($notification['message']) ? htmlspecialchars($notification['message']) : "10:00 - 21:45" ?>
                         <br>
                         <strong>Minimum order:</strong> 5.00€
                     </p>
+                    <?php if (!empty($_SESSION['delivery_address'])): ?>
+                        <div class="mb-3">
+                            <h5>Delivery Address</h5>
+                            <p><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
+                            <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                View on Map
+                            </a>
+                        </div>
+                    <?php endif; ?>
                     <div id="cart-items">
-                        <?php if ($_SESSION['cart']): ?>
+                        <?php if (!empty($_SESSION['cart'])): ?>
                             <ul class="list-group mb-3">
                                 <?php foreach ($_SESSION['cart'] as $index => $item): ?>
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         <div>
                                             <h6><?= htmlspecialchars($item['name']) ?> (<?= htmlspecialchars($item['size'] ?? 'N/A') ?>) x<?= htmlspecialchars($item['quantity']) ?></h6>
-                                            <?php if ($item['extras']): ?>
+                                            <?php if (!empty($item['extras'])): ?>
                                                 <ul>
                                                     <?php foreach ($item['extras'] as $extra): ?>
                                                         <li><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</li>
                                                     <?php endforeach; ?>
                                                 </ul>
                                             <?php endif; ?>
-                                            <?php if ($item['drink']): ?>
+                                            <?php if (!empty($item['drink'])): ?>
                                                 <p>Drink: <?= htmlspecialchars($item['drink']['name']) ?> (+<?= number_format($item['drink']['price'], 2) ?>€)</p>
                                             <?php endif; ?>
-                                            <?php if ($item['sauces']): ?>
+                                            <?php if (!empty($item['sauces'])): ?>
                                                 <p>Sauces: <?= htmlspecialchars(implode(', ', array_column($item['sauces'], 'name'))) ?> (+<?= number_format(array_reduce($item['sauces'], fn($carry, $sauce) => $carry + $sauce['price'], 0.00), 2) ?>€)</p>
                                             <?php endif; ?>
-                                            <?php if ($item['special_instructions']): ?>
+                                            <?php if (!empty($item['special_instructions'])): ?>
                                                 <p><em>Instructions:</em> <?= htmlspecialchars($item['special_instructions']) ?></p>
                                             <?php endif; ?>
                                         </div>
                                         <div>
                                             <strong><?= number_format($item['total_price'], 2) ?>€</strong><br>
-                                            <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2"><i class="bi bi-trash"></i> Remove</a>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>"><i class="bi bi-pencil-square"></i> Edit</button>
+                                            <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>">
+                                                <i class="bi bi-pencil-square"></i> Edit
+                                            </button>
                                         </div>
                                     </li>
                                 <?php endforeach; ?>
@@ -1402,269 +1258,6 @@ try {
             </div>
         </div>
     </main>
-    <!-- Checkout Modal -->
-    <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <form method="POST" action="index.php" id="checkoutForm">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="checkoutModalLabel">Checkout</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <!-- Customer Details Fields -->
-                        <div class="mb-3">
-                            <label for="customer_name" class="form-label">Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="customer_name" name="customer_name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="customer_email" class="form-label">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" id="customer_email" name="customer_email" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="customer_phone" class="form-label">Phone <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" id="customer_phone" name="customer_phone" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="delivery_address" class="form-label">Delivery Address <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" required></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label>
-                                <input class="form-check-input" type="radio" id="event_checkbox"> Event
-                            </label>
-                        </div>
-                        <div id="event_details" style="display: none;">
-                            <div class="mb-3">
-                                <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" min="<?= date('Y-m-d') ?>">
-                            </div>
-                            <div class="mb-3">
-                                <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" id="scheduled_time" name="scheduled_time">
-                            </div>
-                        </div>
-                        <script>
-                            document.getElementById('event_checkbox').addEventListener('change', function() {
-                                const eventDetails = document.getElementById('event_details');
-                                const scheduledDate = document.getElementById('scheduled_date');
-                                const scheduledTime = document.getElementById('scheduled_time');
-                                if (this.checked) {
-                                    eventDetails.style.display = 'block';
-                                    // Set required attribute for inputs when checkbox is checked
-                                    scheduledDate.setAttribute('required', 'required');
-                                    scheduledTime.setAttribute('required', 'required');
-                                } else {
-                                    eventDetails.style.display = 'none';
-                                    // Remove required attribute for inputs when checkbox is unchecked
-                                    scheduledDate.removeAttribute('required');
-                                    scheduledTime.removeAttribute('required');
-                                }
-                            });
-                        </script>
-                        <!-- Payment Method Selection -->
-                        <div class="mb-3">
-                            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
-                            <div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentStripe" value="stripe" required>
-                                    <label class="form-check-label" for="paymentStripe">
-                                        Stripe (Online Payment)
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentPickup" value="pickup" required>
-                                    <label class="form-check-label" for="paymentPickup">
-                                        Pick-Up (Pay on Collection)
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentCash" value="cash" required>
-                                    <label class="form-check-label" for="paymentCash">
-                                        Cash on Delivery
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Stripe Payment Elements (Hidden by Default) -->
-                        <div id="stripe-payment-section" class="mb-3" style="display: none;">
-                            <label class="form-label">Credit or Debit Card</label>
-                            <div id="card-element"><!-- A Stripe Element will be inserted here. --></div>
-                            <div id="card-errors" role="alert" class="text-danger mt-2"></div>
-                        </div>
-                        <!-- Tip Selection -->
-                        <div class="mb-3">
-                            <label for="tip_selection" class="form-label">Select Tip</label>
-                            <select class="form-select" id="tip_selection" name="selected_tip">
-                                <?php foreach ($tip_options as $tip): ?>
-                                    <option value="<?= htmlspecialchars($tip['id']) ?>" <?= ($selected_tip == $tip['id']) ? 'selected' : '' ?>>
-                                        <?php
-                                        if ($tip['percentage']) {
-                                            echo htmlspecialchars($tip['name']) . " (" . htmlspecialchars($tip['percentage']) . "%)";
-                                        } elseif ($tip['amount']) {
-                                            echo htmlspecialchars($tip['name']) . " (+" . number_format($tip['amount'], 2) . "€)";
-                                        }
-                                        ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <!-- Order Summary -->
-                        <h5>Order Summary</h5>
-                        <ul class="list-group mb-3">
-                            <?php foreach ($_SESSION['cart'] as $item): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div><?= htmlspecialchars($item['name']) ?> x<?= htmlspecialchars($item['quantity']) ?><?= $item['size'] ? " ({$item['size']})" : '' ?></div>
-                                    <div><?= number_format($item['total_price'], 2) ?>€</div>
-                                </li>
-                            <?php endforeach; ?>
-                            <?php if ($tip_amount > 0): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>Tip</div>
-                                    <div><?= number_format($tip_amount, 2) ?>€</div>
-                                </li>
-                            <?php endif; ?>
-                        </ul>
-                        <h5>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h5>
-                        <!-- CSRF Token -->
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                    </div>
-                    <div class="modal-footer">
-                        <input type="hidden" name="checkout" value="1">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Place Order</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    <!-- Order Success Modal -->
-    <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
-        <?php
-        // Fetch the last order to get payment method
-        $stmt = $pdo->prepare("SELECT payment_method FROM orders WHERE id = (SELECT MAX(id) FROM orders)");
-        $stmt->execute();
-        $last_order = $stmt->fetch(PDO::FETCH_ASSOC);
-        $payment_method = $last_order['payment_method'] ?? 'cash';
-        ?>
-        <div class="modal fade show" tabindex="-1" style="display: block;" aria-modal="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Thank You for Your Order!</h5>
-                        <a href="index.php" class="btn-close" aria-label="Close"></a>
-                    </div>
-                    <div class="modal-body">
-                        <p>Your order has been placed successfully.</p>
-                        <p>
-                            <?php if ($payment_method === 'stripe'): ?>
-                                <strong>Payment Method:</strong> Online Payment via Stripe.
-                            <?php elseif ($payment_method === 'pickup'): ?>
-                                <strong>Payment Method:</strong> Pay on Collection.
-                            <?php elseif ($payment_method === 'cash'): ?>
-                                <strong>Payment Method:</strong> Cash on Delivery.
-                            <?php endif; ?>
-                        </p>
-                        <p>It will be delivered on <strong><?= htmlspecialchars($_GET['scheduled_date']) ?></strong> at <strong><?= htmlspecialchars($_GET['scheduled_time']) ?></strong>.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <a href="index.php" class="btn btn-primary">Close</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
-    <!-- Toast Notifications -->
-    <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
-        <div class="toast-container position-fixed bottom-0 end-0 p-3">
-            <div class="toast align-items-center text-bg-success border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body">Product added to cart successfully!</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
-    <?php if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>
-        <div class="toast-container position-fixed bottom-0 end-0 p-3">
-            <div class="toast align-items-center text-bg-warning border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body">Product removed from cart.</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
-    <?php if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
-        <div class="toast-container position-fixed bottom-0 end-0 p-3">
-            <div class="toast align-items-center text-bg-info border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body">Cart updated successfully!</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
-    <!-- Cart Modal -->
-    <div class="modal fade" id="cartModal" tabindex="-1" aria-labelledby="cartModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Your Cart</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <?php if ($_SESSION['cart']): ?>
-                        <ul class="list-group mb-3">
-                            <?php foreach ($_SESSION['cart'] as $index => $item): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h6><?= htmlspecialchars($item['name']) ?> (<?= htmlspecialchars($item['size'] ?? 'N/A') ?>) x<?= htmlspecialchars($item['quantity']) ?></h6>
-                                        <?php if ($item['extras']): ?>
-                                            <ul>
-                                                <?php foreach ($item['extras'] as $extra): ?>
-                                                    <li><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        <?php endif; ?>
-                                        <?php if ($item['drink']): ?>
-                                            <p>Drink: <?= htmlspecialchars($item['drink']['name']) ?> (+<?= number_format($item['drink']['price'], 2) ?>€)</p>
-                                        <?php endif; ?>
-                                        <?php if ($item['sauces']): ?>
-                                            <p>Sauces: <?= htmlspecialchars(implode(', ', array_column($item['sauces'], 'name'))) ?> (+<?= number_format(array_reduce($item['sauces'], fn($carry, $sauce) => $carry + $sauce['price'], 0.00), 2) ?>€)</p>
-                                        <?php endif; ?>
-                                        <?php if ($item['special_instructions']): ?>
-                                            <p><em>Instructions:</em> <?= htmlspecialchars($item['special_instructions']) ?></p>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div>
-                                        <strong><?= number_format($item['total_price'], 2) ?>€</strong><br>
-                                        <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2"><i class="bi bi-trash"></i> Remove</a>
-                                        <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>"><i class="bi bi-pencil-square"></i> Edit</button>
-                                    </div>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                        <?php if ($tip_amount > 0): ?>
-                            <ul class="list-group mb-3">
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>Tip</div>
-                                    <div><?= number_format($tip_amount, 2) ?>€</div>
-                                </li>
-                            </ul>
-                        <?php endif; ?>
-                        <h4>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h4>
-                        <button class="btn btn-success w-100 mt-3 btn-checkout" data-bs-toggle="modal" data-bs-target="#checkoutModal">Proceed to Checkout</button>
-                    <?php else: ?>
-                        <p>Your cart is empty.</p>
-                    <?php endif; ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
     <footer class="bg-light text-muted pt-5 pb-4">
         <div class="container text-md-left">
             <div class="row text-md-left">
@@ -1768,156 +1361,38 @@ try {
             </div>
         </div>
     </footer>
-    <!-- Legal Modals -->
-    <!-- AGB Modal -->
-    <div class="modal fade" id="agbModal" tabindex="-1" aria-labelledby="agbModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">AGB (Terms and Conditions)</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <?= nl2br(htmlspecialchars($agb)) ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Impressum Modal -->
-    <div class="modal fade" id="impressumModal" tabindex="-1" aria-labelledby="impressumModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Impressum (Imprint)</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <?= nl2br(htmlspecialchars($impressum)) ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Datenschutzerklärung Modal -->
-    <div class="modal fade" id="datenschutzModal" tabindex="-1" aria-labelledby="datenschutzModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Datenschutzerklärung (Privacy Policy)</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <?= nl2br(htmlspecialchars($datenschutzerklaerung)) ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Ratings Modal -->
-    <div class="modal fade" id="ratingsModal" tabindex="-1" aria-labelledby="ratingsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <form method="POST" action="submit_rating.php">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="ratingsModalLabel">Submit Your Rating</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="full_name" class="form-label">Full Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="full_name" name="full_name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" id="email" name="email" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="phone" class="form-label">Phone (Optional)</label>
-                            <input type="tel" class="form-control" id="phone" name="phone">
-                        </div>
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" value="1" id="anonymous" name="anonymous">
-                            <label class="form-check-label" for="anonymous">
-                                Submit as Anonymous
-                            </label>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Rating <span class="text-danger">*</span></label>
-                            <div>
-                                <?php for ($i = 1; $i <= 5; $i++): ?>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="radio" name="rating" id="rating<?= $i ?>" value="<?= $i ?>" required>
-                                        <label class="form-check-label" for="rating<?= $i ?>"><?= $i ?> Star<?= $i > 1 ? 's' : '' ?></label>
-                                    </div>
-                                <?php endfor; ?>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="comments" class="form-label">Comments</label>
-                            <textarea class="form-control" id="comments" name="comments" rows="3" placeholder="Your feedback..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <input type="hidden" name="submit_rating" value="1">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Submit Rating</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    <!-- SweetAlert2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- Bootstrap Bundle JS (includes Popper) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        $(document).ready(function() {
-            // Fade out loading overlay
+        $(document).ready(() => {
+            // Fade out loading overlay and show toasts
             $('#loading-overlay').fadeOut('slow');
-            // Initialize toasts
             $('.toast').toast('show');
             // Handle reservation form submission via AJAX
-            $('#reservationForm').on('submit', function(e) {
+            $('#reservationForm').submit(function(e) {
                 e.preventDefault();
-                const formData = $(this).serialize();
-                const submitButton = $(this).find('button[type="submit"]');
-                submitButton.prop('disabled', true);
-                $.ajax({
-                    url: 'submit_reservation.php',
-                    type: 'POST',
-                    data: formData,
-                    dataType: 'json',
-                    success: function(response) {
+                const $form = $(this);
+                const $submitBtn = $form.find('button[type="submit"]').prop('disabled', true);
+                $.post('submit_reservation.php', $form.serialize(), (response) => {
                         $('#reservationModal').modal('hide');
-                        $('#reservationForm')[0].reset();
+                        $form[0].reset();
                         Swal.fire({
                             icon: response.status === 'success' ? 'success' : 'error',
                             title: response.status === 'success' ? 'Rezervim i Suksesshëm' : 'Gabim',
                             text: response.message,
-                            timer: response.status === 'success' ? 3000 : undefined,
+                            timer: response.status === 'success' ? 3000 : null,
                             showConfirmButton: response.status !== 'success'
                         });
-                    },
-                    error: function() {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Gabim',
-                            text: 'Ka ndodhur një gabim gjatë dërgimit të rezervimit. Ju lutem provoni më vonë.'
-                        });
-                    },
-                    complete: function() {
-                        submitButton.prop('disabled', false);
-                    }
-                });
+                    }, 'json')
+                    .fail(() => Swal.fire({
+                        icon: 'error',
+                        title: 'Gabim',
+                        text: 'Ka ndodhur një gabim gjatë dërgimit të rezervimit. Ju lutem provoni më vonë.'
+                    }))
+                    .always(() => $submitBtn.prop('disabled', false));
             });
             // Redirect after order success
             <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
@@ -1927,128 +1402,93 @@ try {
                 }, 5000);
             <?php endif; ?>
             // Handle Store Closed Status
-            let storeClosedModalInstance = null;
-
-            function checkStoreStatus() {
-                $.getJSON('check_store_status.php', function(data) {
+            const updateStoreStatus = () => {
+                $.getJSON('check_store_status.php', (data) => {
+                    const $controls = $('.btn-add-to-cart, .btn-checkout');
                     if (data.is_closed) {
-                        if (!storeClosedModalInstance) {
-                            $('#storeClosedModalLabel').text(data.notification.title);
-                            $('#storeClosedMessage').text(data.notification.message);
-                            const endTime = new Date(data.notification.end_datetime);
-                            $('#storeClosedEndTime').text(`We will reopen on ${endTime.toLocaleString()}.`);
-                            storeClosedModalInstance = new bootstrap.Modal('#storeClosedModal', {
-                                backdrop: 'static',
-                                keyboard: false
-                            });
-                            storeClosedModalInstance.show();
-                            $('.btn-add-to-cart').prop('disabled', true).toggleClass('disabled', true).attr('title', 'Store is currently closed');
-                            $('.btn-checkout').prop('disabled', true).toggleClass('disabled', true).attr('title', 'Store is currently closed');
-                        }
+                        $('#storeClosedModalLabel').text(data.notification.title);
+                        $('#storeClosedMessage').text(data.notification.message);
+                        $('#storeClosedEndTime').text(`We will reopen on ${new Date(data.notification.end_datetime).toLocaleString()}.`);
+                        new bootstrap.Modal('#storeClosedModal', {
+                            backdrop: 'static',
+                            keyboard: false
+                        }).show();
+                        $controls.prop('disabled', true).addClass('disabled').attr('title', 'Store is currently closed');
                     } else {
-                        if (storeClosedModalInstance) {
-                            storeClosedModalInstance.hide();
-                            storeClosedModalInstance = null;
-                            $('.btn-add-to-cart').prop('disabled', false).toggleClass('disabled', false).attr('title', '');
-                            $('.btn-checkout').prop('disabled', false).toggleClass('disabled', false).attr('title', '');
-                        }
+                        const modal = bootstrap.Modal.getInstance($('#storeClosedModal')[0]);
+                        modal?.hide();
+                        $controls.prop('disabled', false).removeClass('disabled').attr('title', '');
                     }
-                }).fail(function(error) {
-                    console.error('Error fetching store status:', error);
-                });
-            }
-            // Initial check and set interval
-            checkStoreStatus();
-            setInterval(checkStoreStatus, 60000); // Check every 60 seconds
-        });
-    </script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
+                }).fail(err => console.error('Error fetching store status:', err));
+            };
+            updateStoreStatus();
+            setInterval(updateStoreStatus, 60000);
             // Initialize Stripe
-            const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym'); // Replace with your actual Stripe publishable key
-            const elements = stripe.elements();
-            const cardElement = elements.create('card');
-            cardElement.mount('#card-element');
-            // Handle payment method change
-            const paymentMethods = document.getElementsByName('payment_method');
-            paymentMethods.forEach(function(method) {
-                method.addEventListener('change', function() {
-                    if (document.getElementById('paymentStripe').checked) {
-                        document.getElementById('stripe-payment-section').style.display = 'block';
-                    } else {
-                        document.getElementById('stripe-payment-section').style.display = 'none';
-                    }
-                });
-            });
-            // Handle form submission
-            const checkoutForm = document.getElementById('checkoutForm');
-            const submitButton = checkoutForm.querySelector('button[type="submit"]');
-            checkoutForm.addEventListener('submit', function(e) {
-                if (document.getElementById('paymentStripe').checked) {
+            const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym');
+            const card = stripe.elements().create('card').mount('#card-element');
+            // Toggle Stripe payment section
+            $('input[name="payment_method"]').change(() => $('#stripe-payment-section').toggle($('#paymentStripe').is(':checked')));
+            // Handle checkout form submission
+            $('#checkoutForm').submit(async function(e) {
+                if ($('#paymentStripe').is(':checked')) {
                     e.preventDefault();
-                    submitButton.disabled = true;
-                    stripe.createPaymentMethod({
-                        type: 'card',
-                        card: cardElement,
-                        billing_details: {
-                            name: document.getElementById('customer_name').value,
-                            email: document.getElementById('customer_email').value,
-                            phone: document.getElementById('customer_phone').value,
-                            address: {
-                                line1: document.getElementById('delivery_address').value
+                    const $submitBtn = $(this).find('button[type="submit"]').prop('disabled', true);
+                    try {
+                        const {
+                            paymentMethod,
+                            error
+                        } = await stripe.createPaymentMethod({
+                            type: 'card',
+                            card: card,
+                            billing_details: {
+                                name: $('#customer_name').val(),
+                                email: $('#customer_email').val(),
+                                phone: $('#customer_phone').val(),
+                                address: {
+                                    line1: $('#delivery_address').val()
+                                }
                             }
+                        });
+                        if (error) {
+                            $('#card-errors').text(error.message);
+                            $submitBtn.prop('disabled', false);
+                            return;
                         }
-                    }).then(function(result) {
-                        if (result.error) {
-                            // Display error in #card-errors
-                            document.getElementById('card-errors').textContent = result.error.message;
-                            submitButton.disabled = false;
-                        } else {
-                            // Append payment_method ID to the form and submit via AJAX
-                            const hiddenInput = document.createElement('input');
-                            hiddenInput.setAttribute('type', 'hidden');
-                            hiddenInput.setAttribute('name', 'stripe_payment_method');
-                            hiddenInput.setAttribute('value', result.paymentMethod.id);
-                            checkoutForm.appendChild(hiddenInput);
-                            // Submit the form via AJAX using Fetch API
-                            fetch('index.php', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/x-www-form-urlencoded'
-                                    },
-                                    body: new URLSearchParams(new FormData(checkoutForm))
-                                })
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.requires_action) {
-                                        // Handle required action (e.g., 3D Secure)
-                                        stripe.confirmCardPayment(data.payment_intent_client_secret).then(function(confirmResult) {
-                                            if (confirmResult.error) {
-                                                // Show error to the customer
-                                                document.getElementById('card-errors').textContent = confirmResult.error.message;
-                                                submitButton.disabled = false;
-                                            } else {
-                                                if (confirmResult.paymentIntent.status === 'succeeded') {
-                                                    // Redirect to success page
-                                                    window.location.href = data.redirect_url;
-                                                }
-                                            }
-                                        });
-                                    } else if (data.success) {
-                                        // Payment succeeded, redirect to success page
-                                        window.location.href = data.redirect_url;
-                                    }
-                                })
-                                .catch(() => {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Error',
-                                        text: 'There was an issue processing your payment. Please try again.',
-                                    });
-                                    submitButton.disabled = false;
-                                });
+                        $(this).append($('<input>', {
+                            type: 'hidden',
+                            name: 'stripe_payment_method',
+                            value: paymentMethod.id
+                        }));
+                        const formData = new URLSearchParams(new FormData(this)).toString();
+                        const response = await fetch('index.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: formData
+                        }).then(res => res.json());
+                        if (response.requires_action) {
+                            const {
+                                error: confirmError,
+                                paymentIntent
+                            } = await stripe.confirmCardPayment(response.payment_intent_client_secret);
+                            if (confirmError) {
+                                $('#card-errors').text(confirmError.message);
+                            } else if (paymentIntent.status === 'succeeded') {
+                                window.location.href = response.redirect_url;
+                            }
+                        } else if (response.success) {
+                            window.location.href = response.redirect_url;
                         }
-                    });
+                    } catch {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'There was an issue processing your payment. Please try again.'
+                        });
+                    } finally {
+                        $(this).find('button[type="submit"]').prop('disabled', false);
+                    }
                 }
             });
         });

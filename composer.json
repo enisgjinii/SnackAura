@@ -1,6 +1,7 @@
 {
     "require": {
         "paypal/rest-api-sdk-php": "^1.14",
-        "stripe/stripe-php": "^16.2"
+        "stripe/stripe-php": "^16.2",
+        "symfony/translation": "^6.4"
     }
 }

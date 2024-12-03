@@ -3,6 +3,11 @@
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 
+// Start the session if not already started
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Initialize message variable
 $message = '';
 
@@ -170,12 +175,12 @@ $current_settings = getSettings($pdo, $allowed_keys);
 ?>
 
 <div class="container-fluid mt-4">
-    <h2 class="mb-4"><i class="fas fa-cogs"></i> Settings</h2>
+    <h2 class="mb-4">Settings</h2>
     <?php if ($message): ?>
         <?= $message ?>
     <?php endif; ?>
     <!-- Tabbed Interface -->
-    <form method="POST" action="settings.php" enctype="multipart/form-data">
+    <form method="POST" action="settings.php" enctype="multipart/form-data" novalidate>
         <ul class="nav nav-tabs" id="settingsTab" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab" aria-controls="general" aria-selected="true">
@@ -199,188 +204,232 @@ $current_settings = getSettings($pdo, $allowed_keys);
                 </button>
             </li>
         </ul>
-        <div class="tab-content" id="settingsTabContent">
+        <div class="tab-content border border-top-0 p-4" id="settingsTabContent">
             <!-- General Settings Tab -->
-            <div class="tab-pane fade show active p-4" id="general" role="tabpanel" aria-labelledby="general-tab">
-                <!-- Minimum Order Price -->
-                <div class="mb-4">
-                    <label for="minimum_order" class="form-label">
-                        <i class="fas fa-euro-sign"></i> <strong>Minimum Order (€)</strong>
-                    </label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-euro-sign"></i></span>
-                        <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            class="form-control"
-                            id="minimum_order"
-                            name="minimum_order"
-                            required
-                            value="<?= htmlspecialchars($current_settings['minimum_order'] ?? '5.00') ?>">
-                        <div class="invalid-feedback">
-                            Please enter a valid positive number.
+            <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+                <div class="row">
+                    <!-- Minimum Order Price -->
+                    <div class="col-md-6 mb-4">
+                        <label for="minimum_order" class="form-label">
+                            <i class="fas fa-euro-sign"></i> <strong>Minimum Order (€)</strong>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-euro-sign"></i></span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                class="form-control"
+                                id="minimum_order"
+                                name="minimum_order"
+                                required
+                                value="<?= htmlspecialchars($current_settings['minimum_order'] ?? '5.00') ?>"
+                                aria-describedby="minimumOrderHelp">
+                            <div class="invalid-feedback">
+                                Please enter a valid positive number.
+                            </div>
                         </div>
+                        <div id="minimumOrderHelp" class="form-text">Set the minimum order price required for customers to place an order.</div>
                     </div>
-                    <div class="form-text">Set the minimum order price required for customers to place an order.</div>
                 </div>
             </div>
 
             <!-- Social Media Settings Tab -->
-            <div class="tab-pane fade p-4" id="social-media" role="tabpanel" aria-labelledby="social-media-tab">
+            <div class="tab-pane fade" id="social-media" role="tabpanel" aria-labelledby="social-media-tab">
                 <h5 class="mb-4"><i class="fas fa-share-alt"></i> Social Media Links</h5>
-                <!-- Facebook Link -->
-                <div class="mb-3">
-                    <label for="facebook_link" class="form-label">
-                        <i class="fab fa-facebook-f me-2"></i> Facebook URL
-                    </label>
-                    <input
-                        type="url"
-                        class="form-control"
-                        id="facebook_link"
-                        name="facebook_link"
-                        placeholder="https://facebook.com/yourpage"
-                        value="<?= htmlspecialchars($current_settings['facebook_link'] ?? '') ?>">
-                    <div class="form-text">Enter your Facebook page URL.</div>
-                </div>
-                <!-- Twitter Link -->
-                <div class="mb-3">
-                    <label for="twitter_link" class="form-label">
-                        <i class="fab fa-twitter me-2"></i> Twitter URL
-                    </label>
-                    <input
-                        type="url"
-                        class="form-control"
-                        id="twitter_link"
-                        name="twitter_link"
-                        placeholder="https://twitter.com/yourprofile"
-                        value="<?= htmlspecialchars($current_settings['twitter_link'] ?? '') ?>">
-                    <div class="form-text">Enter your Twitter profile URL.</div>
-                </div>
-                <!-- Instagram Link -->
-                <div class="mb-3">
-                    <label for="instagram_link" class="form-label">
-                        <i class="fab fa-instagram me-2"></i> Instagram URL
-                    </label>
-                    <input
-                        type="url"
-                        class="form-control"
-                        id="instagram_link"
-                        name="instagram_link"
-                        placeholder="https://instagram.com/yourprofile"
-                        value="<?= htmlspecialchars($current_settings['instagram_link'] ?? '') ?>">
-                    <div class="form-text">Enter your Instagram profile URL.</div>
-                </div>
-                <!-- LinkedIn Link -->
-                <div class="mb-3">
-                    <label for="linkedin_link" class="form-label">
-                        <i class="fab fa-linkedin-in me-2"></i> LinkedIn URL
-                    </label>
-                    <input
-                        type="url"
-                        class="form-control"
-                        id="linkedin_link"
-                        name="linkedin_link"
-                        placeholder="https://linkedin.com/in/yourprofile"
-                        value="<?= htmlspecialchars($current_settings['linkedin_link'] ?? '') ?>">
-                    <div class="form-text">Enter your LinkedIn profile URL.</div>
-                </div>
-                <!-- YouTube Link -->
-                <div class="mb-3">
-                    <label for="youtube_link" class="form-label">
-                        <i class="fab fa-youtube me-2"></i> YouTube URL
-                    </label>
-                    <input
-                        type="url"
-                        class="form-control"
-                        id="youtube_link"
-                        name="youtube_link"
-                        placeholder="https://youtube.com/yourchannel"
-                        value="<?= htmlspecialchars($current_settings['youtube_link'] ?? '') ?>">
-                    <div class="form-text">Enter your YouTube channel URL.</div>
+                <div class="row">
+                    <!-- Facebook Link -->
+                    <div class="col-md-6 mb-3">
+                        <label for="facebook_link" class="form-label">
+                            <i class="fab fa-facebook-f me-2"></i> Facebook URL
+                        </label>
+                        <input
+                            type="url"
+                            class="form-control"
+                            id="facebook_link"
+                            name="facebook_link"
+                            placeholder="https://facebook.com/yourpage"
+                            value="<?= htmlspecialchars($current_settings['facebook_link'] ?? '') ?>"
+                            aria-describedby="facebookHelp">
+                        <div id="facebookHelp" class="form-text">Enter your Facebook page URL.</div>
+                        <div class="invalid-feedback">
+                            Please enter a valid URL.
+                        </div>
+                    </div>
+                    <!-- Twitter Link -->
+                    <div class="col-md-6 mb-3">
+                        <label for="twitter_link" class="form-label">
+                            <i class="fab fa-twitter me-2"></i> Twitter URL
+                        </label>
+                        <input
+                            type="url"
+                            class="form-control"
+                            id="twitter_link"
+                            name="twitter_link"
+                            placeholder="https://twitter.com/yourprofile"
+                            value="<?= htmlspecialchars($current_settings['twitter_link'] ?? '') ?>"
+                            aria-describedby="twitterHelp">
+                        <div id="twitterHelp" class="form-text">Enter your Twitter profile URL.</div>
+                        <div class="invalid-feedback">
+                            Please enter a valid URL.
+                        </div>
+                    </div>
+                    <!-- Instagram Link -->
+                    <div class="col-md-6 mb-3">
+                        <label for="instagram_link" class="form-label">
+                            <i class="fab fa-instagram me-2"></i> Instagram URL
+                        </label>
+                        <input
+                            type="url"
+                            class="form-control"
+                            id="instagram_link"
+                            name="instagram_link"
+                            placeholder="https://instagram.com/yourprofile"
+                            value="<?= htmlspecialchars($current_settings['instagram_link'] ?? '') ?>"
+                            aria-describedby="instagramHelp">
+                        <div id="instagramHelp" class="form-text">Enter your Instagram profile URL.</div>
+                        <div class="invalid-feedback">
+                            Please enter a valid URL.
+                        </div>
+                    </div>
+                    <!-- LinkedIn Link -->
+                    <div class="col-md-6 mb-3">
+                        <label for="linkedin_link" class="form-label">
+                            <i class="fab fa-linkedin-in me-2"></i> LinkedIn URL
+                        </label>
+                        <input
+                            type="url"
+                            class="form-control"
+                            id="linkedin_link"
+                            name="linkedin_link"
+                            placeholder="https://linkedin.com/in/yourprofile"
+                            value="<?= htmlspecialchars($current_settings['linkedin_link'] ?? '') ?>"
+                            aria-describedby="linkedinHelp">
+                        <div id="linkedinHelp" class="form-text">Enter your LinkedIn profile URL.</div>
+                        <div class="invalid-feedback">
+                            Please enter a valid URL.
+                        </div>
+                    </div>
+                    <!-- YouTube Link -->
+                    <div class="col-md-6 mb-3">
+                        <label for="youtube_link" class="form-label">
+                            <i class="fab fa-youtube me-2"></i> YouTube URL
+                        </label>
+                        <input
+                            type="url"
+                            class="form-control"
+                            id="youtube_link"
+                            name="youtube_link"
+                            placeholder="https://youtube.com/yourchannel"
+                            value="<?= htmlspecialchars($current_settings['youtube_link'] ?? '') ?>"
+                            aria-describedby="youtubeHelp">
+                        <div id="youtubeHelp" class="form-text">Enter your YouTube channel URL.</div>
+                        <div class="invalid-feedback">
+                            Please enter a valid URL.
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Legal Settings Tab -->
-            <div class="tab-pane fade p-4" id="legal" role="tabpanel" aria-labelledby="legal-tab">
-                <!-- AGB (Terms and Conditions) -->
-                <div class="mb-4">
-                    <label for="agb" class="form-label">
-                        <i class="fas fa-file-contract me-2"></i> <strong>AGB (Terms and Conditions)</strong>
-                    </label>
-                    <textarea
-                        class="form-control wysiwyg"
-                        id="agb"
-                        name="agb"
-                        rows="10"
-                        required><?= htmlspecialchars($current_settings['agb'] ?? '') ?></textarea>
-                    <div class="form-text">Enter the Terms and Conditions for your website.</div>
-                </div>
+            <div class="tab-pane fade" id="legal" role="tabpanel" aria-labelledby="legal-tab">
+                <div class="row">
+                    <!-- AGB (Terms and Conditions) -->
+                    <div class="col-12 mb-4">
+                        <label for="agb" class="form-label">
+                            <i class="fas fa-file-contract me-2"></i> <strong>AGB (Terms and Conditions)</strong>
+                        </label>
+                        <textarea
+                            class="form-control wysiwyg"
+                            id="agb"
+                            name="agb"
+                            rows="10"
+                            required><?= htmlspecialchars($current_settings['agb'] ?? '') ?></textarea>
+                        <div class="form-text">Enter the Terms and Conditions for your website.</div>
+                        <div class="invalid-feedback">
+                            This field is required.
+                        </div>
+                    </div>
 
-                <!-- Impressum (Imprint) -->
-                <div class="mb-4">
-                    <label for="impressum" class="form-label">
-                        <i class="fas fa-building me-2"></i> <strong>Impressum (Imprint)</strong>
-                    </label>
-                    <textarea
-                        class="form-control wysiwyg"
-                        id="impressum"
-                        name="impressum"
-                        rows="5"
-                        required><?= htmlspecialchars($current_settings['impressum'] ?? '') ?></textarea>
-                    <div class="form-text">Enter the Imprint information required by law.</div>
-                </div>
+                    <!-- Impressum (Imprint) -->
+                    <div class="col-12 mb-4">
+                        <label for="impressum" class="form-label">
+                            <i class="fas fa-building me-2"></i> <strong>Impressum (Imprint)</strong>
+                        </label>
+                        <textarea
+                            class="form-control wysiwyg"
+                            id="impressum"
+                            name="impressum"
+                            rows="5"
+                            required><?= htmlspecialchars($current_settings['impressum'] ?? '') ?></textarea>
+                        <div class="form-text">Enter the Imprint information required by law.</div>
+                        <div class="invalid-feedback">
+                            This field is required.
+                        </div>
+                    </div>
 
-                <!-- Datenschutzerklärung (Privacy Policy) -->
-                <div class="mb-4">
-                    <label for="datenschutzerklaerung" class="form-label">
-                        <i class="fas fa-user-shield me-2"></i> <strong>Datenschutzerklärung (Privacy Policy)</strong>
-                    </label>
-                    <textarea
-                        class="form-control wysiwyg"
-                        id="datenschutzerklaerung"
-                        name="datenschutzerklaerung"
-                        rows="10"
-                        required><?= htmlspecialchars($current_settings['datenschutzerklaerung'] ?? '') ?></textarea>
-                    <div class="form-text">Enter the Privacy Policy for your website.</div>
+                    <!-- Datenschutzerklärung (Privacy Policy) -->
+                    <div class="col-12 mb-4">
+                        <label for="datenschutzerklaerung" class="form-label">
+                            <i class="fas fa-user-shield me-2"></i> <strong>Datenschutzerklärung (Privacy Policy)</strong>
+                        </label>
+                        <textarea
+                            class="form-control wysiwyg"
+                            id="datenschutzerklaerung"
+                            name="datenschutzerklaerung"
+                            rows="10"
+                            required><?= htmlspecialchars($current_settings['datenschutzerklaerung'] ?? '') ?></textarea>
+                        <div class="form-text">Enter the Privacy Policy for your website.</div>
+                        <div class="invalid-feedback">
+                            This field is required.
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Cart Settings Tab -->
-            <div class="tab-pane fade p-4" id="cart-settings" role="tabpanel" aria-labelledby="cart-settings-tab">
+            <div class="tab-pane fade" id="cart-settings" role="tabpanel" aria-labelledby="cart-settings-tab">
                 <h5 class="mb-4"><i class="fas fa-shopping-cart me-2"></i> Cart Settings</h5>
-
-                <!-- Cart Logo Upload -->
-                <div class="mb-4">
-                    <label for="cart_logo" class="form-label">
-                        <i class="fas fa-image me-2"></i> <strong>Cart Logo</strong>
-                    </label>
-                    <input
-                        class="form-control"
-                        type="file"
-                        id="cart_logo"
-                        name="cart_logo"
-                        accept="image/*">
-                    <div class="form-text">Upload your company logo to display in the shopping cart.</div>
-                    <?php if (!empty($current_settings['cart_logo']) && file_exists($current_settings['cart_logo'])): ?>
-                        <div class="mt-2">
-                            <img src="<?= htmlspecialchars($current_settings['cart_logo']) ?>" alt="Cart Logo" style="max-width: 200px;">
+                <div class="row">
+                    <!-- Cart Logo Upload -->
+                    <div class="col-md-6 mb-4">
+                        <label for="cart_logo" class="form-label">
+                            <i class="fas fa-image me-2"></i> <strong>Cart Logo</strong>
+                        </label>
+                        <input
+                            class="form-control"
+                            type="file"
+                            id="cart_logo"
+                            name="cart_logo"
+                            accept="image/*"
+                            aria-describedby="cartLogoHelp">
+                        <div id="cartLogoHelp" class="form-text">Upload your company logo to display in the shopping cart.</div>
+                        <?php if (!empty($current_settings['cart_logo']) && file_exists($current_settings['cart_logo'])): ?>
+                            <div class="mt-2">
+                                <img src="<?= htmlspecialchars($current_settings['cart_logo']) ?>" alt="Cart Logo" class="img-thumbnail" style="max-width: 200px;">
+                            </div>
+                        <?php endif; ?>
+                        <div class="invalid-feedback">
+                            Please upload a valid image file (JPEG, PNG, GIF, WEBP).
                         </div>
-                    <?php endif; ?>
-                </div>
+                    </div>
 
-                <!-- Cart Description -->
-                <div class="mb-4">
-                    <label for="cart_description" class="form-label">
-                        <i class="fas fa-align-left me-2"></i> <strong>Cart Description</strong>
-                    </label>
-                    <textarea
-                        class="form-control wysiwyg"
-                        id="cart_description"
-                        name="cart_description"
-                        rows="4"
-                        placeholder="Enter a description to display below the logo in the shopping cart."><?= htmlspecialchars($current_settings['cart_description'] ?? '') ?></textarea>
-                    <div class="form-text">Provide a brief description or message to accompany your logo in the cart.</div>
+                    <!-- Cart Description -->
+                    <div class="col-md-6 mb-4">
+                        <label for="cart_description" class="form-label">
+                            <i class="fas fa-align-left me-2"></i> <strong>Cart Description</strong>
+                        </label>
+                        <textarea
+                            class="form-control wysiwyg"
+                            id="cart_description"
+                            name="cart_description"
+                            rows="4"
+                            placeholder="Enter a description to display below the logo in the shopping cart."><?= htmlspecialchars($current_settings['cart_description'] ?? '') ?></textarea>
+                        <div class="form-text">Provide a brief description or message to accompany your logo in the cart.</div>
+                        <div class="invalid-feedback">
+                            This field is required.
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -398,46 +447,100 @@ $current_settings = getSettings($pdo, $allowed_keys);
     </form>
 </div>
 
-<!-- Optional: JavaScript for Real-Time Validation -->
-<script>
-    // Example: Validate Minimum Order in Real-Time
-    document.getElementById('minimum_order').addEventListener('input', function() {
-        const value = parseFloat(this.value);
-        if (!isNaN(value) && value >= 0) {
-            this.classList.remove('is-invalid');
-            this.classList.add('is-valid');
-        } else {
-            this.classList.remove('is-valid');
-            this.classList.add('is-invalid');
-        }
+<!-- Include Free Version of TinyMCE -->
+<!-- No API key is required for the free version; the following script uses the official TinyMCE CDN without an API key -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/7.5.1/tinymce.min.js" integrity="sha512-8+JNyduy8cg+AUuQiuxKD2W7277rkqjlmEE/Po60jKpCXzc+EYwyVB8o3CnlTGf98+ElVPaOBWyme/8jJqseMA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script><script>
+    // Initialize TinyMCE for all textareas with class 'wysiwyg'
+    tinymce.init({
+        selector: 'textarea.wysiwyg',
+        height: 300,
+        menubar: false,
+        plugins: [
+            'advlist autolink lists link charmap preview anchor',
+            'searchreplace visualblocks code fullscreen',
+            'insertdatetime media table paste code help wordcount'
+        ],
+        toolbar: 'undo redo | formatselect | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help',
+        branding: false,
+        // Ensure that only free plugins and functionalities are enabled
     });
 
-    // Example: Validate Social Media URLs in Real-Time
-    const socialLinks = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
-    socialLinks.forEach(function(linkId) {
-        const linkInput = document.getElementById(linkId);
-        if (linkInput) {
-            linkInput.addEventListener('input', function() {
-                const value = this.value.trim();
-                if (value === '' || isValidURL(value)) {
+    // Real-Time Validation
+    document.addEventListener('DOMContentLoaded', function() {
+        // Bootstrap validation
+        const forms = document.querySelectorAll('form');
+
+        Array.prototype.slice.call(forms)
+            .forEach(function(form) {
+                form.addEventListener('submit', function(event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+
+        // Minimum Order Validation
+        const minimumOrderInput = document.getElementById('minimum_order');
+        minimumOrderInput.addEventListener('input', function() {
+            const value = parseFloat(this.value);
+            if (!isNaN(value) && value >= 0) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+
+        // Social Media URLs Validation
+        const socialLinks = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
+        socialLinks.forEach(function(linkId) {
+            const linkInput = document.getElementById(linkId);
+            if (linkInput) {
+                linkInput.addEventListener('input', function() {
+                    const value = this.value.trim();
+                    if (value === '' || isValidURL(value)) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                    }
+                });
+            }
+        });
+
+        // Cart Logo Validation
+        const cartLogoInput = document.getElementById('cart_logo');
+        cartLogoInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                if (validTypes.includes(file.type)) {
                     this.classList.remove('is-invalid');
                     this.classList.add('is-valid');
                 } else {
                     this.classList.remove('is-valid');
                     this.classList.add('is-invalid');
                 }
-            });
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.remove('is-invalid');
+            }
+        });
+
+        // Helper function to validate URLs
+        function isValidURL(string) {
+            try {
+                new URL(string);
+                return true;
+            } catch (_) {
+                return false;
+            }
         }
     });
-
-    function isValidURL(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
 </script>
 
 <?php

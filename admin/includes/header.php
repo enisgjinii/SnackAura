@@ -1,13 +1,10 @@
 <?php
 // admin/includes/header.php
 require_once 'auth.php';
-
 // Get current page
 $currentPage = basename($_SERVER['PHP_SELF']);
-
 // Get session user role
 $userRole = $_SESSION['role'] ?? '';
-
 // Define menu items for different roles with updated icons
 $adminMenuItems = [
     ['dashboard.php', 'fas fa-chart-pie', 'Dashboard'],
@@ -28,12 +25,10 @@ $adminMenuItems = [
     ['offers.php', 'fas fa-percentage', 'Offers'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
 ];
-
 $deliveryMenuItems = [
     ['dashboard.php', 'fas fa-chart-pie', 'Dashboard'],
     ['orders.php', 'fas fa-receipt', 'Orders'],
 ];
-
 // Determine which menu items to display based on the role
 switch ($userRole) {
     case 'admin':
@@ -46,6 +41,61 @@ switch ($userRole) {
     default:
         $menuItems = []; // No menu items if role is unrecognized
         break;
+}
+// settings_fetch.php
+// Fetch legal settings (AGB, Impressum, Datenschutzerklärung) and social media links
+try {
+    // Define all required keys
+    $legal_keys = ['agb', 'impressum', 'datenschutzerklaerung'];
+    $social_keys = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
+    $cart_keys = ['cart_logo', 'cart_description']; // New Cart Settings
+    // Merge all keys into a single array for a combined query
+    $all_keys = array_merge($legal_keys, $social_keys, $cart_keys); // Include cart_keys
+    // Create placeholders for the IN clause
+    $placeholders = rtrim(str_repeat('?,', count($all_keys)), ',');
+    // Prepare the SQL statement
+    $stmt = $pdo->prepare("SELECT `key`, `value` FROM `settings` WHERE `key` IN ($placeholders)");
+    // Execute the statement with all keys
+    $stmt->execute($all_keys);
+    // Fetch the results as an associative array
+    $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    // Assign legal settings with default fallbacks
+    $agb = $settings['agb'] ?? 'No AGB available.';
+    $impressum = $settings['impressum'] ?? 'No Impressum available.';
+    $datenschutzerklaerung = $settings['datenschutzerklaerung'] ?? 'No Datenschutzerklärung available.';
+    // Assign social media links with default empty strings if not set
+    $social_links = [
+        'facebook_link' => $settings['facebook_link'] ?? '',
+        'twitter_link' => $settings['twitter_link'] ?? '',
+        'instagram_link' => $settings['instagram_link'] ?? '',
+        'linkedin_link' => $settings['linkedin_link'] ?? '',
+        'youtube_link' => $settings['youtube_link'] ?? '',
+    ];
+    // Assign cart settings with default fallbacks
+    $cart_logo = $settings['cart_logo'] ?? ''; // Default empty string
+    $cart_description = $settings['cart_description'] ?? ''; // Default empty string
+    // Adjust cart_logo path if necessary (remove '../' if present)
+    if (!empty($cart_logo)) {
+        $cart_logo = str_replace('../', '', $cart_logo);
+    }
+} catch (PDOException $e) {
+    // Log the error with context
+    log_error_markdown("Failed to fetch settings: " . $e->getMessage(), "Fetching Settings");
+    // Assign default values for legal settings in case of an error
+    $agb = 'Error loading AGB.';
+    $impressum = 'Error loading Impressum.';
+    $datenschutzerklaerung = 'Error loading Datenschutzerklärung.';
+    // Assign default empty strings for social media links in case of an error
+    $social_links = [
+        'facebook_link' => '',
+        'twitter_link' => '',
+        'instagram_link' => '',
+        'linkedin_link' => '',
+        'youtube_link' => '',
+    ];
+    // Assign default empty strings for cart settings in case of an error
+    $cart_logo = '';
+    $cart_description = '';
 }
 ?>
 <!DOCTYPE html>
@@ -63,6 +113,23 @@ switch ($userRole) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
     <link href="assets/css/styles.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/v/bs5/jq-3.7.0/jszip-3.10.1/dt-2.1.8/af-2.7.0/b-3.2.0/b-colvis-3.2.0/b-html5-3.2.0/cr-2.0.4/date-1.5.4/fc-5.0.4/fh-4.0.1/kt-2.12.1/r-3.0.3/rg-1.5.1/rr-1.5.0/sc-2.4.3/sb-1.8.1/sp-2.3.3/sl-2.1.0/sr-1.4.1/datatables.min.css" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <!-- SweetAlert2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-bootstrap-4@5/bootstrap-4.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://kit.fontawesome.com/a076d05399.css" crossorigin="anonymous">
+    <!-- Fav Icon -->
+    <?php if (!empty($cart_logo)): ?>
+        <link rel="icon" type="image/png" href="../<?php echo htmlspecialchars($cart_logo, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
+
     <style>
         * {
             font-family: "Inter", sans-serif;
@@ -121,7 +188,23 @@ switch ($userRole) {
             padding: 0;
             flex-grow: 1;
             overflow-y: auto;
-            /* Make the menu scrollable */
+            /* Enables vertical scrolling */
+            max-height: calc(100vh - 120px);
+            /* Adjust height as per your layout */
+        }
+
+        /* Optional: Customize the scrollbar appearance */
+        #sidebar .list-unstyled::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #sidebar .list-unstyled::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+        }
+
+        #sidebar .list-unstyled::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.5);
         }
 
         #sidebar .list-unstyled li {
@@ -192,7 +275,7 @@ switch ($userRole) {
             padding: 1rem;
             transition: all 0.3s;
             flex-grow: 1;
-            background-color: var(--content-bg);
+            /* background-color: var(--content-bg); */
             min-height: 100vh;
         }
 
@@ -308,11 +391,11 @@ switch ($userRole) {
         </nav>
         <!-- Page Content -->
         <div id="content" class="flex-grow-1">
-            <nav class="navbar navbar-expand-lg navbar-light mb-4">
+            <nav class="navbar navbar-expand-lg navbar-light rounded-2 border  mb-4">
+                <button type="button" id="sidebarCollapse" class="btn" aria-label="Toggle Sidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
                 <div class="container-fluid">
-                    <button type="button" id="sidebarCollapse" class="btn" aria-label="Toggle Sidebar">
-                        <i class="fas fa-bars"></i>
-                    </button>
                     <div class="ms-auto d-flex align-items-center">
                         <div class="dropdown">
                             <button class="btn btn-secondary dropdown-toggle d-flex align-items-center" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
@@ -321,6 +404,7 @@ switch ($userRole) {
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton1">
                                 <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i> Profile</a></li>
                                 <li><a class="dropdown-item" href="#"><i class="fas fa-id-badge me-2"></i> Role: <?= htmlspecialchars($_SESSION['role']) ?></a></li>
+                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i> Settings</a></li>
                                 <li>
                                     <hr class="dropdown-divider">
                                 </li>

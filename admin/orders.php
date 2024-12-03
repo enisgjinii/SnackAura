@@ -6,7 +6,8 @@ require 'vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-function log_error($message, $context = '') {
+function log_error($message, $context = '')
+{
     $timestamp = date('Y-m-d H:i:s');
     $safe_message = htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $formatted = "### [$timestamp] Error\n\n**Message:** $safe_message\n";
@@ -14,7 +15,8 @@ function log_error($message, $context = '') {
     $formatted .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted, FILE_APPEND | LOCK_EX);
 }
-function sendEmail($to, $toName, $subject, $body) {
+function sendEmail($to, $toName, $subject, $body)
+{
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
@@ -35,7 +37,8 @@ function sendEmail($to, $toName, $subject, $body) {
         log_error("Mail Error: " . $mail->ErrorInfo, "Sending Email to: $to");
     }
 }
-function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_date = null, $scheduled_time = null){
+function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_date = null, $scheduled_time = null)
+{
     $subject = "Update Status of Your Order #{$order_id}";
     $scheduled_info = ($scheduled_date && $scheduled_time) ? "<p><strong>Scheduled Delivery:</strong> {$scheduled_date} at {$scheduled_time}</p>" : '';
     $body = <<<EOD
@@ -52,7 +55,8 @@ function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_dat
     EOD;
     sendEmail($email, $name, $subject, $body);
 }
-function sendDelayNotificationEmail($email, $name, $order_id, $additional_time){
+function sendDelayNotificationEmail($email, $name, $order_id, $additional_time)
+{
     $subject = "Njoftim për Vonese në Porosinë #{$order_id}";
     $body = <<<EOD
     <html>
@@ -68,7 +72,8 @@ function sendDelayNotificationEmail($email, $name, $order_id, $additional_time){
     EOD;
     sendEmail($email, $name, $subject, $body);
 }
-function notifyDeliveryPerson($email, $name, $order_id, $status){
+function notifyDeliveryPerson($email, $name, $order_id, $status)
+{
     $subject = "New Order Assigned - Order #{$order_id}";
     $body = <<<EOD
     <html>
@@ -93,12 +98,14 @@ set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-function getDeliveryUsers($pdo){
+function getDeliveryUsers($pdo)
+{
     $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE role = 'delivery' AND is_active = 1");
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-function getOrderStatusHistory($pdo, $order_id){
+function getOrderStatusHistory($pdo, $order_id)
+{
     $stmt = $pdo->prepare('
         SELECT osh.*, os.status, u.username AS delivery_username, u.email AS delivery_email 
         FROM order_status_history osh 
@@ -110,7 +117,8 @@ function getOrderStatusHistory($pdo, $order_id){
     $stmt->execute([$order_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-function geocodeAddress($address){
+function geocodeAddress($address)
+{
     $encoded = urlencode($address);
     $url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q={$encoded}";
     $ch = curl_init($url);
@@ -126,17 +134,20 @@ function geocodeAddress($address){
     $data = json_decode($response, true);
     return isset($data[0]) ? [$data[0]['lat'], $data[0]['lon']] : [null, null];
 }
-function updateOrderCoordinates($pdo, $order_id, $address){
+function updateOrderCoordinates($pdo, $order_id, $address)
+{
     list($lat, $lon) = geocodeAddress($address);
     if ($lat && $lon) {
         $stmt = $pdo->prepare("UPDATE orders SET latitude = ?, longitude = ? WHERE id = ?");
         $stmt->execute([$lat, $lon, $order_id]);
     }
 }
-function getAllStatuses($pdo){
+function getAllStatuses($pdo)
+{
     return $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
 }
-function getActiveOrders($pdo, $role, $user_id = null){
+function getActiveOrders($pdo, $role, $user_id = null)
+{
     $common_fields = 'o.*, os.status, t.name AS tip_name, t.percentage AS tip_percentage, t.amount AS tip_fixed_amount, c.order_count, u.username AS delivery_username';
     $common_query = '
         SELECT ' . $common_fields . ' 
@@ -153,11 +164,11 @@ function getActiveOrders($pdo, $role, $user_id = null){
         ) c ON (o.customer_email = c.customer_email OR o.customer_phone = c.customer_phone) 
         LEFT JOIN users u ON o.delivery_user_id = u.id 
         WHERE o.deleted_at IS NULL ';
-    if ($role === 'admin'){
+    if ($role === 'admin') {
         $query = $common_query . ' ORDER BY os.id ASC, o.created_at DESC';
         $stmt = $pdo->prepare($query);
         $stmt->execute();
-    } elseif ($role === 'delivery'){
+    } elseif ($role === 'delivery') {
         $query = $common_query . ' AND o.delivery_user_id = ? ORDER BY os.id ASC, o.created_at DESC';
         $stmt = $pdo->prepare($query);
         $stmt->execute([$user_id]);
@@ -468,6 +479,38 @@ switch ($action) {
             }
         }
         break;
+    case 'check_new_orders':
+        // Ensure the user is authenticated
+        if (!isset($_SESSION['user_id'])) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
+            exit();
+        }
+        // Get the last known order ID from the client
+        $last_order_id = isset($_GET['last_order_id']) ? (int)$_GET['last_order_id'] : 0;
+        try {
+            // Fetch the latest order ID in the database
+            $stmt = $pdo->prepare('SELECT MAX(id) AS max_id FROM orders WHERE deleted_at IS NULL');
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $current_max_id = $result['max_id'] ?? 0;
+            if ($current_max_id > $last_order_id) {
+                // New orders have arrived
+                echo json_encode([
+                    'status' => 'success',
+                    'new_orders' => $current_max_id - $last_order_id,
+                    'latest_order_id' => $current_max_id
+                ]);
+            } else {
+                // No new orders
+                echo json_encode(['status' => 'no_new_orders']);
+            }
+        } catch (PDOException $e) {
+            log_error("Failed to check for new orders: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'Server error']);
+        }
+        exit();
     case 'view':
     default:
         try {
@@ -734,8 +777,12 @@ switch ($action) {
                                     <td><?= htmlspecialchars($item['size_name'] ?? '-') ?></td>
                                     <td><?= htmlspecialchars($item['quantity']) ?></td>
                                     <td><?= number_format($item['price'], 2) ?></td>
-                                    <td><?= !empty($item['extras']) ? implode('<br>', array_map(function($e){return "<span class='badge bg-primary'>" . htmlspecialchars($e['name']) . " x" . htmlspecialchars($e['quantity']) . " (+". number_format($e['unit_price'],2)."€)</span>";}, $item['extras'])) : '-' ?></td>
-                                    <td><?= !empty($item['drinks']) ? implode('<br>', array_map(function($d){return "<span class='badge bg-info'>" . htmlspecialchars($d['name']) . " x" . htmlspecialchars($d['quantity']) . " (+". number_format($d['unit_price'],2)."€)</span>";}, $item['drinks'])) : '-' ?></td>
+                                    <td><?= !empty($item['extras']) ? implode('<br>', array_map(function ($e) {
+                                            return "<span class='badge bg-primary'>" . htmlspecialchars($e['name']) . " x" . htmlspecialchars($e['quantity']) . " (+" . number_format($e['unit_price'], 2) . "€)</span>";
+                                        }, $item['extras'])) : '-' ?></td>
+                                    <td><?= !empty($item['drinks']) ? implode('<br>', array_map(function ($d) {
+                                            return "<span class='badge bg-info'>" . htmlspecialchars($d['name']) . " x" . htmlspecialchars($d['quantity']) . " (+" . number_format($d['unit_price'], 2) . "€)</span>";
+                                        }, $item['drinks'])) : '-' ?></td>
                                     <td><?= htmlspecialchars($item['special_instructions']) ?: '-' ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -745,7 +792,8 @@ switch ($action) {
                 <div class="mt-3">
                     <h5>Selected Tip</h5>
                     <p><strong>Tip:</strong> <?= $order['tip_name'] ? "<span class='badge bg-info' data-bs-toggle='tooltip' title='Selected Tip: " . ($order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€') . "'>" . htmlspecialchars($order['tip_name']) . "</span>" : 'N/A' ?><br>
-                    <strong>Tip Amount:</strong> <?= $order['tip_amount'] > 0 ? "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>" : '0.00€' ?></p>
+                        <strong>Tip Amount:</strong> <?= $order['tip_amount'] > 0 ? "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>" : '0.00€' ?>
+                    </p>
                 </div>
             </div>
         </div>
@@ -998,22 +1046,29 @@ switch ($action) {
         });
     </script>
 <?php endif; ?>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     $(document).ready(function() {
         $('.data-table').DataTable({
-            "language": {"url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/English.json"},
-            "paging": true, "searching": true, "ordering": true, "responsive": true
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/English.json"
+            },
+            "paging": true,
+            "searching": true,
+            "ordering": true,
+            "responsive": true
         });
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
+        var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
     });
 </script>
 <?php
-function getDeliveredStatusId($pdo){
+function getDeliveredStatusId($pdo)
+{
     $stmt = $pdo->prepare("SELECT id FROM order_statuses WHERE status = 'Delivered' LIMIT 1");
     $stmt->execute();
     return $stmt->fetchColumn();

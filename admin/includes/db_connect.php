@@ -1,11 +1,23 @@
 <?php
 // admin/includes/db_connect.php
 
-$host = 'localhost';
-$db   = 'dbfood';
-$user = 'root';
-$pass = '';
+
+$env = 'local'; // Default to 'local' if not set
+if ($env === 'local') {
+    $host = 'localhost';
+    $db   = 'yumiis_e';
+    $user = 'root';
+    $pass = '';
+} else {
+    $host = '127.0.0.1';
+    $db   = 'yumiis_e';
+    $user = 'ab';
+    $pass = 'bUd!d1107';
+}
+
+// Replace with your actual database password
 $charset = 'utf8mb4';
+$port = 8443;
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
 $options = [
@@ -19,4 +31,3 @@ try {
 } catch (\PDOException $e) {
     die("Database connection failed: " . $e->getMessage());
 }
-?>

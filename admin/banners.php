@@ -1,370 +1,293 @@
 <?php
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
+// Helper Functions
+function redirectWithMessage($action, $message)
+{
+    header("Location: banners.php?action={$action}&message=" . urlencode($message));
+    exit();
+}
+function handleImageUpload($image, $targetDir = 'uploads/banners/')
+{
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!$image || $image['error'] !== UPLOAD_ERR_OK) {
+        return ['error' => 'Gabim gjatë ngarkimit të imazhit.'];
+    }
+    if (!in_array($image['type'], $allowedTypes)) {
+        return ['error' => 'Format i imazhit i pavlefshëm. Lejohen JPEG, PNG, GIF.'];
+    }
+    if (!is_dir($targetDir)) {
+        mkdir($targetDir, 0755, true);
+    }
+    $filename = uniqid() . '_' . basename($image['name']);
+    $targetFile = $targetDir . $filename;
+    if (!move_uploaded_file($image['tmp_name'], $targetFile)) {
+        return ['error' => 'Deshtoi ngarkimi i imazhit.'];
+    }
+    return ['filename' => $filename];
+}
+function fetchBanner($pdo, $id)
+{
+    $stmt = $pdo->prepare('SELECT * FROM banners WHERE id = ?');
+    $stmt->execute([$id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+// Initialize Variables
 $action = $_GET['action'] ?? 'list';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$message = '';
+$message = $_GET['message'] ?? '';
 $perPage = 10;
-
+// Handle POST Requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($action === 'create') {
-        $title = trim($_POST['title'] ?? '');
-        $link = trim($_POST['link'] ?? '');
-        $is_active = isset($_POST['is_active']) ? 1 : 0;
-        $image = $_FILES['image'] ?? null;
-
-        if (empty($title) || empty($image)) {
-            $message = '<div class="alert alert-danger">Të gjitha fushat me yll janë të detyrueshme.</div>';
-        } elseif ($image && $image['error'] !== UPLOAD_ERR_OK) {
-            $message = '<div class="alert alert-danger">Gabim gjatë ngarkimit të imazhit.</div>';
-        } else {
-            // Validate image
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            if (!in_array($image['type'], $allowedTypes)) {
-                $message = '<div class="alert alert-danger">Format i imazhit i pavlefshëm. Lejohen JPEG, PNG, GIF.</div>';
+    switch ($action) {
+        case 'create':
+            $title = trim($_POST['title'] ?? '');
+            $link = trim($_POST['link'] ?? '');
+            $is_active = isset($_POST['is_active']) ? 1 : 0;
+            $image = $_FILES['image'] ?? null;
+            if (empty($title) || empty($image)) {
+                $message = 'Të gjitha fushat me yll janë të detyrueshme.';
             } else {
-                $targetDir = 'uploads/banners/';
-                if (!is_dir($targetDir)) {
-                    mkdir($targetDir, 0755, true);
-                }
-                $filename = uniqid() . '_' . basename($image['name']);
-                $targetFile = $targetDir . $filename;
-
-                if (move_uploaded_file($image['tmp_name'], $targetFile)) {
-                    $stmt = $pdo->prepare('INSERT INTO banners (title, image, link, is_active, created_at) VALUES (?, ?, ?, ?, NOW())');
+                $uploadResult = handleImageUpload($image);
+                if (isset($uploadResult['error'])) {
+                    $message = $uploadResult['error'];
+                } else {
                     try {
-                        $stmt->execute([$title, $filename, $link, $is_active]);
-                        header('Location: banners.php?action=list&message=' . urlencode("Banner u krijua me sukses."));
-                        exit();
+                        $stmt = $pdo->prepare('INSERT INTO banners (title, image, link, is_active, created_at) VALUES (?, ?, ?, ?, NOW())');
+                        $stmt->execute([$title, $uploadResult['filename'], $link, $is_active]);
+                        redirectWithMessage('list', "Banner u krijua me sukses.");
                     } catch (PDOException $e) {
                         error_log("Error creating banner: " . $e->getMessage());
-                        $message = '<div class="alert alert-danger">Deshtoi krijimi i bannerit. Ju lutem provoni më vonë.</div>';
+                        $message = 'Deshtoi krijimi i bannerit. Ju lutem provoni më vonë.';
                     }
-                } else {
-                    $message = '<div class="alert alert-danger">Deshtoi ngarkimi i imazhit.</div>';
                 }
             }
-        }
-    } elseif ($action === 'edit' && $id > 0) {
-        $title = trim($_POST['title'] ?? '');
-        $link = trim($_POST['link'] ?? '');
-        $is_active = isset($_POST['is_active']) ? 1 : 0;
-        $image = $_FILES['image'] ?? null;
-
-        if (empty($title)) {
-            $message = '<div class="alert alert-danger">Titulli është i detyrueshëm.</div>';
-        } else {
-            if ($image && $image['error'] === UPLOAD_ERR_OK) {
-                $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-                if (!in_array($image['type'], $allowedTypes)) {
-                    $message = '<div class="alert alert-danger">Format i imazhit i pavlefshëm. Lejohen JPEG, PNG, GIF.</div>';
+            break;
+        case 'edit':
+            if ($id > 0) {
+                $title = trim($_POST['title'] ?? '');
+                $link = trim($_POST['link'] ?? '');
+                $is_active = isset($_POST['is_active']) ? 1 : 0;
+                $image = $_FILES['image'] ?? null;
+                if (empty($title)) {
+                    $message = 'Titulli është i detyrueshëm.';
                 } else {
-                    $targetDir = 'uploads/banners/';
-                    if (!is_dir($targetDir)) {
-                        mkdir($targetDir, 0755, true);
+                    $banner = fetchBanner($pdo, $id);
+                    if (!$banner) {
+                        redirectWithMessage('list', "Banner nuk u gjet.");
                     }
-                    $filename = uniqid() . '_' . basename($image['name']);
-                    $targetFile = $targetDir . $filename;
-
-                    if (move_uploaded_file($image['tmp_name'], $targetFile)) {
-                        // Fetch existing banner to delete old image
-                        $stmt = $pdo->prepare('SELECT image FROM banners WHERE id = ?');
-                        $stmt->execute([$id]);
-                        $existingBanner = $stmt->fetch(PDO::FETCH_ASSOC);
-                        if ($existingBanner && file_exists($targetDir . $existingBanner['image'])) {
-                            unlink($targetDir . $existingBanner['image']);
+                    if ($image && $image['error'] === UPLOAD_ERR_OK) {
+                        $uploadResult = handleImageUpload($image);
+                        if (isset($uploadResult['error'])) {
+                            $message = $uploadResult['error'];
+                        } else {
+                            // Delete old image
+                            if ($banner['image'] && file_exists('uploads/banners/' . $banner['image'])) {
+                                unlink('uploads/banners/' . $banner['image']);
+                            }
+                            $imageFilename = $uploadResult['filename'];
                         }
-
-                        $stmt = $pdo->prepare('UPDATE banners SET title = ?, image = ?, link = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
-                        $params = [$title, $filename, $link, $is_active, $id];
                     } else {
-                        $message = '<div class="alert alert-danger">Deshtoi ngarkimi i imazhit.</div>';
-                        $params = [$title, $link, $is_active, $id];
+                        $imageFilename = $banner['image'];
+                    }
+                    if (empty($message)) {
+                        try {
+                            $stmt = $pdo->prepare('UPDATE banners SET title = ?, image = ?, link = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
+                            $stmt->execute([$title, $imageFilename, $link, $is_active, $id]);
+                            redirectWithMessage('list', "Banner u azhurnua me sukses.");
+                        } catch (PDOException $e) {
+                            error_log("Error updating banner (ID: $id): " . $e->getMessage());
+                            $message = 'Deshtoi azhurnimi i bannerit. Ju lutem provoni më vonë.';
+                        }
                     }
                 }
-            } else {
-                $stmt = $pdo->prepare('UPDATE banners SET title = ?, link = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
-                $params = [$title, $link, $is_active, $id];
             }
-
-            if (empty($message)) {
-                try {
-                    $stmt->execute($params);
-                    header('Location: banners.php?action=list&message=' . urlencode("Banner u azhurnua me sukses."));
-                    exit();
-                } catch (PDOException $e) {
-                    error_log("Error updating banner (Banner ID: $id): " . $e->getMessage());
-                    $message = '<div class="alert alert-danger">Deshtoi azhurnimi i bannerit. Ju lutem provoni më vonë.</div>';
+            break;
+        case 'delete':
+            if ($id > 0) {
+                $banner = fetchBanner($pdo, $id);
+                if ($banner) {
+                    try {
+                        $stmt = $pdo->prepare('DELETE FROM banners WHERE id = ?');
+                        $stmt->execute([$id]);
+                        // Delete image file
+                        if ($banner['image'] && file_exists('uploads/banners/' . $banner['image'])) {
+                            unlink('uploads/banners/' . $banner['image']);
+                        }
+                        redirectWithMessage('list', "Banner u fshi me sukses.");
+                    } catch (PDOException $e) {
+                        error_log("Error deleting banner (ID: $id): " . $e->getMessage());
+                        redirectWithMessage('list', "Deshtoi fshirja e bannerit. Ju lutem provoni më vonë.");
+                    }
+                } else {
+                    redirectWithMessage('list', "Banner nuk u gjet.");
                 }
             }
-        }
-    } elseif ($action === 'delete' && $id > 0) {
-        // Fetch banner to delete image
-        $stmt = $pdo->prepare('SELECT image FROM banners WHERE id = ?');
-        $stmt->execute([$id]);
-        $banner = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($banner) {
-            $stmt = $pdo->prepare('DELETE FROM banners WHERE id = ?');
+            break;
+        case 'export':
             try {
-                $stmt->execute([$id]);
-                // Delete image file
-                $imagePath = 'uploads/banners/' . $banner['image'];
-                if (file_exists($imagePath)) {
-                    unlink($imagePath);
+                header('Content-Type: text/csv');
+                header('Content-Disposition: attachment;filename=banners_' . date('Ymd') . '.csv');
+                $output = fopen('php://output', 'w');
+                fputcsv($output, ['ID', 'Titulli', 'Imazhi', 'Lidhja', 'Statusi', 'Krijuar', 'Azhurnuar']);
+                $stmt = $pdo->query('SELECT * FROM banners ORDER BY created_at DESC');
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    fputcsv($output, [
+                        $row['id'],
+                        $row['title'],
+                        $row['image'],
+                        $row['link'],
+                        $row['is_active'] ? 'Aktiv' : 'Inaktiv',
+                        $row['created_at'],
+                        $row['updated_at'] ?? 'N/A'
+                    ]);
                 }
-                header('Location: banners.php?action=list&message=' . urlencode("Banner u fshi me sukses."));
+                fclose($output);
                 exit();
             } catch (PDOException $e) {
-                error_log("Error deleting banner (Banner ID: $id): " . $e->getMessage());
-                header('Location: banners.php?action=list&message=' . urlencode("Deshtoi fshirja e bannerit. Ju lutem provoni më vonë."));
-                exit();
+                error_log("Error exporting banners: " . $e->getMessage());
+                $message = 'Deshtoi eksportimi i bannerave. Ju lutem provoni më vonë.';
             }
-        } else {
-            header('Location: banners.php?action=list&message=' . urlencode("Banner nuk u gjet."));
-            exit();
-        }
-    } elseif ($action === 'assign_admin' && $id > 0) {
-        // If banners are associated with admins, implement here
-        // For simplicity, this action is omitted unless specified
-    } elseif ($action === 'export') {
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment;filename=banners_' . date('Ymd') . '.csv');
-        $output = fopen('php://output', 'w');
-        fputcsv($output, ['ID', 'Titulli', 'Imazhi', 'Lidhja', 'Statusi', 'Krijuar', 'Azhurnuar']);
-        try {
-            $stmt = $pdo->query('SELECT * FROM banners ORDER BY created_at DESC');
-            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                fputcsv($output, [
-                    $row['id'],
-                    $row['title'],
-                    $row['image'],
-                    $row['link'],
-                    $row['is_active'] ? 'Aktiv' : 'Inaktiv',
-                    $row['created_at'],
-                    $row['updated_at']
-                ]);
-            }
-            fclose($output);
-            exit();
-        } catch (PDOException $e) {
-            error_log("Error exporting banners: " . $e->getMessage());
-            $message = '<div class="alert alert-danger">Deshtoi eksportimi i bannerave. Ju lutem provoni më vonë.</div>';
-        }
+            break;
+        default:
+            // Handle other POST actions if necessary
+            break;
     }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
+}
+// Handle GET Requests
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if ($action === 'toggle_status' && $id > 0) {
-        $stmt = $pdo->prepare('SELECT is_active FROM banners WHERE id = ?');
-        $stmt->execute([$id]);
-        $banner = $stmt->fetch(PDO::FETCH_ASSOC);
+        $banner = fetchBanner($pdo, $id);
         if ($banner) {
             $new_status = $banner['is_active'] ? 0 : 1;
-            $stmt = $pdo->prepare('UPDATE banners SET is_active = ? WHERE id = ?');
             try {
+                $stmt = $pdo->prepare('UPDATE banners SET is_active = ? WHERE id = ?');
                 $stmt->execute([$new_status, $id]);
                 $status_text = $new_status ? 'aktivizuar' : 'deaktivizuar';
-                header('Location: banners.php?action=list&message=' . urlencode("Banneri është {$status_text} me sukses."));
-                exit();
+                redirectWithMessage('list', "Banneri është {$status_text} me sukses.");
             } catch (PDOException $e) {
-                error_log("Error toggling banner status (Banner ID: $id): " . $e->getMessage());
-                header('Location: banners.php?action=list&message=' . urlencode("Deshtoi ndryshimi i statusit të bannerit. Ju lutem provoni më vonë."));
-                exit();
+                error_log("Error toggling banner status (ID: $id): " . $e->getMessage());
+                redirectWithMessage('list', "Deshtoi ndryshimi i statusit të bannerit. Ju lutem provoni më vonë.");
             }
         } else {
-            header('Location: banners.php?action=list&message=' . urlencode("Banner nuk u gjet."));
-            exit();
+            redirectWithMessage('list', "Banner nuk u gjet.");
         }
     }
 }
-
+// Fetch Data for Different Actions
 if ($action === 'list') {
-    $search = trim($_GET['search'] ?? '');
-    $search_query = '';
-    $params = [];
-    if ($search) {
-        $search_query = ' WHERE b.title LIKE :search OR b.link LIKE :search ';
-        $params[':search'] = '%' . $search . '%';
-    }
-
-    $sort = $_GET['sort'] ?? 'created_at';
-    $allowed_sort = ['title', 'created_at', 'is_active'];
-    if (!in_array($sort, $allowed_sort)) {
-        $sort = 'created_at';
-    }
-    $order = $_GET['order'] ?? 'DESC';
-    $order = ($order === 'ASC') ? 'ASC' : 'DESC';
-
-    $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-    $offset = ($page - 1) * $perPage;
-
     try {
-        $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM banners b {$search_query}");
-        $count_stmt->execute($params);
-        $total = $count_stmt->fetchColumn();
-    } catch (PDOException $e) {
-        error_log("Error counting banners: " . $e->getMessage());
-        $total = 0;
-    }
-
-    try {
-        $stmt = $pdo->prepare("SELECT * FROM banners b {$search_query} ORDER BY b.{$sort} {$order} LIMIT :limit OFFSET :offset");
-        foreach ($params as $key => &$val) {
-            $stmt->bindParam($key, $val, PDO::PARAM_STR);
-        }
-        $stmt->bindValue(':limit', (int)$perPage, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt = $pdo->query('SELECT * FROM banners ORDER BY created_at DESC');
         $banners = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         error_log("Error fetching banners: " . $e->getMessage());
         $banners = [];
-        $message = '<div class="alert alert-danger">Deshtoi marrja e bannerave. Ju lutem provoni më vonë.</div>';
+        $message = 'Deshtoi marrja e bannerave. Ju lutem provoni më vonë.';
     }
-
-    $totalPages = ceil($total / $perPage);
-} elseif ($action === 'edit' && $id > 0) {
-    $stmt = $pdo->prepare('SELECT * FROM banners WHERE id = ?');
-    $stmt->execute([$id]);
-    $banner = $stmt->fetch(PDO::FETCH_ASSOC);
+} elseif (in_array($action, ['edit', 'view']) && $id > 0) {
+    $banner = fetchBanner($pdo, $id);
     if (!$banner) {
-        header('Location: banners.php?action=list&message=' . urlencode("Banner nuk u gjet."));
-        exit();
+        redirectWithMessage('list', "Banner nuk u gjet.");
     }
-} elseif ($action === 'view' && $id > 0) {
-    $stmt = $pdo->prepare('SELECT * FROM banners WHERE id = ?');
-    $stmt->execute([$id]);
-    $banner = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$banner) {
-        header('Location: banners.php?action=list&message=' . urlencode("Banner nuk u gjet."));
-        exit();
-    }
-} elseif ($action === 'assign_admin' && $id > 0) {
-    // If banners are associated with admins, implement here
-    // For simplicity, this action is omitted unless specified
 }
 ?>
 <?php if ($action === 'list'): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4">Menaxhimi i Bënarave</h2>
-        <?php if (isset($_GET['message'])): ?>
-            <div class="alert alert-info"><?= htmlspecialchars($_GET['message']) ?></div>
-        <?php elseif ($message): ?>
-            <?= $message ?>
-        <?php endif; ?>
-        <div class="d-flex justify-content-between mb-3">
-            <div>
-                <a href="banners.php?action=create" class="btn btn-primary me-2">
-                    <i class="fas fa-plus"></i> Krijo Banner të Ri
-                </a>
-                <a href="banners.php?action=export" class="btn btn-secondary">
-                    <i class="fas fa-file-export"></i> Eksporto CSV
-                </a>
-            </div>
-        </div>
-        <div class="table-responsive">
-            <table id="bannersTable" class="table table-striped table-hover">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Foto</th>
-                        <th>Titulli</th>
-                        <th>Lidhja</th>
-                        <th>Statusi</th>
-                        <th>Krijuar</th>
-                        <th>Veprime</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($banners)): ?>
+    <h2 class="mb-4">Banners</h2>
+    <?php if ($message): ?>
+        <div class="alert alert-info"><?= htmlspecialchars($message) ?></div>
+    <?php endif; ?>
+    <hr>
+    <div class="table-responsive">
+        <table id="bannersTable" class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Foto</th>
+                    <th>Titulli</th>
+                    <th>Lidhja</th>
+                    <th>Statusi</th>
+                    <th>Krijuar</th>
+                    <th>Veprime</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($banners)): ?>
+
+                <?php else: ?>
+                    <?php foreach ($banners as $banner): ?>
                         <tr>
-                            <td colspan="6" class="text-center">Nuk u gjetën bannerë.</td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($banners as $banner): ?>
-                            <tr>
-                                <td>
+                            <td>
+                                <?php if ($banner['image'] && file_exists('uploads/banners/' . $banner['image'])): ?>
                                     <img src="uploads/banners/<?= htmlspecialchars($banner['image']) ?>" alt="<?= htmlspecialchars($banner['title']) ?>" width="100">
-                                </td>
-                                <td><?= htmlspecialchars($banner['title']) ?></td>
-                                <td><?= htmlspecialchars($banner['link']) ?></td>
-                                <td>
-                                    <span class="badge <?= $banner['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
-                                        <?= $banner['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
-                                    </span>
-                                </td>
-                                <td><?= htmlspecialchars($banner['created_at']) ?></td>
-                                <td>
-                                    <div class="d-flex flex-wrap gap-1">
-                                        <a href="banners.php?action=view&id=<?= $banner['id'] ?>" class="btn btn-sm btn-info" title="Shiko">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="banners.php?action=edit&id=<?= $banner['id'] ?>" class="btn btn-sm btn-warning" title="Ndrysho">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        <a href="banners.php?action=delete&id=<?= $banner['id'] ?>" class="btn btn-sm btn-danger" title="Fshij" onclick="return confirm('A jeni i sigurtë që dëshironi të fshini këtë banner?');">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </a>
-                                        <a href="banners.php?action=toggle_status&id=<?= $banner['id'] ?>" class="btn btn-sm <?= $banner['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $banner['is_active'] ? 'Deaktivizo' : 'Aktivizo' ?>">
-                                            <i class="fas <?= $banner['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-        <!-- Pagination (Optional if using DataTables) -->
-        <?php if ($totalPages > 1): ?>
-            <nav>
-                <ul class="pagination justify-content-center">
-                    <?php for ($p = 1; $p <= $totalPages; $p++): ?>
-                        <li class="page-item <?= $p == $page ? 'active' : '' ?>">
-                            <a class="page-link" href="?action=list&page=<?= $p ?>&sort=<?= $sort ?>&order=<?= $order ?>"><?= $p ?></a>
-                        </li>
-                    <?php endfor; ?>
-                </ul>
-            </nav>
-        <?php endif; ?>
+                                <?php else: ?>
+                                    <span>N/A</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= htmlspecialchars($banner['title']) ?></td>
+                            <td><?= htmlspecialchars($banner['link']) ?></td>
+                            <td>
+                                <span class="badge <?= $banner['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
+                                    <?= $banner['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
+                                </span>
+                            </td>
+                            <td><?= htmlspecialchars($banner['created_at']) ?></td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <a href="banners.php?action=view&id=<?= $banner['id'] ?>" class="btn btn-sm btn-info" title="Shiko">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="banners.php?action=edit&id=<?= $banner['id'] ?>" class="btn btn-sm btn-warning" title="Ndrysho">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="banners.php?action=delete&id=<?= $banner['id'] ?>" class="btn btn-sm btn-danger" title="Fshij" onclick="return confirm('A jeni i sigurtë që dëshironi të fshini këtë banner?');">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </a>
+                                    <a href="banners.php?action=toggle_status&id=<?= $banner['id'] ?>" class="btn btn-sm <?= $banner['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $banner['is_active'] ? 'Deaktivizo' : 'Aktivizo' ?>">
+                                        <i class="fas <?= $banner['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
 <?php elseif ($action === 'create'): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4"><i class="fas fa-plus"></i> Krijo Banner të Ri</h2>
-        <?php if ($message): ?>
-            <?= $message ?>
-        <?php endif; ?>
-        <form method="POST" action="banners.php?action=create" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="title" class="form-label">Titulli<span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="title" name="title" required maxlength="255" value="<?= htmlspecialchars($_POST['title'] ?? '') ?>">
-            </div>
-            <div class="mb-3">
-                <label for="image" class="form-label">Imazhi<span class="text-danger">*</span></label>
-                <input type="file" class="form-control" id="image" name="image" required accept="image/*">
-            </div>
-            <div class="mb-3">
-                <label for="link" class="form-label">Lidhja</label>
-                <input type="url" class="form-control" id="link" name="link" maxlength="255" value="<?= htmlspecialchars($_POST['link'] ?? '') ?>">
-            </div>
-            <div class="form-check mb-3">
-                <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= (isset($_POST['is_active']) && $_POST['is_active']) ? 'checked' : 'checked' ?>>
-                <label class="form-check-label" for="is_active">Aktiv</label>
-            </div>
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> Krijo Banner
-                </button>
-                <a href="banners.php?action=list" class="btn btn-secondary">
-                    <i class="fas fa-times"></i> Anulo
-                </a>
-            </div>
-        </form>
-    </div>
+    <h2 class="mb-4"><i class="fas fa-plus"></i> Krijo Banner të Ri</h2>
+    <?php if ($message): ?>
+        <div class="alert alert-danger"><?= htmlspecialchars($message) ?></div>
+    <?php endif; ?>
+    <form method="POST" action="banners.php?action=create" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="title" class="form-label">Titulli<span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="title" name="title" required maxlength="255" value="<?= htmlspecialchars($_POST['title'] ?? '') ?>">
+        </div>
+        <div class="mb-3">
+            <label for="image" class="form-label">Imazhi<span class="text-danger">*</span></label>
+            <input type="file" class="form-control" id="image" name="image" required accept="image/*">
+        </div>
+        <div class="mb-3">
+            <label for="link" class="form-label">Lidhja</label>
+            <input type="url" class="form-control" id="link" name="link" maxlength="255" value="<?= htmlspecialchars($_POST['link'] ?? '') ?>">
+        </div>
+        <div class="form-check mb-3">
+            <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= isset($_POST['is_active']) ? 'checked' : 'checked' ?>>
+            <label class="form-check-label" for="is_active">Aktiv</label>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Krijo Banner
+            </button>
+            <a href="banners.php?action=list" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Anulo
+            </a>
+        </div>
+    </form>
 <?php elseif ($action === 'edit' && isset($banner)): ?>
     <div class="container mt-4">
         <h2 class="mb-4"><i class="fas fa-edit"></i> Ndrysho Banner</h2>
         <?php if ($message): ?>
-            <?= $message ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
         <form method="POST" action="banners.php?action=edit&id=<?= $banner['id'] ?>" enctype="multipart/form-data">
             <div class="mb-3">
@@ -397,112 +320,140 @@ if ($action === 'list') {
         </form>
     </div>
 <?php elseif ($action === 'delete' && $id > 0): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4"><i class="fas fa-trash-alt"></i> Fshij Banner</h2>
-        <?php
-        $stmt = $pdo->prepare('SELECT title, image FROM banners WHERE id = ?');
-        $stmt->execute([$id]);
-        $banner = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$banner):
-        ?>
-            <div class="alert alert-danger">Banner nuk u gjet.</div>
-            <a href="banners.php?action=list" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Kthehu te Lista
-            </a>
-        <?php else: ?>
-            <div class="alert alert-warning">
-                A jeni i sigurtë që dëshironi të fshini bannerin <strong><?= htmlspecialchars($banner['title']) ?></strong>?
-            </div>
-            <form method="POST" action="banners.php?action=delete&id=<?= $id ?>">
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-check"></i> Po, Fshij
-                    </button>
-                    <a href="banners.php?action=list" class="btn btn-secondary">
-                        <i class="fas fa-times"></i> Jo, Anulo
-                    </a>
-                </div>
-            </form>
-        <?php endif; ?>
-    </div>
-<?php elseif ($action === 'view' && isset($banner)): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4"><i class="fas fa-eye"></i> Detajet e Bannerit</h2>
-        <div class="table-responsive">
-            <table class="table table-bordered">
-                <tr>
-                    <th>ID</th>
-                    <td><?= htmlspecialchars($banner['id']) ?></td>
-                </tr>
-                <tr>
-                    <th>Titulli</th>
-                    <td><?= htmlspecialchars($banner['title']) ?></td>
-                </tr>
-                <tr>
-                    <th>Foto</th>
-                    <td>
-                        <img src="uploads/banners/<?= htmlspecialchars($banner['image']) ?>" alt="<?= htmlspecialchars($banner['title']) ?>" width="200">
-                    </td>
-                </tr>
-                <tr>
-                    <th>Lidhja</th>
-                    <td><?= htmlspecialchars($banner['link']) ?></td>
-                </tr>
-                <tr>
-                    <th>Statusi</th>
-                    <td>
-                        <span class="badge <?= $banner['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
-                            <?= $banner['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
-                        </span>
-                    </td>
-                </tr>
-                <tr>
-                    <th>Krijuar</th>
-                    <td><?= htmlspecialchars($banner['created_at']) ?></td>
-                </tr>
-                <tr>
-                    <th>Ndryshuar</th>
-                    <td><?= htmlspecialchars($banner['updated_at'] ?? 'N/A') ?></td>
-                </tr>
-            </table>
-        </div>
+    <h2 class="mb-4"><i class="fas fa-trash-alt"></i> Fshij Banner</h2>
+    <?php
+    $banner = fetchBanner($pdo, $id);
+    if (!$banner):
+    ?>
+        <div class="alert alert-danger">Banner nuk u gjet.</div>
         <a href="banners.php?action=list" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Kthehu te Lista
         </a>
+    <?php else: ?>
+        <div class="alert alert-warning">
+            A jeni i sigurtë që dëshironi të fshini bannerin <strong><?= htmlspecialchars($banner['title']) ?></strong>?
+        </div>
+        <form method="POST" action="banners.php?action=delete&id=<?= $id ?>">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-check"></i> Po, Fshij
+                </button>
+                <a href="banners.php?action=list" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Jo, Anulo
+                </a>
+            </div>
+        </form>
+    <?php endif; ?>
+<?php elseif ($action === 'view' && isset($banner)): ?>
+    <h2 class="mb-4"><i class="fas fa-eye"></i> Detajet e Bannerit</h2>
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <tr>
+                <th>ID</th>
+                <td><?= htmlspecialchars($banner['id']) ?></td>
+            </tr>
+            <tr>
+                <th>Titulli</th>
+                <td><?= htmlspecialchars($banner['title']) ?></td>
+            </tr>
+            <tr>
+                <th>Foto</th>
+                <td>
+                    <?php if ($banner['image'] && file_exists('uploads/banners/' . $banner['image'])): ?>
+                        <img src="uploads/banners/<?= htmlspecialchars($banner['image']) ?>" alt="<?= htmlspecialchars($banner['title']) ?>" width="200">
+                    <?php else: ?>
+                        <span>N/A</span>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th>Lidhja</th>
+                <td><?= htmlspecialchars($banner['link']) ?></td>
+            </tr>
+            <tr>
+                <th>Statusi</th>
+                <td>
+                    <span class="badge <?= $banner['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
+                        <?= $banner['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
+                    </span>
+                </td>
+            </tr>
+            <tr>
+                <th>Krijuar</th>
+                <td><?= htmlspecialchars($banner['created_at']) ?></td>
+            </tr>
+            <tr>
+                <th>Ndryshuar</th>
+                <td><?= htmlspecialchars($banner['updated_at'] ?? 'N/A') ?></td>
+            </tr>
+        </table>
     </div>
+    <a href="banners.php?action=list" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Kthehu te Lista
+    </a>
 <?php endif; ?>
-<!-- Scripts and Styles -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<?php include 'includes/footer.php'; ?>
+<!-- DataTable Initialization -->
 <script>
     $(document).ready(function() {
-        $('.form-select').select2({
-            theme: 'bootstrap-5',
-            width: '100%'
-        });
-
         $('#bannersTable').DataTable({
-            "paging": false,
-            "searching": true,
-            "info": false,
-            "order": [],
+            "paging": true, // Enable pagination
+            "searching": true, // Enable searching
+            "info": true, // Show table info
+            "order": [
+                [4, "desc"]
+            ], // Default sort by 'Krijuar' column (index 4)
+            // Add buttons, search, info, pagination
+            "dom": '<"row mb-3"' +
+                '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
+                '>' +
+                'rt' +
+                '<"row mt-3"' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
+                '>',
+            // Add custom buttons for export
+            "buttons": [ // Krijo banner te ri
+                {
+                    text: '<i class="fas fa-plus"></i> Krijo Banner',
+                    action: function(e, dt, node, config) {
+                        window.location.href = 'banners.php?action=create';
+                    },
+                    className: 'btn btn-success rounded-2'
+                }, {
+                    extend: 'csv',
+                    text: '<i class="fas fa-file-csv"></i> Eksporto CSV',
+                    className: 'btn btn-primary rounded-2'
+                },
+                {
+                    extend: 'pdf',
+                    text: '<i class="fas fa-file-pdf"></i> Eksporto PDF',
+                    className: 'btn btn-primary rounded-2'
+                },
+                {
+                    extend: 'colvis',
+                    text: '<i class="fas fa-columns"></i> Kolonat',
+                    className: 'btn btn-primary rounded-2',
+                },
+                {
+                    extend: 'copy',
+                    text: '<i class="fas fa-copy"></i> Kopjo',
+                    className: 'btn btn-primary rounded-2',
+                },
+            ],
+            initComplete: function() {
+                // Change the buttons dont make as a group button
+                var buttons = this.api().buttons();
+                buttons.container().addClass('d-flex flex-wrap gap-2');
+            },
+            // Dutch
             "language": {
-                "search": "Kërko:",
-                "emptyTable": "Nuk u gjetën bannerë."
+                // url: 'dataTables.german.json',
+                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
             }
         });
     });
 </script>
-
 <?php
 require_once 'includes/footer.php';
 ?>

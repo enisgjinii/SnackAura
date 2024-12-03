@@ -2,28 +2,22 @@
 ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 if (session_status() == PHP_SESSION_NONE) session_start();
-
 $action = $_REQUEST['action'] ?? 'view';
 $id = isset($_REQUEST['id']) ? (int) $_REQUEST['id'] : 0;
-
 function sanitizeInput($data)
 {
     return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
 }
-
 function generateCsrfToken()
 {
     if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     return $_SESSION['csrf_token'];
 }
-
 function validateCsrfToken($token)
 {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
-
 function handleImageUpload($file, $existingImage = null)
 {
     $image_url = $existingImage ?? '';
@@ -58,31 +52,24 @@ function handleImageUpload($file, $existingImage = null)
     }
     return $image_url;
 }
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
         $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Invalid CSRF token.'];
         header('Location: categories.php');
         exit();
     }
-
     if ($action === 'add') {
         $name = sanitizeInput($_POST['name'] ?? '');
         $description = sanitizeInput($_POST['description'] ?? '');
-
         try {
             $image_url = handleImageUpload($_FILES['image_file'] ?? null);
-
             if ($name === '') throw new Exception('Category name is required.');
-
             // Automatically assign the next position
             $stmt = $pdo->query('SELECT MAX(position) AS max_position FROM categories');
             $result = $stmt->fetch();
             $position = $result['max_position'] !== null ? $result['max_position'] + 1 : 1;
-
             $stmt = $pdo->prepare('INSERT INTO categories (name, description, image_url, position) VALUES (?, ?, ?, ?)');
             $stmt->execute([$name, $description, $image_url, $position]);
-
             $_SESSION['toast'] = ['type' => 'success', 'message' => 'Category added successfully.'];
             header('Location: categories.php');
             exit();
@@ -103,20 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'edit' && $id > 0) {
         $name = sanitizeInput($_POST['name'] ?? '');
         $description = sanitizeInput($_POST['description'] ?? '');
-
         try {
             $stmt = $pdo->prepare('SELECT * FROM categories WHERE id = ?');
             $stmt->execute([$id]);
             $category = $stmt->fetch();
             if (!$category) throw new Exception('Category not found.');
-
             $image_url = handleImageUpload($_FILES['image_file'] ?? null, $category['image_url']);
-
             if ($name === '') throw new Exception('Category name is required.');
-
             $stmt = $pdo->prepare('UPDATE categories SET name = ?, description = ?, image_url = ? WHERE id = ?');
             $stmt->execute([$name, $description, $image_url, $id]);
-
             $_SESSION['toast'] = ['type' => 'success', 'message' => 'Category updated successfully.'];
             header('Location: categories.php');
             exit();
@@ -161,7 +143,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
 if ($action === 'view') {
     $stmt = $pdo->prepare('SELECT * FROM categories ORDER BY position ASC');
     $stmt->execute();
@@ -171,8 +152,9 @@ if ($action === 'view') {
 <?php if ($action === 'view'): ?>
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Categories</h2>
-        <button class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas"><i class="fas fa-plus"></i> Add Category</button>
+
     </div>
+    <hr>
     <div class="table-responsive">
         <table id="categoriesTable" class="table table-striped table-bordered align-middle">
             <thead class="table-dark">
@@ -219,14 +201,10 @@ if ($action === 'view') {
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <tr>
-                        <td colspan="7" class="text-center">No categories found.</td>
-                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </div>
-
     <!-- Add Category Offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="addCategoryOffcanvas" aria-labelledby="addCategoryOffcanvasLabel">
         <div class="offcanvas-header">
@@ -252,7 +230,6 @@ if ($action === 'view') {
             </form>
         </div>
     </div>
-
     <!-- Edit Category Offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="editCategoryOffcanvas" aria-labelledby="editCategoryOffcanvasLabel">
         <div class="offcanvas-header">
@@ -283,7 +260,6 @@ if ($action === 'view') {
             </form>
         </div>
     </div>
-
     <!-- Toast Notifications -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
         <div id="toast-container"></div>
@@ -292,46 +268,66 @@ if ($action === 'view') {
 <?php
 require_once 'includes/footer.php';
 ?>
-
-<!-- External Libraries -->
-<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.3/dist/sweetalert2.min.css" rel="stylesheet">
-<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.css" rel="stylesheet">
-
-<!-- Scripts -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
 <script>
     $(document).ready(function() {
         // Initialize DataTable
         $('#categoriesTable').DataTable({
-            responsive: true,
-            columnDefs: [{
-                    orderable: false,
-                    targets: [0, 2, 6]
-                } // Disable ordering on Move, Image, and Actions columns
-            ],
-            order: [
-                [1, 'asc']
-            ], // Initially order by ID
-            language: {
-                "emptyTable": "No categories available.",
-                "info": "Showing _START_ to _END_ of _TOTAL_ categories",
-                "infoEmpty": "Showing 0 to 0 of 0 categories",
-                "lengthMenu": "Show _MENU_ categories",
-                "paginate": {
-                    "first": "First",
-                    "last": "Last",
-                    "next": "Next",
-                    "previous": "Previous"
+            "paging": true, // Enable pagination
+            "searching": true, // Enable searching
+            "info": true, // Show table info
+            "order": [
+                [5, "desc"]
+            ], // Default sort by 'Krijuar' column (index 4)
+            // Add buttons, search, info, pagination
+            "dom": '<"row mb-3"' +
+                '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
+                '>' +
+                'rt' +
+                '<"row mt-3"' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
+                '>',
+            // Add custom buttons for export
+            "buttons": [ // Krijo kategori te ri addCategoryOffcanvas
+                {
+                    text: '<i class="fas fa-plus"></i> Krijo Kategori e Re',
+                    className: 'btn btn-success rounded-2',
+                    action: function() {
+                        $('#addCategoryOffcanvas').offcanvas('show');
+                    }
                 },
-                "search": "Search:"
+                {
+                    extend: 'csv',
+                    text: '<i class="fas fa-file-csv"></i> Eksporto CSV',
+                    className: 'btn btn-primary rounded-2'
+                },
+                {
+                    extend: 'pdf',
+                    text: '<i class="fas fa-file-pdf"></i> Eksporto PDF',
+                    className: 'btn btn-primary rounded-2'
+                },
+                {
+                    extend: 'colvis',
+                    text: '<i class="fas fa-columns"></i> Kolonat',
+                    className: 'btn btn-primary rounded-2',
+                },
+                {
+                    extend: 'copy',
+                    text: '<i class="fas fa-copy"></i> Kopjo',
+                    className: 'btn btn-primary rounded-2',
+                },
+            ],
+            initComplete: function() {
+                // Change the buttons dont make as a group button
+                var buttons = this.api().buttons();
+                buttons.container().addClass('d-flex flex-wrap gap-2');
+            },
+            // Dutch
+            "language": {
+                // url: 'dataTables.german.json',
+                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
             }
         });
-
         // Initialize Sortable
         $("#sortable").sortable({
             handle: ".handle",
@@ -365,20 +361,17 @@ require_once 'includes/footer.php';
                 });
             }
         }).disableSelection();
-
         // Handle Edit Button Click
         $('.edit-category-btn').on('click', function() {
             var id = $(this).data('id');
             var name = $(this).data('name');
             var description = $(this).data('description');
             var image = $(this).data('image');
-
             $('#edit-id').val(id);
             $('#edit-name').val(name);
             $('#edit-description').val(description);
             $('#current-image').attr('src', image ? image : 'assets/images/placeholder.png');
         });
-
         // Handle Delete Button Click
         $('.delete-category-btn').on('click', function() {
             var id = $(this).data('id');
@@ -412,7 +405,6 @@ require_once 'includes/footer.php';
                 }
             });
         });
-
         // Display Toast Notifications
         <?php if (isset($_SESSION['toast'])): ?>
             var toastHtml = `
@@ -433,7 +425,6 @@ require_once 'includes/footer.php';
         <?php endif; ?>
     });
 </script>
-
 <!-- Custom Styles for Sortable Placeholder -->
 <style>
     .sortable-placeholder {
