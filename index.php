@@ -715,7 +715,6 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -742,49 +741,40 @@ try {
             justify-content: center;
             align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
-
         .offers-section .card-title {
             font-size: 1.25rem;
             font-weight: 600;
         }
-
         .offers-section .card-text {
             font-size: 0.95rem;
             color: #555;
         }
-
         @media (max-width: 768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
-
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: 0.65;
             cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -792,7 +782,6 @@ try {
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
@@ -801,7 +790,6 @@ try {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
-
 <body>
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
@@ -848,52 +836,60 @@ try {
                 </div>
             </div>
         </div>
+        <!-- Improved map initialization script -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
-            $(document).ready(function() {
-                $('#storeModal').modal('show');
-                var map = L.map('map').setView([51.505, -0.09], 13);
+            document.addEventListener("DOMContentLoaded", function() {
+                const storeModalElement = document.getElementById('storeModal');
+                const storeModal = new bootstrap.Modal(storeModalElement, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+                storeModal.show();
+                let map = L.map('map', {
+                    center: [51.505, -0.09],
+                    zoom: 13
+                });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
-                var marker;
-
+                let marker;
                 function onMapClick(e) {
                     if (marker) {
                         map.removeLayer(marker);
                     }
                     marker = L.marker(e.latlng).addTo(map);
-                    $('#latitude').val(e.latlng.lat);
-                    $('#longitude').val(e.latlng.lng);
+                    document.getElementById('latitude').value = e.latlng.lat;
+                    document.getElementById('longitude').value = e.latlng.lng;
                     fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.display_name) {
-                                $('#delivery_address').val(data.display_name);
+                                document.getElementById('delivery_address').value = data.display_name;
                             }
                         })
                         .catch(error => console.error('Error:', error));
                 }
                 map.on('click', onMapClick);
-                $('#delivery_address').on('change', function() {
-                    var address = $(this).val();
+                document.getElementById('delivery_address').addEventListener('change', function() {
+                    let address = this.value.trim();
                     if (address.length > 5) {
                         fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`)
                             .then(response => response.json())
                             .then(data => {
                                 if (data && data.length > 0) {
-                                    var firstResult = data[0];
-                                    var lat = firstResult.lat;
-                                    var lon = firstResult.lon;
+                                    let firstResult = data[0];
+                                    let lat = firstResult.lat;
+                                    let lon = firstResult.lon;
                                     if (marker) {
                                         map.removeLayer(marker);
                                     }
                                     marker = L.marker([lat, lon]).addTo(map);
                                     map.setView([lat, lon], 13);
-                                    $('#latitude').val(lat);
-                                    $('#longitude').val(lon);
+                                    document.getElementById('latitude').value = lat;
+                                    document.getElementById('longitude').value = lon;
                                 } else {
                                     alert('Address not found. Please try again.');
                                 }
@@ -901,10 +897,13 @@ try {
                             .catch(error => console.error('Error:', error));
                     }
                 });
-                $('#storeSelectionForm').on('submit', function(e) {
-                    var address = $('#delivery_address').val().trim();
-                    var lat = $('#latitude').val();
-                    var lon = $('#longitude').val();
+                storeModalElement.addEventListener('shown.bs.modal', function() {
+                    map.invalidateSize();
+                });
+                document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
+                    let address = document.getElementById('delivery_address').value.trim();
+                    let lat = document.getElementById('latitude').value;
+                    let lon = document.getElementById('longitude').value;
                     if (address === '' || lat === '' || lon === '') {
                         e.preventDefault();
                         alert('Please enter a valid address and select your location on the map.');
@@ -1313,7 +1312,8 @@ try {
             updateStoreStatus();
             setInterval(updateStoreStatus, 60000);
             const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym');
-            const card = stripe.elements().create('card').mount('#card-element');
+            const card = stripe.elements().create('card');
+            card.mount('#card-element');
             $('input[name="payment_method"]').change(() => $('#stripe-payment-section').toggle($('#paymentStripe').is(':checked')));
             $('#checkoutForm').submit(async function(e) {
                 if ($('#paymentStripe').is(':checked')) {
@@ -1380,6 +1380,5 @@ try {
         });
     </script>
 </body>
-
 </html>
 <?php ob_end_flush(); ?>
