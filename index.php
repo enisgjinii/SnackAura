@@ -1,38 +1,31 @@
 <?php
-ob_start(); // Start output buffering
-require 'vendor/autoload.php'; // Ensure Composer's autoload is included
-\Stripe\Stripe::setApiKey("sk_test_51QByfJE4KNNCb6nuElXbMZUUan5s9fkJ1N2Ce3fMunhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2"); // Securely set your Stripe secret key using environment variables
+ob_start();
+require 'vendor/autoload.php';
+\Stripe\Stripe::setApiKey("sk_test_51QByfJE4KNNCb6nuElXbMZUUanhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2");
 session_start();
-require 'db.php'; // Initialize CSRF token if not already set
+require 'db.php';
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-// Fetch available stores if not already selected
 if (!isset($_SESSION['selected_store'])) {
     $stmt = $pdo->query('SELECT id, name FROM stores WHERE is_active = 1 ORDER BY name ASC');
     $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-// Handle Store Selection Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
-    // Sanitize and validate the store_id
     $selected_store_id = (int)$_POST['store_id'];
-    // Fetch the store name from the database
     $stmt = $pdo->prepare('SELECT name FROM stores WHERE id = ? AND is_active = 1');
     $stmt->execute([$selected_store_id]);
     $store = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($store) {
-        // Sanitize and validate address inputs
         $delivery_address = trim($_POST['delivery_address'] ?? '');
         $latitude = trim($_POST['latitude'] ?? '');
         $longitude = trim($_POST['longitude'] ?? '');
         if (empty($delivery_address) || empty($latitude) || empty($longitude)) {
             $error_message = "Please provide a valid delivery address and select your location on the map.";
         } else {
-            // Optionally, further validate latitude and longitude
             if (!is_numeric($latitude) || !is_numeric($longitude)) {
                 $error_message = "Invalid location coordinates.";
             } else {
-                // Store the selected store and address in the session
                 $_SESSION['selected_store'] = $selected_store_id;
                 $_SESSION['store_name'] = $store['name'];
                 $_SESSION['delivery_address'] = $delivery_address;
@@ -43,16 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
             }
         }
     } else {
-        // Handle error: store not found or inactive
         $error_message = "Selected store is not available.";
     }
 }
-// Enable error reporting for debugging (disable in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-// Function to log errors in Markdown format
 function log_error_markdown($error_message, $context = '')
 {
     $timestamp = date('Y-m-d H:i:s');
@@ -65,28 +55,23 @@ function log_error_markdown($error_message, $context = '')
     $formatted_message .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted_message, FILE_APPEND | LOCK_EX);
 }
-// Custom exception handler
 set_exception_handler(function ($exception) {
     log_error_markdown("Uncaught Exception: " . $exception->getMessage(), "File: " . $exception->getFile() . " Line: " . $exception->getLine());
     header("Location: index.php?error=unknown_error");
     exit;
 });
-// Custom error handler
 set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-include 'settings_fetch.php'; // This is the code we just corrected
-// Initialize cart in session
+include 'settings_fetch.php';
 $_SESSION['cart'] = $_SESSION['cart'] ?? [];
-// Handle Operational Hours
 $is_closed = false;
 $notification = [];
 $current_datetime = new DateTime();
 $current_date = $current_datetime->format('Y-m-d');
 $current_day = $current_datetime->format('l');
 $current_time = $current_datetime->format('H:i:s');
-// Fetch operational hours
 $query = "
 SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week
 FROM operational_hours
@@ -116,7 +101,6 @@ if ($op_hours) {
         }
     }
 }
-// Fetch active tips
 try {
     $stmt = $pdo->prepare("SELECT * FROM tips WHERE is_active = 1 ORDER BY percentage ASC, amount ASC");
     $stmt->execute();
@@ -125,7 +109,6 @@ try {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
-// Handle Tip Selection
 if (isset($_GET['select_tip'])) {
     $selected_tip_id = (int)$_GET['select_tip'];
     $tip_exists = false;
@@ -141,7 +124,6 @@ if (isset($_GET['select_tip'])) {
     header("Location: index.php");
     exit;
 }
-// Handle Adding to Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $product_id = (int)$_POST['product_id'];
     $quantity = max(1, (int)$_POST['quantity']);
@@ -150,7 +132,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
     $special_instructions = trim($_POST['special_instructions']);
     $selected_sauces = $_POST['sauces'] ?? [];
-    // Fetch product details
     $product_query = "
     SELECT p.*,
     ps.size_id, s.name AS size_name, ps.price AS size_price,
@@ -168,7 +149,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $stmt->execute(['product_id' => $product_id]);
     $product_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if ($product_rows) {
-        // Initialize product array
         $product = [
             'id' => $product_rows[0]['id'],
             'name' => $product_rows[0]['name'],
@@ -182,7 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             'extras' => [],
             'sauces' => []
         ];
-        // Populate sizes, extras, and sauces
         foreach ($product_rows as $row) {
             if ($row['size_id'] && !isset($product['sizes'][$row['size_id']])) {
                 $product['sizes'][$row['size_id']] = [
@@ -202,9 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 $product['sauces'][] = $row['sauce_id'];
             }
         }
-        // Calculate size price
         $size_price = $size_id && isset($product['sizes'][$size_id]) ? $product['sizes'][$size_id]['price'] : 0.00;
-        // Calculate extras
         $extras_total = 0.00;
         $extras_details = [];
         if ($extras) {
@@ -215,7 +192,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 }
             }
         }
-        // Fetch drink details
         $drink_details = null;
         $drink_total = 0.00;
         if ($drink_id) {
@@ -227,7 +203,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 $drink_total = (float)$drink['price'];
             }
         }
-        // Fetch sauces details
         $sauces_details = [];
         $sauces_total = 0.00;
         if ($selected_sauces) {
@@ -240,10 +215,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 $sauces_total += (float)$sauce['price'];
             }
         }
-        // Calculate unit and total price
         $unit_price = $product['base_price'] + $size_price + $extras_total + $drink_total + $sauces_total;
         $total_price = $unit_price * $quantity;
-        // Create cart item
         $cart_item = [
             'product_id' => $product['id'],
             'name' => $product['name'],
@@ -260,7 +233,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             'total_price' => $total_price,
             'base_price' => $product['base_price']
         ];
-        // Check for duplicate items in cart
         $duplicate_index = array_search(true, array_map(function ($item) use ($cart_item) {
             return (
                 $item['product_id'] === $cart_item['product_id'] &&
@@ -285,7 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         exit;
     }
 }
-// Handle Removing from Cart
 if (isset($_GET['remove'])) {
     $remove_index = (int)$_GET['remove'];
     if (isset($_SESSION['cart'][$remove_index])) {
@@ -297,7 +268,6 @@ if (isset($_GET['remove'])) {
     header("Location: index.php?removed=1");
     exit;
 }
-// Handle Updating Cart
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
     $item_index = (int)$_POST['item_index'];
     if (isset($_SESSION['cart'][$item_index])) {
@@ -308,7 +278,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         $special_instructions = trim($_POST['special_instructions']);
         $selected_sauces = $_POST['sauces'] ?? [];
         $product_id = $_SESSION['cart'][$item_index]['product_id'];
-        // Fetch product details
         $product_query = "
     SELECT p.*,
     ps.size_id, s.name AS size_name, ps.price AS size_price,
@@ -326,7 +295,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         $stmt->execute(['product_id' => $product_id]);
         $product_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         if ($product_rows) {
-            // Initialize product array
             $product = [
                 'id' => $product_rows[0]['id'],
                 'name' => $product_rows[0]['name'],
@@ -340,7 +308,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                 'extras' => [],
                 'sauces' => []
             ];
-            // Populate sizes, extras, and sauces
             foreach ($product_rows as $row) {
                 if ($row['size_id'] && !isset($product['sizes'][$row['size_id']])) {
                     $product['sizes'][$row['size_id']] = [
@@ -360,9 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     $product['sauces'][] = $row['sauce_id'];
                 }
             }
-            // Calculate size price
             $size_price = $size_id && isset($product['sizes'][$size_id]) ? $product['sizes'][$size_id]['price'] : 0.00;
-            // Calculate extras
             $extras_total = 0.00;
             $extras_details = [];
             if ($extras) {
@@ -373,7 +338,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     }
                 }
             }
-            // Fetch drink details
             $drink_details = null;
             $drink_total = 0.00;
             if ($drink_id) {
@@ -385,7 +349,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     $drink_total = (float)$drink['price'];
                 }
             }
-            // Fetch sauces details
             $sauces_details = [];
             $sauces_total = 0.00;
             if ($selected_sauces) {
@@ -398,10 +361,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                     $sauces_total += (float)$sauce['price'];
                 }
             }
-            // Calculate unit and total price
             $unit_price = $product['base_price'] + $size_price + $extras_total + $drink_total + $sauces_total;
             $total_price = $unit_price * $quantity;
-            // Update cart item
             $_SESSION['cart'][$item_index] = [
                 'product_id' => $product['id'],
                 'name' => $product['name'],
@@ -431,27 +392,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         exit;
     }
 }
-// Handle Checkout
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     if (empty($_SESSION['cart'])) {
         header("Location: index.php?error=empty_cart");
         exit;
     }
-    // CSRF Token Validation
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
         header("Location: index.php?error=invalid_csrf_token");
         exit;
     }
     $store_id = $_SESSION['selected_store'] ?? null;
-    // Fetch and validate customer details
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_email = trim($_POST['customer_email'] ?? '');
     $customer_phone = trim($_POST['customer_phone'] ?? '');
     $delivery_address = trim($_POST['delivery_address'] ?? '');
     $selected_tip_id = isset($_POST['selected_tip']) ? (int)$_POST['selected_tip'] : null;
-    // Check if 'is_event' checkbox was selected
     $is_event = isset($_POST['is_event']) && $_POST['is_event'] == '1';
-    // Retrieve and validate scheduled date and time
     $scheduled_date = $_POST['scheduled_date'] ?? '';
     $scheduled_time = $_POST['scheduled_time'] ?? '';
     if ($is_event) {
@@ -459,7 +415,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             header("Location: index.php?error=missing_scheduled_time");
             exit;
         }
-        // Validate that scheduled_date and scheduled_time are in the future
         $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
         if (!$scheduled_datetime) {
             header("Location: index.php?error=invalid_scheduled_datetime");
@@ -471,25 +426,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             exit;
         }
     } else {
-        // If not an event, set scheduled_date and scheduled_time to null or defaults
         $scheduled_date = null;
         $scheduled_time = null;
     }
-    // Validate payment method
     $payment_method = $_POST['payment_method'] ?? '';
     $allowed_payment_methods = ['stripe', 'pickup', 'cash'];
     if (!in_array($payment_method, $allowed_payment_methods)) {
         header("Location: index.php?error=invalid_payment_method");
         exit;
     }
-    // Validate order details
     if (empty($customer_name) || empty($customer_email) || empty($customer_phone) || empty($delivery_address)) {
         header("Location: index.php?error=invalid_order_details");
         exit;
     }
-    // Calculate cart total
     $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
-    // Calculate tip amount
     $tip_amount = 0.00;
     if ($selected_tip_id) {
         foreach ($tip_options as $tip) {
@@ -503,27 +453,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
             }
         }
     }
-    // Calculate total amount
     $total_amount = $cart_total + $tip_amount;
     try {
-        // Begin transaction
         $pdo->beginTransaction();
-        // Insert into orders table
         $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method,store_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method, $store_id]);
         $order_id = $pdo->lastInsertId();
-        // Prepare statements for order items, extras, and drinks
         $stmt_item = $pdo->prepare("INSERT INTO order_items (order_id, product_id, size_id, quantity, price, extras, special_instructions) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt_extras = $pdo->prepare("INSERT INTO order_extras (order_item_id, extra_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
         $stmt_drinks = $pdo->prepare("INSERT INTO order_drinks (order_item_id, drink_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
         foreach ($_SESSION['cart'] as $item) {
-            // Serialize extras as comma-separated IDs
             $extras_ids = $item['extras'] ? implode(',', array_column($item['extras'], 'id')) : null;
-            // Serialize sauces as comma-separated names
             $sauces_names = $item['sauces'] ? implode(', ', array_column($item['sauces'], 'name')) : null;
-            // Combine sauces and special instructions
             $combined_instructions = $sauces_names ? ($sauces_names . ($item['special_instructions'] ? "; " . $item['special_instructions'] : "")) : $item['special_instructions'];
-            // Insert into order_items
             $stmt_item->execute([
                 $order_id,
                 $item['product_id'],
@@ -534,7 +476,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 $combined_instructions
             ]);
             $order_item_id = $pdo->lastInsertId();
-            // Insert into order_extras
             foreach ($item['extras'] as $extra) {
                 $stmt_extras->execute([
                     $order_item_id,
@@ -544,7 +485,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                     $extra['price']
                 ]);
             }
-            // Insert into order_drinks
             if ($item['drink']) {
                 $stmt_drinks->execute([
                     $order_item_id,
@@ -555,21 +495,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 ]);
             }
         }
-        // Process payment based on payment method
         if ($payment_method === 'stripe') {
-            // Retrieve the Payment Method ID from POST data
             $stripe_payment_method = $_POST['stripe_payment_method'] ?? '';
             if (empty($stripe_payment_method)) {
                 throw new Exception("Stripe payment method ID is missing.");
             }
-            // Calculate the amount in cents
             $amount_cents = intval(round($total_amount * 100));
-            // Define your return_url dynamically based on scheduled_date and scheduled_time
             $return_url = 'http://' . $_SERVER['HTTP_HOST'] . '/index.php?order=success&scheduled_date=' . urlencode($scheduled_date) . '&scheduled_time=' . urlencode($scheduled_time);
-            // Create a PaymentIntent with Stripe, including return_url
             $payment_intent = \Stripe\PaymentIntent::create([
                 'amount' => $amount_cents,
-                'currency' => 'eur', // Change to your currency
+                'currency' => 'eur',
                 'payment_method' => $stripe_payment_method,
                 'confirmation_method' => 'manual',
                 'confirm' => true,
@@ -577,11 +512,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 'metadata' => [
                     'order_id' => $order_id
                 ],
-                'return_url' => $return_url, // Added return_url
+                'return_url' => $return_url,
             ]);
-            // Handle Payment Intent status
             if ($payment_intent->status == 'requires_action' && $payment_intent->next_action->type == 'use_stripe_sdk') {
-                // Tell the client to handle the action
                 header('Content-Type: application/json');
                 echo json_encode([
                     'requires_action' => true,
@@ -589,15 +522,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 ]);
                 exit;
             } elseif ($payment_intent->status == 'succeeded') {
-                // The payment is complete, update order status to 'Paid'
                 $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
-                $stmt->execute([2, $order_id]); // Assuming status_id 5 is 'Paid'
-                // Commit transaction before sending response
+                $stmt->execute([2, $order_id]);
                 $pdo->commit();
-                // Clear cart and selected tip
                 $_SESSION['cart'] = [];
                 $_SESSION['selected_tip'] = null;
-                // Send JSON response indicating success and redirect URL
                 header('Content-Type: application/json');
                 echo json_encode([
                     'success' => true,
@@ -605,32 +534,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 ]);
                 exit;
             } else {
-                // Invalid status
                 throw new Exception("Invalid PaymentIntent status: " . $payment_intent->status);
             }
         } elseif ($payment_method === 'pickup') {
-            // Set order status to 'Ready for Pickup'
-            $new_status_id = 2; // Example: 3 represents 'Ready for Pickup'
+            $new_status_id = 2;
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         } elseif ($payment_method === 'cash') {
-            // Set order status to 'Pending Cash Payment'
-            $new_status_id = 2; // Example: 4 represents 'Pending Cash Payment'
+            $new_status_id = 2;
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         }
-        // Commit transaction after successful payment and status update
         if ($payment_method !== 'stripe') {
             $pdo->commit();
-            // Clear cart and selected tip
             $_SESSION['cart'] = [];
             $_SESSION['selected_tip'] = null;
-            // Redirect to success page
             header("Location: index.php?order=success&scheduled_date=$scheduled_date&scheduled_time=$scheduled_time");
             exit;
         }
     } catch (Exception $e) {
-        // Check if a transaction is active before attempting to rollback
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
@@ -639,79 +561,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         exit;
     }
 }
-// Fetch categories
 $stmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC, name ASC");
 $stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// Determine selected category
 $selected_category_id = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-// Fetch products based on category
-$product_query = "
-        SELECT
-        p.id AS product_id, p.name AS product_name, p.description, p.image_url, p.is_new, p.is_offer, p.allergies, p.price AS base_price,
-        ps.size_id, s.name AS size_name, ps.price AS size_price,
-        e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
-        psu.sauce_id
-        FROM products p
-        LEFT JOIN product_sizes ps ON p.id = ps.product_id
-        LEFT JOIN sizes s ON ps.size_id = s.id
-        LEFT JOIN product_extras pe ON p.id = pe.product_id
-        LEFT JOIN extras e ON pe.extra_id = e.id
-        LEFT JOIN product_sauces psu ON p.id = psu.product_id
-        WHERE p.is_active = 1" . ($selected_category_id > 0 ? " AND p.category_id = :category_id" : "") . "
-        ORDER BY p.name ASC, s.name ASC, e.name ASC
-        ";
-$stmt = $pdo->prepare($product_query);
+$sql = "SELECT p.*, c.name as category_name FROM products p
+JOIN categories c ON p.category_id = c.id
+WHERE p.is_active = 1";
+$params = [];
 if ($selected_category_id > 0) {
-    $stmt->bindParam(':category_id', $selected_category_id, PDO::PARAM_INT);
+    $sql .= " AND p.category_id = :category_id";
+    $params[':category_id'] = $selected_category_id;
 }
-$stmt->execute();
-$raw_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// Organize products with sizes, extras, and sauces
+$sql .= " ORDER BY p.name ASC";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$raw_base_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $products = [];
-foreach ($raw_products as $row) {
-    $pid = $row['product_id'];
-    if (!isset($products[$pid])) {
-        $products[$pid] = [
-            'id' => $pid,
-            'name' => $row['product_name'],
-            'description' => $row['description'],
-            'image_url' => $row['image_url'],
-            'is_new' => $row['is_new'],
-            'is_offer' => $row['is_offer'],
-            'allergies' => $row['allergies'],
-            'base_price' => (float)$row['base_price'],
-            'sauces' => [],
-            'sizes' => [],
-            'extras' => []
-        ];
+foreach ($raw_base_products as $base) {
+    $product_id = $base['id'];
+    $is_pizza = stripos($base['category_name'], 'pizza') !== false;
+    $product = [
+        'id' => $product_id,
+        'name' => $base['name'],
+        'description' => $base['description'],
+        'image_url' => $base['image_url'],
+        'is_new' => $base['is_new'],
+        'is_offer' => $base['is_offer'],
+        'allergies' => $base['allergies'],
+        'base_price' => (float)$base['price'],
+        'sizes' => [],
+        'extras' => [],
+        'sauces' => []
+    ];
+    if ($is_pizza) {
+        $stmtSz = $pdo->prepare("SELECT * FROM product_dynamic_sizes WHERE product_id = ?");
+        $stmtSz->execute([$product_id]);
+        $dyn_sizes = $stmtSz->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($dyn_sizes as $sz) {
+            $size_id = $sz['id'];
+            $size_entry = [
+                'id' => $size_id,
+                'name' => $sz['name'],
+                'price' => (float)$sz['price'],
+                'extras' => [],
+                'sauces' => []
+            ];
+            $stmtEx = $pdo->prepare("SELECT e.id, e.name, pse.price FROM product_size_extras pse JOIN extras e ON pse.extra_id = e.id WHERE pse.product_size_id = ?");
+            $stmtEx->execute([$size_id]);
+            $size_extras = $stmtEx->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($size_extras as $ex) {
+                $size_entry['extras'][] = [
+                    'id' => $ex['id'],
+                    'name' => $ex['name'],
+                    'price' => (float)$ex['price']
+                ];
+            }
+            $stmtSc = $pdo->prepare("SELECT s.id, s.name, pss.price FROM product_size_sauces pss JOIN sauces s ON pss.sauce_id = s.id WHERE pss.product_size_id = ?");
+            $stmtSc->execute([$size_id]);
+            $size_sauces = $stmtSc->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($size_sauces as $sc) {
+                $size_entry['sauces'][] = [
+                    'id' => $sc['id'],
+                    'name' => $sc['name'],
+                    'price' => (float)$sc['price']
+                ];
+            }
+            $product['sizes'][] = $size_entry;
+        }
+    } else {
+        $stmtOldSz = $pdo->prepare("SELECT ps.size_id, s.name AS size_name, ps.price AS size_price FROM product_sizes ps JOIN sizes s ON ps.size_id = s.id WHERE ps.product_id = ?");
+        $stmtOldSz->execute([$product_id]);
+        $old_sizes = $stmtOldSz->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($old_sizes as $sz) {
+            $product['sizes'][] = [
+                'id' => $sz['size_id'],
+                'name' => $sz['size_name'],
+                'price' => (float)$sz['size_price']
+            ];
+        }
+        $stmtExtra = $pdo->prepare("SELECT e.id, e.name, e.price FROM product_extras pe JOIN extras e ON pe.extra_id = e.id WHERE pe.product_id = ?");
+        $stmtExtra->execute([$product_id]);
+        $all_extras = $stmtExtra->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($all_extras as $ex) {
+            $product['extras'][] = [
+                'id' => $ex['id'],
+                'name' => $ex['name'],
+                'price' => (float)$ex['price']
+            ];
+        }
+        $stmtSauce = $pdo->prepare("SELECT s.id, s.name, s.price FROM product_sauces ps JOIN sauces s ON ps.sauce_id = s.id WHERE ps.product_id = ?");
+        $stmtSauce->execute([$product_id]);
+        $all_sauces = $stmtSauce->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($all_sauces as $sc) {
+            $product['sauces'][] = [
+                'id' => $sc['id'],
+                'name' => $sc['name'],
+                'price' => (float)$sc['price']
+            ];
+        }
     }
-    if ($row['size_id'] && !isset($products[$pid]['sizes'][$row['size_id']])) {
-        $products[$pid]['sizes'][$row['size_id']] = [
-            'id' => $row['size_id'],
-            'name' => $row['size_name'],
-            'price' => (float)$row['size_price']
-        ];
-    }
-    if ($row['extra_id'] && !isset($products[$pid]['extras'][$row['extra_id']])) {
-        $products[$pid]['extras'][$row['extra_id']] = [
-            'id' => $row['extra_id'],
-            'name' => $row['extra_name'],
-            'price' => (float)$row['extra_price']
-        ];
-    }
-    if ($row['sauce_id'] && !in_array($row['sauce_id'], $products[$pid]['sauces'])) {
-        $products[$pid]['sauces'][] = $row['sauce_id'];
-    }
+    $products[$product_id] = $product;
 }
-foreach ($products as &$product) {
-    $product['sizes'] = array_values($product['sizes']);
-    $product['extras'] = array_values($product['extras']);
-}
-unset($product);
-// Fetch sauce details
+$products = array_values($products);
 $sauce_details = [];
-$all_sauce_ids = array_unique(array_merge(...array_map(fn($p) => $p['sauces'], $products)));
+$all_sauce_ids = array_unique(array_merge(...array_map(fn($p) => array_map(fn($s) => isset($s['id']) ? $s['id'] : $s, $p['sauces'] ?: []), $products)));
+$all_sauce_ids = array_filter($all_sauce_ids, 'is_numeric');
 if ($all_sauce_ids) {
     $placeholders = implode(',', array_fill(0, count($all_sauce_ids), '?'));
     $stmt = $pdo->prepare("SELECT * FROM sauces WHERE id IN ($placeholders)");
@@ -721,11 +676,9 @@ if ($all_sauce_ids) {
         $sauce_details[$sauce_row['id']] = $sauce_row;
     }
 }
-// Fetch drinks
 $stmt = $pdo->prepare("SELECT * FROM drinks ORDER BY name ASC");
 $stmt->execute();
 $drinks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// Calculate cart total with selected tip
 $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
 $selected_tip = $_SESSION['selected_tip'] ?? null;
 $tip_amount = 0.00;
@@ -742,7 +695,6 @@ if ($selected_tip) {
     }
 }
 $cart_total_with_tip = $cart_total + $tip_amount;
-// Fetch banners
 try {
     $stmt = $pdo->prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY created_at DESC");
     $stmt->execute();
@@ -751,7 +703,6 @@ try {
     log_error_markdown("Failed to fetch banners: " . $e->getMessage(), "Fetching Banners");
     $banners = [];
 }
-// Fetch active offers
 try {
     $current_date = date('Y-m-d');
     $stmt = $pdo->prepare("SELECT * FROM offers WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date>= ?) ORDER BY created_at DESC");
@@ -769,17 +720,11 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Restaurant Delivery</title>
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- Flag Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" rel="stylesheet">
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
-    <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
         <link rel="icon" type="image/png" href="<?php echo $cart_logo; ?>">
@@ -858,14 +803,12 @@ try {
 </head>
 
 <body>
-    <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
     <?php if (!isset($_SESSION['selected_store'])): ?>
-        <!-- Store Selection Modal -->
         <div class="modal fade" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg"> <!-- Increased size for map -->
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
@@ -883,23 +826,18 @@ try {
                                 <select name="store_id" id="store_id" class="form-select" required>
                                     <option value="" selected>Select Store</option>
                                     <?php foreach ($stores as $store): ?>
-                                        <option value="<?= htmlspecialchars($store['id']) ?>">
-                                            <?= htmlspecialchars($store['name']) ?>
-                                        </option>
+                                        <option value="<?= htmlspecialchars($store['id']) ?>"><?= htmlspecialchars($store['name']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <!-- Address Input -->
                             <div class="mb-3">
                                 <label for="delivery_address" class="form-label">Delivery Address</label>
                                 <input type="text" class="form-control" id="delivery_address" name="delivery_address" placeholder="Enter your address" required>
                             </div>
-                            <!-- Leaflet Map -->
                             <div class="mb-3">
                                 <label class="form-label">Select Location on Map</label>
                                 <div id="map" style="height: 300px;"></div>
                             </div>
-                            <!-- Hidden Inputs for Latitude and Longitude -->
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
                         </div>
@@ -910,21 +848,18 @@ try {
                 </div>
             </div>
         </div>
-        <!-- Include jQuery and Bootstrap JS if not already included -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
             $(document).ready(function() {
                 $('#storeModal').modal('show');
-                // Initialize Leaflet Map
-                var map = L.map('map').setView([51.505, -0.09], 13); // Default to London
-                // Add OpenStreetMap tiles
+                var map = L.map('map').setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
                 var marker;
-                // Function to handle map clicks
+
                 function onMapClick(e) {
                     if (marker) {
                         map.removeLayer(marker);
@@ -932,7 +867,6 @@ try {
                     marker = L.marker(e.latlng).addTo(map);
                     $('#latitude').val(e.latlng.lat);
                     $('#longitude').val(e.latlng.lng);
-                    // Optionally, reverse geocode to fill the address input
                     fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
                         .then(response => response.json())
                         .then(data => {
@@ -943,10 +877,9 @@ try {
                         .catch(error => console.error('Error:', error));
                 }
                 map.on('click', onMapClick);
-                // Optional: Autofill address when address input changes using geocoding
                 $('#delivery_address').on('change', function() {
                     var address = $(this).val();
-                    if (address.length > 5) { // Basic validation
+                    if (address.length > 5) {
                         fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`)
                             .then(response => response.json())
                             .then(data => {
@@ -968,7 +901,6 @@ try {
                             .catch(error => console.error('Error:', error));
                     }
                 });
-                // Form submission validation
                 $('#storeSelectionForm').on('submit', function(e) {
                     var address = $('#delivery_address').val().trim();
                     var lat = $('#latitude').val();
@@ -982,13 +914,11 @@ try {
         </script>
     <?php else: ?>
         <div class="container mt-4">
-            <!-- <h1>Welcome to the Store Management System</h1> -->
             <p>You have selected store ID: <?= htmlspecialchars($_SESSION['selected_store']) ?></p>
             <p>Name of the store: <?= htmlspecialchars($_SESSION['store_name']) ?></p>
         </div>
     <?php endif; ?>
     <?php
-    // Array of files to include
     $includes = [
         'edit_cart.php',
         'header.php',
@@ -1005,12 +935,10 @@ try {
         'ratings.php',
         'store_close.php'
     ];
-    // Include each file
     foreach ($includes as $file) {
         include $file;
     }
     ?>
-    <!-- Category Tabs -->
     <ul class="nav nav-tabs justify-content-center my-4" id="categoryTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <a class="nav-link <?= ($selected_category_id === 0) ? 'active' : '' ?>" href="index.php" role="tab">All</a>
@@ -1021,10 +949,8 @@ try {
             </li>
         <?php endforeach; ?>
     </ul>
-    <!-- Main Content -->
     <main class="container my-5">
         <div class="row">
-            <!-- Products Section -->
             <div class="col-lg-9">
                 <div class="row g-4">
                     <?php if ($products): ?>
@@ -1048,9 +974,7 @@ try {
                                         <h5 class="card-title"><?= htmlspecialchars($product['name']) ?></h5>
                                         <p class="card-text"><?= htmlspecialchars($product['description']) ?></p>
                                         <div class="mt-auto d-flex justify-content-between align-items-center">
-                                            <strong>
-                                                <?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?>
-                                            </strong>
+                                            <strong><?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?></strong>
                                             <button class="btn btn-sm btn-primary btn-add-to-cart" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $product['id'] ?>">
                                                 <i class="bi bi-cart-plus me-1"></i> Add to Cart
                                             </button>
@@ -1058,7 +982,6 @@ try {
                                     </div>
                                 </div>
                             </div>
-                            <!-- Add to Cart Modal -->
                             <div class="modal fade" id="addToCartModal<?= $product['id'] ?>" tabindex="-1" aria-labelledby="addToCartModalLabel<?= $product['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-xl modal-dialog-centered">
                                     <div class="modal-content">
@@ -1071,53 +994,87 @@ try {
                                                     <div class="col-8">
                                                         <h2 class="text-uppercase"><b><?= htmlspecialchars($product['name']) ?></b></h2>
                                                         <hr style="width: 10%; border: 2px solid black; border-radius: 5px;">
-                                                        <h3 style="color:#d3b213"><b>
-                                                                <?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?>
-                                                            </b></h3>
+                                                        <h3 style="color:#d3b213"><b><?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?></b></h3>
                                                         <?php if (!empty($product['sizes'])): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Size</label>
-                                                                <select class="form-select" name="size" required>
+                                                                <select class="form-select" name="size" required id="sizeSelect<?= $product['id'] ?>">
                                                                     <option value="">Choose a size</option>
-                                                                    <?php foreach ($product['sizes'] as $size): ?>
-                                                                        <option value="<?= htmlspecialchars($size['id']) ?>">
-                                                                            <?= htmlspecialchars($size['name']) ?> (+<?= number_format($size['price'], 2) ?>€)
-                                                                        </option>
+                                                                    <?php foreach ($product['sizes'] as $dyn_size): ?>
+                                                                        <option value="<?= htmlspecialchars($dyn_size['id']) ?>" data-extras='<?= json_encode($dyn_size['extras']) ?>' data-sauces='<?= json_encode($dyn_size['sauces']) ?>'><?= htmlspecialchars($dyn_size['name']) ?> (+<?= number_format($dyn_size['price'], 2) ?>€)</option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
-                                                        <?php endif; ?>
-                                                        <?php foreach (['extras' => $product['extras'], 'sauces' => $product['sauces']] as $type => $items): ?>
-                                                            <?php if ($items): ?>
+                                                            <div id="extrasContainer<?= $product['id'] ?>" class="mt-3" style="display:none;">
+                                                                <h6>Extras:</h6>
+                                                                <div id="extrasList<?= $product['id'] ?>"></div>
+                                                            </div>
+                                                            <div id="saucesContainer<?= $product['id'] ?>" class="mt-3" style="display:none;">
+                                                                <h6>Sauces:</h6>
+                                                                <div id="saucesList<?= $product['id'] ?>"></div>
+                                                            </div>
+                                                            <script>
+                                                                $(document).ready(function() {
+                                                                    $('#sizeSelect<?= $product['id'] ?>').change(function() {
+                                                                        const selectedOption = $(this).find(':selected');
+                                                                        const extras = JSON.parse(selectedOption.data('extras') || '[]');
+                                                                        const sauces = JSON.parse(selectedOption.data('sauces') || '[]');
+                                                                        if (extras.length > 0) {
+                                                                            let html = '';
+                                                                            extras.forEach(ex => {
+                                                                                html += `<div class="form-check"><input class="form-check-input" type="checkbox" name="extras[]" value="${ex.id}"><label class="form-check-label">${ex.name} (+${parseFloat(ex.price).toFixed(2)}€)</label></div>`;
+                                                                            });
+                                                                            $('#extrasList<?= $product['id'] ?>').html(html);
+                                                                            $('#extrasContainer<?= $product['id'] ?>').show();
+                                                                        } else {
+                                                                            $('#extrasContainer<?= $product['id'] ?>').hide();
+                                                                            $('#extrasList<?= $product['id'] ?>').empty();
+                                                                        }
+                                                                        if (sauces.length > 0) {
+                                                                            let html = '';
+                                                                            sauces.forEach(sc => {
+                                                                                html += `<div class="form-check"><input class="form-check-input" type="checkbox" name="sauces[]" value="${sc.id}"><label class="form-check-label">${sc.name} (+${parseFloat(sc.price).toFixed(2)}€)</label></div>`;
+                                                                            });
+                                                                            $('#saucesList<?= $product['id'] ?>').html(html);
+                                                                            $('#saucesContainer<?= $product['id'] ?>').show();
+                                                                        } else {
+                                                                            $('#saucesContainer<?= $product['id'] ?>').hide();
+                                                                            $('#saucesList<?= $product['id'] ?>').empty();
+                                                                        }
+                                                                    });
+                                                                });
+                                                            </script>
+                                                        <?php else: ?>
+                                                            <?php if (!empty($product['extras'])): ?>
                                                                 <div class="mb-3">
-                                                                    <label class="form-label"><?= ucfirst($type) ?></label>
-                                                                    <div>
-                                                                        <?php foreach ($items as $key => $item): ?>
-                                                                            <?php
-                                                                            $itemData = ($type === 'sauces') && isset($sauce_details[$item]) ? $sauce_details[$item] : $item;
-                                                                            if ($type === 'sauces' && !isset($sauce_details[$item])) continue;
-                                                                            ?>
-                                                                            <div class="form-check">
-                                                                                <input class="form-check-input" type="checkbox" id="<?= $type ?><?= $product['id'] ?>_<?= is_array($itemData) ? $itemData['id'] : $item['id'] ?>" name="<?= $type ?>[]" value="<?= htmlspecialchars(is_array($itemData) ? $itemData['id'] : $item['id']) ?>">
-                                                                                <label class="form-check-label" for="<?= $type ?><?= $product['id'] ?>_<?= is_array($itemData) ? $itemData['id'] : $item['id'] ?>">
-                                                                                    <?= htmlspecialchars(is_array($itemData) ? $itemData['name'] : $item['name']) ?>
-                                                                                    (+<?= number_format(is_array($itemData) ? $itemData['price'] : $item['price'], 2) ?>€)
-                                                                                </label>
-                                                                            </div>
-                                                                        <?php endforeach; ?>
-                                                                    </div>
+                                                                    <label class="form-label">Extras</label>
+                                                                    <?php foreach ($product['extras'] as $extra): ?>
+                                                                        <div class="form-check">
+                                                                            <input class="form-check-input" type="checkbox" name="extras[]" value="<?= htmlspecialchars($extra['id']) ?>">
+                                                                            <label class="form-check-label"><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</label>
+                                                                        </div>
+                                                                    <?php endforeach; ?>
                                                                 </div>
                                                             <?php endif; ?>
-                                                        <?php endforeach; ?>
+                                                            <?php if (!empty($product['sauces'])): ?>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Sauces</label>
+                                                                    <?php foreach ($product['sauces'] as $sauce): ?>
+                                                                        <div class="form-check">
+                                                                            <input class="form-check-input" type="checkbox" name="sauces[]" value="<?= htmlspecialchars($sauce['id']) ?>">
+                                                                            <label class="form-check-label"><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</label>
+                                                                        </div>
+                                                                    <?php endforeach; ?>
+                                                                </div>
+                                                            <?php endif; ?>
+                                                        <?php endif; ?>
                                                         <?php if ($drinks): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Drinks</label>
                                                                 <select class="form-select" name="drink">
                                                                     <option value="">Choose a drink</option>
                                                                     <?php foreach ($drinks as $drink): ?>
-                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>">
-                                                                            <?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)
-                                                                        </option>
+                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>"><?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)</option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
@@ -1143,7 +1100,6 @@ try {
                                     </div>
                                 </div>
                             </div>
-                            <!-- Allergies Modal -->
                             <?php if ($product['allergies']): ?>
                                 <div class="modal fade" id="allergiesModal<?= $product['id'] ?>" tabindex="-1" aria-labelledby="allergiesModalLabel<?= $product['id'] ?>" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered">
@@ -1172,27 +1128,22 @@ try {
                     <?php endif; ?>
                 </div>
             </div>
-            <!-- Order Summary Sidebar -->
             <div class="col-lg-3">
                 <div class="order-summary">
                     <h2 class="order-title">YOUR ORDER</h2>
-                    <!-- Display Cart Logo -->
                     <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
                         <div class="mb-3 text-center">
                             <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo" class="img-fluid cart-logo" id="cart-logo" loading="lazy" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
                         </div>
                     <?php endif; ?>
-                    <!-- Display Cart Description -->
                     <?php if (!empty($cart_description)): ?>
                         <div class="mb-4 cart-description" id="cart-description">
                             <p><?= nl2br(htmlspecialchars($cart_description)) ?></p>
                         </div>
                     <?php endif; ?>
-                    <!-- Existing Order Details -->
                     <p class="card-text">
                         <strong>Working hours:</strong>
-                        <?= !empty($notification['message']) ? htmlspecialchars($notification['message']) : "10:00 - 21:45" ?>
-                        <br>
+                        <?= !empty($notification['message']) ? htmlspecialchars($notification['message']) : "10:00 - 21:45" ?><br>
                         <strong>Minimum order:</strong> 5.00€
                     </p>
                     <?php if (!empty($_SESSION['delivery_address'])): ?>
@@ -1230,12 +1181,8 @@ try {
                                         </div>
                                         <div>
                                             <strong><?= number_format($item['total_price'], 2) ?>€</strong><br>
-                                            <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2">
-                                                <i class="bi bi-trash"></i> Remove
-                                            </a>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>">
-                                                <i class="bi bi-pencil-square"></i> Edit
-                                            </button>
+                                            <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2"><i class="bi bi-trash"></i> Remove</a>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>"><i class="bi bi-pencil-square"></i> Edit</button>
                                         </div>
                                     </li>
                                 <?php endforeach; ?>
@@ -1261,56 +1208,27 @@ try {
     <footer class="bg-light text-muted pt-5 pb-4">
         <div class="container text-md-left">
             <div class="row text-md-left">
-                <!-- Company Info -->
                 <div class="col-md-3 col-lg-3 col-xl-3 mx-auto mt-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">
-                        <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&h=40&w=40" alt="Restaurant Logo" width="40" height="40" class="me-2">
-                        Restaurant
-                    </h5>
-                    <p>
-                        Experience the finest dining with us. We offer a variety of dishes crafted from the freshest ingredients to delight your palate.
-                    </p>
+                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark"><img src="https://images.unsplash.com/photo-1550547660-d9450f859349?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&h=40&w=40" alt="Restaurant Logo" width="40" height="40" class="me-2">Restaurant</h5>
+                    <p>Experience the finest dining with us. We offer a variety of dishes crafted from the freshest ingredients to delight your palate.</p>
                 </div>
-                <!-- Navigation Links -->
                 <div class="col-md-2 col-lg-2 col-xl-2 mx-auto mt-3">
                     <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Quick Links</h5>
                     <ul class="list-unstyled">
-                        <li class="mb-2">
-                            <a href="index.php" class="text-reset text-decoration-none">Home</a>
-                        </li>
-                        <li class="mb-2">
-                            <a href="#menu" class="text-reset text-decoration-none">Menu</a>
-                        </li>
-                        <li class="mb-2">
-                            <a href="#about" class="text-reset text-decoration-none">About Us</a>
-                        </li>
-                        <li class="mb-2">
-                            <a href="#contact" class="text-reset text-decoration-none">Contact</a>
-                        </li>
+                        <li class="mb-2"><a href="index.php" class="text-reset text-decoration-none">Home</a></li>
+                        <li class="mb-2"><a href="#menu" class="text-reset text-decoration-none">Menu</a></li>
+                        <li class="mb-2"><a href="#about" class="text-reset text-decoration-none">About Us</a></li>
+                        <li class="mb-2"><a href="#contact" class="text-reset text-decoration-none">Contact</a></li>
                     </ul>
                 </div>
-                <!-- Legal Links -->
                 <div class="col-md-3 col-lg-2 col-xl-2 mx-auto mt-3">
                     <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Legal</h5>
                     <ul class="list-unstyled">
-                        <li class="mb-2">
-                            <button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#agbModal">
-                                <i class="bi bi-file-earmark-text-fill me-2"></i> AGB
-                            </button>
-                        </li>
-                        <li class="mb-2">
-                            <button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#impressumModal">
-                                <i class="bi bi-file-earmark-text-fill me-2"></i> Impressum
-                            </button>
-                        </li>
-                        <li class="mb-2">
-                            <button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#datenschutzModal">
-                                <i class="bi bi-file-earmark-text-fill me-2"></i> Datenschutzerklärung
-                            </button>
-                        </li>
+                        <li class="mb-2"><button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#agbModal"><i class="bi bi-file-earmark-text-fill me-2"></i> AGB</button></li>
+                        <li class="mb-2"><button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#impressumModal"><i class="bi bi-file-earmark-text-fill me-2"></i> Impressum</button></li>
+                        <li class="mb-2"><button type="button" class="btn btn-link text-reset text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#datenschutzModal"><i class="bi bi-file-earmark-text-fill me-2"></i> Datenschutzerklärung</button></li>
                     </ul>
                 </div>
-                <!-- Contact Information -->
                 <div class="col-md-4 col-lg-3 col-xl-3 mx-auto mt-3">
                     <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Contact Us</h5>
                     <p><i class="bi bi-geo-alt-fill me-2"></i> 123 Main Street, City, Country</p>
@@ -1321,40 +1239,17 @@ try {
             </div>
             <hr class="mb-4">
             <div class="row align-items-center">
-                <!-- Social Media Icons -->
                 <div class="col-md-7 col-lg-8">
-                    <p>
-                        © <?= date('Y') ?> <strong>Restaurant</strong>. All rights reserved.
-                    </p>
+                    <p>© <?= date('Y') ?> <strong>Restaurant</strong>. All rights reserved.</p>
                 </div>
                 <div class="col-md-5 col-lg-4">
                     <div class="text-center text-md-end">
                         <div class="social-media">
-                            <?php if (!empty($social_links['facebook_link'])): ?>
-                                <a href="<?= htmlspecialchars($social_links['facebook_link']) ?>" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-facebook"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php if (!empty($social_links['twitter_link'])): ?>
-                                <a href="<?= htmlspecialchars($social_links['twitter_link']) ?>" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-twitter"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php if (!empty($social_links['instagram_link'])): ?>
-                                <a href="<?= htmlspecialchars($social_links['instagram_link']) ?>" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-instagram"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php if (!empty($social_links['linkedin_link'])): ?>
-                                <a href="<?= htmlspecialchars($social_links['linkedin_link']) ?>" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-linkedin"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php if (!empty($social_links['youtube_link'])): ?>
-                                <a href="<?= htmlspecialchars($social_links['youtube_link']) ?>" target="_blank" rel="noopener noreferrer">
-                                    <i class="bi bi-youtube"></i>
-                                </a>
-                            <?php endif; ?>
+                            <?php if (!empty($social_links['facebook_link'])): ?><a href="<?= htmlspecialchars($social_links['facebook_link']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-facebook"></i></a><?php endif; ?>
+                            <?php if (!empty($social_links['twitter_link'])): ?><a href="<?= htmlspecialchars($social_links['twitter_link']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-twitter"></i></a><?php endif; ?>
+                            <?php if (!empty($social_links['instagram_link'])): ?><a href="<?= htmlspecialchars($social_links['instagram_link']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-instagram"></i></a><?php endif; ?>
+                            <?php if (!empty($social_links['linkedin_link'])): ?><a href="<?= htmlspecialchars($social_links['linkedin_link']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-linkedin"></i></a><?php endif; ?>
+                            <?php if (!empty($social_links['youtube_link'])): ?><a href="<?= htmlspecialchars($social_links['youtube_link']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-youtube"></i></a><?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -1362,16 +1257,12 @@ try {
         </div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Bootstrap Bundle JS (includes Popper) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(() => {
-            // Fade out loading overlay and show toasts
             $('#loading-overlay').fadeOut('slow');
             $('.toast').toast('show');
-            // Handle reservation form submission via AJAX
             $('#reservationForm').submit(function(e) {
                 e.preventDefault();
                 const $form = $(this);
@@ -1394,14 +1285,12 @@ try {
                     }))
                     .always(() => $submitBtn.prop('disabled', false));
             });
-            // Redirect after order success
             <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
                 setTimeout(() => {
                     $('.modal').modal('hide');
                     window.location.href = 'index.php';
                 }, 5000);
             <?php endif; ?>
-            // Handle Store Closed Status
             const updateStoreStatus = () => {
                 $.getJSON('check_store_status.php', (data) => {
                     const $controls = $('.btn-add-to-cart, .btn-checkout');
@@ -1423,12 +1312,9 @@ try {
             };
             updateStoreStatus();
             setInterval(updateStoreStatus, 60000);
-            // Initialize Stripe
             const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym');
             const card = stripe.elements().create('card').mount('#card-element');
-            // Toggle Stripe payment section
             $('input[name="payment_method"]').change(() => $('#stripe-payment-section').toggle($('#paymentStripe').is(':checked')));
-            // Handle checkout form submission
             $('#checkoutForm').submit(async function(e) {
                 if ($('#paymentStripe').is(':checked')) {
                     e.preventDefault();
@@ -1496,5 +1382,4 @@ try {
 </body>
 
 </html>
-<?php ob_end_flush();
-?>
+<?php ob_end_flush(); ?>

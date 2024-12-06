@@ -1,672 +1,640 @@
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:58] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:44] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:28:59] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:45] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:01] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:46] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:02] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1298
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:39] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:48] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:40] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Undefined array key &quot;quantity&quot;
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1299
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:49] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:50] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:50] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:54] Error
+### [2024-12-06 10:30:50] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:55] Error
+### [2024-12-06 10:30:50] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
-### [2024-12-01 23:29:55] Error
+### [2024-12-06 10:30:50] Error
 
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.products&#039; doesn&#039;t exist
 
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
-
----
-
-### [2024-12-01 23:29:55] Error
-
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
-
----
-
-### [2024-12-01 23:29:55] Error
-
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
-
----
-
-### [2024-12-01 23:29:55] Error
-
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
-
----
-
-### [2024-12-01 23:29:55] Error
-
-**Message:** Uncaught Exception: Trying to access array offset on value of type int
-
-**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 1205
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 664
 
 ---
 
