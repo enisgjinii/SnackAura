@@ -3,9 +3,14 @@ ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require 'vendor/autoload.php';
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
+
+// Define error log file
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+
+// Function to log errors
 function log_error($message, $context = '')
 {
     $timestamp = date('Y-m-d H:i:s');
@@ -15,95 +20,159 @@ function log_error($message, $context = '')
     $formatted .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted, FILE_APPEND | LOCK_EX);
 }
+
+// Function to send emails using PHPMailer
 function sendEmail($to, $toName, $subject, $body)
 {
     $mail = new PHPMailer(true);
     try {
+        // SMTP configuration
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'egjini17@gmail.com';
-        $mail->Password = 'axnjsldfudhohipv';
+        $mail->Password = 'axnjsldfudhohipv'; // Consider using environment variables for security
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
+
+        // Email settings
         $mail->setFrom('egjini17@gmail.com', 'Yumiis');
         $mail->addAddress($to, $toName);
         $mail->isHTML(true);
         $mail->CharSet = 'UTF-8';
         $mail->Subject = $subject;
         $mail->Body = $body;
+
         $mail->send();
     } catch (Exception $e) {
         log_error("Mail Error: " . $mail->ErrorInfo, "Sending Email to: $to");
     }
 }
+
+// Function to send status update emails
 function sendStatusUpdateEmail($email, $name, $order_id, $status, $scheduled_date = null, $scheduled_time = null)
 {
     $subject = "Update Status of Your Order #{$order_id}";
     $scheduled_info = ($scheduled_date && $scheduled_time) ? "<p><strong>Scheduled Delivery:</strong> {$scheduled_date} at {$scheduled_time}</p>" : '';
     $body = <<<EOD
     <html>
-    <head><style>body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
-    .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    .header { background-color: #4CAF50; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { padding: 20px; }
-    .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
-    .button { background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+    <head><style>
+        body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+        .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .header { background-color: #4CAF50; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { padding: 20px; }
+        .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+        .button { background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
     </style></head>
-    <body><div class='container'><div class='header'><h2>Yumiis</h2></div><div class='content'><p>Pershendetje <strong>{$name}</strong>,</p><p>Statusi i porosisë tuaj <strong>#{$order_id}</strong> është përditësuar në <strong>{$status}</strong>.</p>{$scheduled_info}<p>Faleminderit që zgjodhët Yumiis!</p><a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Detajet</a></div><div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div></div></body>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h2>Yumiis</h2>
+            </div>
+            <div class='content'>
+                <p>Pershendetje <strong>{$name}</strong>,</p>
+                <p>Statusi i porosisë tuaj <strong>#{$order_id}</strong> është përditësuar në <strong>{$status}</strong>.</p>
+                {$scheduled_info}
+                <p>Faleminderit që zgjodhët Yumiis!</p>
+                <a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Detajet</a>
+            </div>
+            <div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div>
+        </div>
+    </body>
     </html>
     EOD;
     sendEmail($email, $name, $subject, $body);
 }
+
+// Function to send delay notification emails
 function sendDelayNotificationEmail($email, $name, $order_id, $additional_time)
 {
     $subject = "Njoftim për Vonese në Porosinë #{$order_id}";
     $body = <<<EOD
     <html>
-    <head><style>body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
-    .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    .header { background-color: #ff9800; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { padding: 20px; }
-    .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
-    .button { background-color: #ff9800; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+    <head><style>
+        body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+        .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .header { background-color: #ff9800; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { padding: 20px; }
+        .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+        .button { background-color: #ff9800; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
     </style></head>
-    <body><div class='container'><div class='header'><h2>Yumiis</h2></div><div class='content'><p>Pershendetje <strong>{$name}</strong>,</p><p>Na vjen keq të informojmë se porosia juaj <strong>#{$order_id}</strong> mund të përbëhet nga vonesë për shkak të numrit të madh të porosive.</p><p>Kemi nevojë për miratimin tuaj për kohën e shtuar të dërgesës prej <strong>{$additional_time}</strong> orësh.</p><p>Ju lutem, na njoftoni nëse jeni dakord me këtë ndryshim.</p><a href='https://yourwebsite.com/contact' class='button'>Na Kontaktoni</a><p>Faleminderit për mirëkuptimin!</p></div><div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div></div></body>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h2>Yumiis</h2>
+            </div>
+            <div class='content'>
+                <p>Pershendetje <strong>{$name}</strong>,</p>
+                <p>Na vjen keq të informojmë se porosia juaj <strong>#{$order_id}</strong> mund të përbëhet nga vonesë për shkak të numrit të madh të porosive.</p>
+                <p>Kemi nevojë për miratimin tuaj për kohën e shtuar të dërgesës prej <strong>{$additional_time}</strong> orësh.</p>
+                <p>Ju lutem, na njoftoni nëse jeni dakord me këtë ndryshim.</p>
+                <a href='https://yourwebsite.com/contact' class='button'>Na Kontaktoni</a>
+                <p>Faleminderit për mirëkuptimin!</p>
+            </div>
+            <div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div>
+        </div>
+    </body>
     </html>
     EOD;
     sendEmail($email, $name, $subject, $body);
 }
+
+// Function to notify the delivery person
 function notifyDeliveryPerson($email, $name, $order_id, $status)
 {
     $subject = "New Order Assigned - Order #{$order_id}";
     $body = <<<EOD
     <html>
-    <head><style>body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
-    .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    .header { background-color: #2196F3; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { padding: 20px; }
-    .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
-    .button { background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+    <head><style>
+        body { font-family: Arial, sans-serif; background-color: #f9f9f9; margin: 0; padding: 0; }
+        .container { padding: 20px; background-color: #ffffff; margin: 20px auto; max-width: 600px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .header { background-color: #2196F3; color: white; padding: 10px 0; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { padding: 20px; }
+        .footer { text-align: center; padding: 10px 0; color: #777777; font-size: 12px; }
+        .button { background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
     </style></head>
-    <body><div class='container'><div class='header'><h2>Yumiis</h2></div><div class='content'><p>Pershendetje <strong>{$name}</strong>,</p><p>Ju keni caktuar të trajtoni porosinë <strong>#{$order_id}</strong> me statusin <strong>{$status}</strong>.</p><p>Ju lutem, procedoni sipas nevojës.</p><a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Porosinë</a></div><div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div></div></body>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h2>Yumiis</h2>
+            </div>
+            <div class='content'>
+                <p>Pershendetje <strong>{$name}</strong>,</p>
+                <p>Ju keni caktuar të trajtoni porosinë <strong>#{$order_id}</strong> me statusin <strong>{$status}</strong>.</p>
+                <p>Ju lutem, procedoni sipas nevojës.</p>
+                <a href='https://yourwebsite.com/orders/{$order_id}' class='button'>Shiko Porosinë</a>
+            </div>
+            <div class='footer'>&copy; " . date('Y') . " Yumiis. Të gjitha të drejtat e mbrojtura.</div>
+        </div>
+    </body>
     </html>
     EOD;
     sendEmail($email, $name, $subject, $body);
 }
+
+// Exception and Error Handlers
 set_exception_handler(function ($e) {
     log_error("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
     header("Location: orders.php?action=view&message=unknown_error");
     exit;
 });
+
 set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
+
+// Function to get delivery users
 function getDeliveryUsers($pdo)
 {
     $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE role = 'delivery' AND is_active = 1");
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Function to get order status history
 function getOrderStatusHistory($pdo, $order_id)
 {
     $stmt = $pdo->prepare('
@@ -117,6 +186,8 @@ function getOrderStatusHistory($pdo, $order_id)
     $stmt->execute([$order_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Function to geocode address
 function geocodeAddress($address)
 {
     $encoded = urlencode($address);
@@ -134,6 +205,8 @@ function geocodeAddress($address)
     $data = json_decode($response, true);
     return isset($data[0]) ? [$data[0]['lat'], $data[0]['lon']] : [null, null];
 }
+
+// Function to update order coordinates
 function updateOrderCoordinates($pdo, $order_id, $address)
 {
     list($lat, $lon) = geocodeAddress($address);
@@ -142,10 +215,14 @@ function updateOrderCoordinates($pdo, $order_id, $address)
         $stmt->execute([$lat, $lon, $order_id]);
     }
 }
+
+// Function to get all statuses
 function getAllStatuses($pdo)
 {
     return $pdo->query('SELECT * FROM order_statuses ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Function to get active orders based on role
 function getActiveOrders($pdo, $role, $user_id = null)
 {
     $common_fields = 'o.*, os.status, t.name AS tip_name, t.percentage AS tip_percentage, t.amount AS tip_fixed_amount, c.order_count, u.username AS delivery_username';
@@ -177,21 +254,31 @@ function getActiveOrders($pdo, $role, $user_id = null)
     }
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Retrieve user role and ID from session
 $user_role = $_SESSION['role'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
+
+// Retrieve action and ID from GET parameters
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
+
+// Define allowed actions based on role
 $allowed_actions = [
     'admin' => ['view', 'update_status', 'delete', 'permanent_delete', 'restore', 'view_trash', 'view_details', 'update_status_form', 'customer_counts', 'manage_ratings', 'delete_rating', 'send_delay_notification'],
     'delivery' => ['view', 'view_details', 'update_status', 'send_delay_notification']
 ];
+
+// Check if the action is allowed for the user role
 if (!in_array($action, $allowed_actions[$user_role] ?? [])) {
     header('HTTP/1.1 403 Forbidden');
     echo "<h1>403 Forbidden</h1><p>You do not have permission to perform this action.</p>";
     require_once 'includes/footer.php';
     exit();
 }
+
+// Handle different actions
 switch ($action) {
     case 'update_status':
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
@@ -200,6 +287,8 @@ switch ($action) {
             $scheduled_date = $_POST['scheduled_date'] ?? null;
             $scheduled_time = $_POST['scheduled_time'] ?? null;
             date_default_timezone_set('Europe/Tirane');
+
+            // Validate scheduled date and time
             if ($scheduled_date || $scheduled_time) {
                 if ($scheduled_date && $scheduled_time) {
                     $scheduled_datetime = DateTime::createFromFormat('Y-m-d H:i', "$scheduled_date $scheduled_time");
@@ -219,6 +308,7 @@ switch ($action) {
                     exit();
                 }
             }
+
             if ($status_id && is_numeric($status_id)) {
                 $stmt = $pdo->prepare('SELECT status FROM order_statuses WHERE id = ?');
                 $stmt->execute([$status_id]);
@@ -239,22 +329,32 @@ switch ($action) {
                                 exit();
                             }
                         }
+
+                        // Update coordinates if not set
                         if (is_null($order['latitude']) || is_null($order['longitude'])) {
                             updateOrderCoordinates($pdo, $id, $order['delivery_address']);
                             $stmt->execute([$id]);
                             $order = $stmt->fetch(PDO::FETCH_ASSOC);
                         }
+
+                        // Update order status
                         $update = $pdo->prepare('UPDATE orders SET status_id = ?, delivery_user_id = ?, scheduled_date = ?, scheduled_time = ? WHERE id = ?');
                         if ($update->execute([$status_id, $delivery_user_id ?: null, $scheduled_date ?: null, $scheduled_time ?: null, $id])) {
+                            // Insert into history
                             $history = $pdo->prepare('INSERT INTO order_status_history (order_id, status_id, delivery_user_id) VALUES (?, ?, ?)');
                             $history->execute([$id, $status_id, $delivery_user_id ?: null]);
+
+                            // Send status update email
                             sendStatusUpdateEmail($order['customer_email'], $order['customer_name'], $id, $new_status, $scheduled_date, $scheduled_time);
+
+                            // Notify delivery person if assigned by admin
                             if ($delivery_user_id && $user_role === 'admin') {
                                 $stmt = $pdo->prepare('SELECT email, username FROM users WHERE id = ?');
                                 $stmt->execute([$delivery_user_id]);
                                 $delivery_user = $stmt->fetch(PDO::FETCH_ASSOC);
                                 if ($delivery_user) notifyDeliveryPerson($delivery_user['email'], $delivery_user['username'], $id, $new_status);
                             }
+
                             header("Location: orders.php?action=view&message=" . urlencode('Order status updated successfully.'));
                             exit();
                         }
@@ -265,6 +365,7 @@ switch ($action) {
             exit();
         }
         break;
+
     case 'delete':
         if ($user_role === 'admin' && $id > 0) {
             $stmt = $pdo->prepare('UPDATE orders SET deleted_at = NOW() WHERE id = ?');
@@ -274,6 +375,7 @@ switch ($action) {
             exit();
         }
         break;
+
     case 'permanent_delete':
         if ($user_role === 'admin' && $id > 0) {
             $stmt = $pdo->prepare('DELETE FROM orders WHERE id = ?');
@@ -283,6 +385,7 @@ switch ($action) {
             exit();
         }
         break;
+
     case 'restore':
         if ($user_role === 'admin' && $id > 0) {
             $stmt = $pdo->prepare('UPDATE orders SET deleted_at = NULL WHERE id = ?');
@@ -292,6 +395,7 @@ switch ($action) {
             exit();
         }
         break;
+
     case 'view_trash':
         if ($user_role === 'admin') {
             try {
@@ -312,6 +416,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'view_details':
         if ($id > 0) {
             try {
@@ -325,11 +430,14 @@ switch ($action) {
                 $stmt->execute([$id]);
                 $order = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($order) {
+                    // Update coordinates if not set
                     if (is_null($order['latitude']) || is_null($order['longitude'])) {
                         updateOrderCoordinates($pdo, $id, $order['delivery_address']);
                         $stmt->execute([$id]);
                         $order = $stmt->fetch(PDO::FETCH_ASSOC);
                     }
+
+                    // Fetch order items
                     $stmt = $pdo->prepare('
                         SELECT oi.*, p.name AS product_name, s.name AS size_name 
                         FROM order_items oi 
@@ -339,30 +447,31 @@ switch ($action) {
                     ');
                     $stmt->execute([$id]);
                     $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    // Fetch extras and drinks for each item
                     foreach ($items as &$item) {
-                        $item['extras'] = $pdo->prepare('
+                        // Fetch extras
+                        $stmt = $pdo->prepare('
                             SELECT e.name, oe.quantity, oe.unit_price, oe.total_price 
                             FROM order_extras oe 
                             JOIN extras e ON oe.extra_id = e.id 
                             WHERE oe.order_item_id = ?
-                        ')->execute([$item['id']]) ? $pdo->prepare('
-                            SELECT e.name, oe.quantity, oe.unit_price, oe.total_price 
-                            FROM order_extras oe 
-                            JOIN extras e ON oe.extra_id = e.id 
-                            WHERE oe.order_item_id = ?
-                        ')->fetchAll(PDO::FETCH_ASSOC) : [];
-                        $item['drinks'] = $pdo->prepare('
+                        ');
+                        $stmt->execute([$item['id']]);
+                        $item['extras'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                        // Fetch drinks
+                        $stmt = $pdo->prepare('
                             SELECT d.name, od.quantity, od.unit_price, od.total_price 
                             FROM order_drinks od 
                             JOIN drinks d ON od.drink_id = d.id 
                             WHERE od.order_item_id = ?
-                        ')->execute([$item['id']]) ? $pdo->prepare('
-                            SELECT d.name, od.quantity, od.unit_price, od.total_price 
-                            FROM order_drinks od 
-                            JOIN drinks d ON od.drink_id = d.id 
-                            WHERE od.order_item_id = ?
-                        ')->fetchAll(PDO::FETCH_ASSOC) : [];
+                        ');
+                        $stmt->execute([$item['id']]);
+                        $item['drinks'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     }
+
+                    // Fetch status history
                     $status_history = getOrderStatusHistory($pdo, $id);
                 } else {
                     $message = '<div class="alert alert-warning">The order does not exist or is in Trash.</div>';
@@ -377,6 +486,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'update_status_form':
         if ($id > 0) {
             try {
@@ -406,6 +516,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'customer_counts':
         try {
             $stmt = $pdo->prepare('
@@ -423,6 +534,7 @@ switch ($action) {
             $message = '<div class="alert alert-danger">Failed to retrieve customer order counts.</div>';
         }
         break;
+
     case 'manage_ratings':
         if ($user_role === 'admin') {
             try {
@@ -436,6 +548,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'delete_rating':
         if ($user_role === 'admin' && $id > 0) {
             try {
@@ -452,6 +565,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'send_delay_notification':
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
             $additional_time = (int)($_POST['additional_time'] ?? 0);
@@ -479,6 +593,7 @@ switch ($action) {
             }
         }
         break;
+
     case 'check_new_orders':
         // Ensure the user is authenticated
         if (!isset($_SESSION['user_id'])) {
@@ -511,6 +626,7 @@ switch ($action) {
             echo json_encode(['status' => 'error', 'message' => 'Server error']);
         }
         exit();
+
     case 'view':
     default:
         try {
@@ -526,8 +642,45 @@ switch ($action) {
         }
         break;
 }
+
+// Function to get Delivered Status ID
+function getDeliveredStatusId($pdo)
+{
+    $stmt = $pdo->prepare("SELECT id FROM order_statuses WHERE status = 'Delivered' LIMIT 1");
+    $stmt->execute();
+    return $stmt->fetchColumn();
+}
 ?>
-<div class="container-fluid mt-4">
+<!-- Custom CSS for Compactness -->
+<style>
+    .table th,
+    .table td {
+        padding: 0.3rem;
+        font-size: 0.9rem;
+    }
+
+    .card-header,
+    .modal-header {
+        padding: 0.5rem;
+    }
+
+    .card-body,
+    .modal-body,
+    .modal-footer {
+        padding: 0.5rem;
+    }
+
+    .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .badge {
+        font-size: 0.75rem;
+    }
+</style>
+
+<div class="container-fluid mt-4 px-3">
     <?php if (isset($_GET['message'])): ?>
         <div class="alert alert-<?= (strpos($_GET['message'], 'successfully') !== false || strpos($_GET['message'], 'sukses') !== false || strpos($_GET['message'], 'suksesshëm') !== false) ? 'success' : 'danger' ?> alert-dismissible fade show" role="alert">
             <?= htmlspecialchars($_GET['message']) ?>
@@ -536,42 +689,42 @@ switch ($action) {
     <?php elseif (isset($message)): ?>
         <?= $message ?>
     <?php endif; ?>
+
     <?php if ($action === 'view'): ?>
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Orders</h2>
+            <h2 class="h4">Orders</h2>
             <?php if ($user_role === 'admin'): ?>
-                <div>
-                    <a href="orders.php?action=customer_counts" class="btn btn-primary me-2"><i class="fas fa-chart-bar"></i> Customer Order Counts</a>
-                    <a href="orders.php?action=manage_ratings" class="btn btn-warning me-2"><i class="fas fa-star"></i> Manage Ratings</a>
-                    <a href="orders.php?action=view_trash" class="btn btn-danger"><i class="fas fa-trash"></i> Trash</a>
+                <div class="btn-group" role="group" aria-label="Admin Actions">
+                    <a href="orders.php?action=customer_counts" class="btn btn-sm btn-primary"><i class="fas fa-chart-bar"></i> Customer Order Counts</a>
+                    <a href="orders.php?action=manage_ratings" class="btn btn-sm btn-warning"><i class="fas fa-star"></i> Manage Ratings</a>
+                    <a href="orders.php?action=view_trash" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> Trash</a>
                 </div>
             <?php endif; ?>
         </div>
         <?php foreach ($grouped_orders as $status => $orders): ?>
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <div class="card mb-3 shadow-sm">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center p-2">
                     <span><i class="fas fa-tag"></i> <?= htmlspecialchars($status) ?> Orders</span>
                     <span class="badge bg-primary"><?= count($orders) ?></span>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-2">
                     <?php if (count($orders) > 0): ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover table-bordered data-table">
+                            <table class="table table-striped table-hover table-bordered table-sm mb-0">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>ID</th>
-                                        <th>Customer Name</th>
+                                        <th>Customer</th>
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>Address</th>
                                         <th>Total (€)</th>
                                         <th>Tip</th>
-                                        <th>Tip Amount (€)</th>
-                                        <th>Scheduled Date</th>
-                                        <th>Scheduled Time</th>
+                                        <th>Tip (€)</th>
+                                        <th>Scheduled</th>
                                         <th>Created At</th>
                                         <th>Order Count</th>
-                                        <th>Delivery Person</th>
+                                        <th>Delivery</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -586,12 +739,11 @@ switch ($action) {
                                             <td><?= number_format($order['total_amount'], 2) ?>€</td>
                                             <td><?= $order['tip_name'] ? "<span class='badge bg-info' data-bs-toggle='tooltip' title='Selected Tip: " . ($order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€') . "'>" . htmlspecialchars($order['tip_name']) . "</span>" : 'N/A' ?></td>
                                             <td><?= $order['tip_amount'] > 0 ? "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>" : '0.00€' ?></td>
-                                            <td><?= htmlspecialchars($order['scheduled_date'] ?? 'N/A') ?></td>
-                                            <td><?= htmlspecialchars($order['scheduled_time'] ?? 'N/A') ?></td>
+                                            <td><?= htmlspecialchars($order['scheduled_date'] ?? 'N/A') ?> <?= htmlspecialchars($order['scheduled_time'] ?? '') ?></td>
                                             <td><?= htmlspecialchars($order['created_at']) ?></td>
-                                            <td><?= htmlspecialchars($order['order_count']) ?><?= $order['order_count'] > 1 ? "<span class='badge bg-primary'>Repeat</span>" : '' ?></td>
+                                            <td><?= htmlspecialchars($order['order_count']) ?><?= $order['order_count'] > 1 ? "<span class='badge bg-primary ms-1'>Repeat</span>" : '' ?></td>
                                             <td><?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?></td>
-                                            <td>
+                                            <td class="text-nowrap">
                                                 <a href="orders.php?action=view_details&id=<?= $order['id'] ?>" class="btn btn-sm btn-info me-1" data-bs-toggle="tooltip" title="View"><i class="fas fa-eye"></i></a>
                                                 <?php if ($user_role === 'admin' || ($user_role === 'delivery' && in_array($order['status'], ['Assigned', 'Processing']))): ?>
                                                     <a href="orders.php?action=update_status_form&id=<?= $order['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Update Status"><i class="fas fa-edit"></i></a>
@@ -604,40 +756,44 @@ switch ($action) {
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
+
                                         <?php if ($user_role === 'admin'): ?>
+                                            <!-- Delete Modal -->
                                             <div class="modal fade" id="deleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                                 <div class="modal-dialog modal-dialog-centered">
                                                     <div class="modal-content">
-                                                        <div class="modal-header bg-danger text-white">
+                                                        <div class="modal-header bg-danger text-white p-2">
                                                             <h5 class="modal-title" id="deleteModalLabel<?= $order['id'] ?>">Delete Order</h5>
                                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                                         </div>
-                                                        <div class="modal-body">Are you sure you want to delete this order?</div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                                                            <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-danger">Yes, Delete</a>
+                                                        <div class="modal-body p-2">Are you sure you want to delete this order?</div>
+                                                        <div class="modal-footer p-2">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No</button>
+                                                            <a href="orders.php?action=delete&id=<?= $order['id'] ?>" class="btn btn-danger btn-sm">Yes, Delete</a>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            <!-- Delay Notification Modal -->
                                             <div class="modal fade" id="delayNotificationModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="delayNotificationModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                                 <div class="modal-dialog modal-dialog-centered">
                                                     <div class="modal-content">
-                                                        <div class="modal-header bg-warning text-dark">
+                                                        <div class="modal-header bg-warning text-dark p-2">
                                                             <h5 class="modal-title" id="delayNotificationModalLabel<?= $order['id'] ?>">Send Delay Notification - Order #<?= $order['id'] ?></h5>
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                         </div>
                                                         <form method="POST" action="orders.php?action=send_delay_notification&id=<?= $order['id'] ?>">
-                                                            <div class="modal-body">
+                                                            <div class="modal-body p-2">
                                                                 <div class="mb-3">
                                                                     <label for="additional_time_<?= $order['id'] ?>" class="form-label">Additional Time (in hours)</label>
-                                                                    <input type="number" class="form-control" id="additional_time_<?= $order['id'] ?>" name="additional_time" min="1" required>
+                                                                    <input type="number" class="form-control form-control-sm" id="additional_time_<?= $order['id'] ?>" name="additional_time" min="1" required>
                                                                 </div>
                                                                 <p>Are you sure you want to send a delay notification for this order?</p>
                                                             </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                                                                <button type="submit" class="btn btn-warning">Yes, Send</button>
+                                                            <div class="modal-footer p-2">
+                                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No</button>
+                                                                <button type="submit" class="btn btn-warning btn-sm">Yes, Send</button>
                                                             </div>
                                                         </form>
                                                     </div>
@@ -649,19 +805,21 @@ switch ($action) {
                             </table>
                         </div>
                     <?php else: ?>
-                        <p>No orders in this category.</p>
+                        <p class="mb-0">No orders in this category.</p>
                     <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
+
     <?php elseif ($action === 'manage_ratings' && $user_role === 'admin'): ?>
+        <!-- Manage Ratings Section -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Manage Customer Ratings</h2>
-            <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            <h2 class="h4">Manage Customer Ratings</h2>
+            <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
         </div>
         <?php if (!empty($ratings)): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered data-table">
+                <table class="table table-striped table-hover table-bordered table-sm mb-0">
                     <thead class="table-dark">
                         <tr>
                             <th>ID</th>
@@ -686,19 +844,21 @@ switch ($action) {
                                 <td><?= str_repeat('⭐', $rating['rating']) ?></td>
                                 <td><?= htmlspecialchars($rating['comments'] ?? 'No comments') ?></td>
                                 <td><?= htmlspecialchars($rating['created_at']) ?></td>
-                                <td>
+                                <td class="text-nowrap">
                                     <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteRatingModal<?= $rating['id'] ?>" title="Delete"><i class="fas fa-trash-alt"></i></button>
+
+                                    <!-- Delete Rating Modal -->
                                     <div class="modal fade" id="deleteRatingModal<?= $rating['id'] ?>" tabindex="-1" aria-labelledby="deleteRatingModalLabel<?= $rating['id'] ?>" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
-                                                <div class="modal-header bg-danger text-white">
+                                                <div class="modal-header bg-danger text-white p-2">
                                                     <h5 class="modal-title" id="deleteRatingModalLabel<?= $rating['id'] ?>">Delete Rating</h5>
                                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
-                                                <div class="modal-body">Are you sure you want to delete this rating?</div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                                                    <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-danger">Yes, Delete</a>
+                                                <div class="modal-body p-2">Are you sure you want to delete this rating?</div>
+                                                <div class="modal-footer p-2">
+                                                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No</button>
+                                                    <a href="orders.php?action=delete_rating&id=<?= $rating['id'] ?>" class="btn btn-danger btn-sm">Yes, Delete</a>
                                                 </div>
                                             </div>
                                         </div>
@@ -710,27 +870,31 @@ switch ($action) {
                 </table>
             </div>
         <?php else: ?>
-            <p>No ratings submitted yet.</p>
+            <p class="mb-0">No ratings submitted yet.</p>
         <?php endif; ?>
+
     <?php elseif ($action === 'view_details' && $id > 0): ?>
+        <!-- Order Details Section -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Order Details - ID: <?= htmlspecialchars($order['id']) ?></h2>
-            <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            <h2 class="h4">Order Details - ID: <?= htmlspecialchars($order['id']) ?></h2>
+            <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
         </div>
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+
+        <!-- Order Information Card -->
+        <div class="card mb-3 shadow-sm">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center p-2">
                 <span><i class="fas fa-info-circle"></i> Order Information</span>
                 <span class="badge bg-primary"><?= htmlspecialchars($order['status']) ?></span>
             </div>
-            <div class="card-body">
+            <div class="card-body p-2">
                 <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Customer Name:</strong> <?= htmlspecialchars($order['customer_name']) ?></p>
+                    <div class="col-md-6 mb-2">
+                        <p><strong>Customer:</strong> <?= htmlspecialchars($order['customer_name']) ?></p>
                         <p><strong>Email:</strong> <?= htmlspecialchars($order['customer_email']) ?></p>
                         <p><strong>Phone:</strong> <?= htmlspecialchars($order['customer_phone']) ?></p>
                         <p><strong>Address:</strong> <?= nl2br(htmlspecialchars($order['delivery_address'])) ?></p>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 mb-2">
                         <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?>€</p>
                         <p><strong>Status:</strong> <?= htmlspecialchars($order['status']) ?></p>
                         <p><strong>Tip:</strong> <?= $order['tip_name'] ? "<span class='badge bg-info' data-bs-toggle='tooltip' title='Selected Tip: " . ($order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€') . "'>" . htmlspecialchars($order['tip_name']) . "</span>" : 'N/A' ?></p>
@@ -751,23 +915,25 @@ switch ($action) {
                 </div>
             </div>
         </div>
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+
+        <!-- Order Items Card -->
+        <div class="card mb-3 shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center p-2">
                 <span><i class="fas fa-boxes"></i> Order Items</span>
                 <span class="badge bg-primary"><?= count($items) ?> Item<?= count($items) > 1 ? 's' : '' ?></span>
             </div>
-            <div class="card-body">
+            <div class="card-body p-2">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover table-bordered">
+                    <table class="table table-striped table-hover table-bordered table-sm mb-0">
                         <thead class="table-dark">
                             <tr>
                                 <th>Product</th>
                                 <th>Size</th>
-                                <th>Quantity</th>
+                                <th>Qty</th>
                                 <th>Price (€)</th>
                                 <th>Extras</th>
                                 <th>Drinks</th>
-                                <th>Special Instructions</th>
+                                <th>Instructions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -789,50 +955,39 @@ switch ($action) {
                         </tbody>
                     </table>
                 </div>
-                <div class="mt-3">
-                    <h5>Selected Tip</h5>
-                    <p><strong>Tip:</strong> <?= $order['tip_name'] ? "<span class='badge bg-info' data-bs-toggle='tooltip' title='Selected Tip: " . ($order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€') . "'>" . htmlspecialchars($order['tip_name']) . "</span>" : 'N/A' ?><br>
+                <div class="mt-2">
+                    <h5 class="h6">Selected Tip</h5>
+                    <p class="mb-0"><strong>Tip:</strong> <?= $order['tip_name'] ? "<span class='badge bg-info' data-bs-toggle='tooltip' title='Selected Tip: " . ($order['tip_percentage'] ? htmlspecialchars($order['tip_percentage']) . '%' : htmlspecialchars(number_format($order['tip_fixed_amount'], 2)) . '€') . "'>" . htmlspecialchars($order['tip_name']) . "</span>" : 'N/A' ?><br>
                         <strong>Tip Amount:</strong> <?= $order['tip_amount'] > 0 ? "<span class='badge bg-warning'>" . number_format($order['tip_amount'], 2) . "€</span>" : '0.00€' ?>
                     </p>
                 </div>
             </div>
         </div>
+
         <?php if (!empty($order['latitude']) && !empty($order['longitude'])): ?>
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <!-- Delivery Address Map Card -->
+            <div class="card mb-3 shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-2">
                     <span><i class="fas fa-map-marker-alt"></i> Delivery Address</span>
                 </div>
-                <div class="card-body">
-                    <div id="map" style="height: 400px;"></div>
+                <div class="card-body p-2">
+                    <div id="map" style="height: 300px; width: 100%;"></div>
                 </div>
             </div>
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-            <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    var map = L.map('map').setView([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>], 15);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        maxZoom: 19,
-                        attribution: '© OpenStreetMap'
-                    }).addTo(map);
-                    L.marker([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>])
-                        .addTo(map)
-                        .bindPopup("<b>Delivery Address</b><br><?= htmlspecialchars($order['delivery_address']) ?>")
-                        .openPopup();
-                });
-            </script>
         <?php else: ?>
-            <div class="alert alert-warning">The delivery address is not set or could not be geocoded.</div>
+            <div class="alert alert-warning p-2 mb-3">The delivery address is not set or could not be geocoded.</div>
         <?php endif; ?>
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+
+        <!-- Order Status History Card -->
+        <div class="card mb-3 shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center p-2">
                 <span><i class="fas fa-history"></i> Order Status History</span>
                 <span class="badge bg-primary"><?= count($status_history) ?> Changes</span>
             </div>
-            <div class="card-body">
+            <div class="card-body p-2">
                 <?php if (!empty($status_history)): ?>
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover table-bordered data-table">
+                        <table class="table table-striped table-hover table-bordered table-sm mb-0">
                             <thead class="table-dark">
                                 <tr>
                                     <th>Status</th>
@@ -852,24 +1007,26 @@ switch ($action) {
                         </table>
                     </div>
                 <?php else: ?>
-                    <p>No status history recorded.</p>
+                    <p class="mb-0">No status history recorded.</p>
                 <?php endif; ?>
             </div>
         </div>
+
     <?php elseif ($action === 'update_status_form' && $id > 0): ?>
+        <!-- Update Status Form -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Update Order Status - ID: <?= htmlspecialchars($order['id']) ?></h2>
-            <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            <h2 class="h4">Update Order Status - ID: <?= htmlspecialchars($order['id']) ?></h2>
+            <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
         </div>
         <?php if (!empty($message)): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
         <div class="card shadow-sm">
-            <div class="card-body">
-                <form method="POST" action="orders.php?action=update_status&id=<?= $id ?>">
-                    <div class="mb-3">
+            <div class="card-body p-2">
+                <form method="POST" action="orders.php?action=update_status&id=<?= $id ?>" class="row g-3">
+                    <div class="col-md-6">
                         <label for="status_id" class="form-label">Select New Status</label>
-                        <select class="form-select" id="status_id" name="status_id" required>
+                        <select class="form-select form-select-sm" id="status_id" name="status_id" required>
                             <?php foreach ($statuses as $status_option): ?>
                                 <?php if ($user_role === 'delivery' && !in_array($status_option['status'], ['Delivered'])) continue; ?>
                                 <option value="<?= htmlspecialchars($status_option['id']) ?>" <?= ($order['status_id'] == $status_option['id']) ? 'selected' : '' ?>><?= htmlspecialchars($status_option['status']) ?></option>
@@ -877,9 +1034,9 @@ switch ($action) {
                         </select>
                     </div>
                     <?php if ($user_role === 'admin'): ?>
-                        <div class="mb-3">
+                        <div class="col-md-6">
                             <label for="delivery_user_id" class="form-label">Assign Delivery Person</label>
-                            <select class="form-select" id="delivery_user_id" name="delivery_user_id">
+                            <select class="form-select form-select-sm" id="delivery_user_id" name="delivery_user_id">
                                 <option value="">-- Select Delivery Person --</option>
                                 <?php foreach ($delivery_users as $user): ?>
                                     <option value="<?= htmlspecialchars($user['id']) ?>" <?= ($order['delivery_user_id'] == $user['id']) ? 'selected' : '' ?>><?= htmlspecialchars($user['username']) ?> (<?= htmlspecialchars($user['email']) ?>)</option>
@@ -888,46 +1045,52 @@ switch ($action) {
                             <div class="form-text">Optional for certain statuses.</div>
                         </div>
                     <?php endif; ?>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="scheduleDeliveryCheck">
-                        <label class="form-check-label" for="scheduleDeliveryCheck">Schedule Delivery</label>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="scheduleDeliveryCheck">
+                            <label class="form-check-label" for="scheduleDeliveryCheck">Schedule Delivery</label>
+                        </div>
                     </div>
-                    <div class="mb-3" id="scheduledDateContainer" style="display: none;">
+                    <div class="col-md-6" id="scheduledDateContainer" style="display: none;">
                         <label for="scheduled_date" class="form-label">Scheduled Delivery Date</label>
-                        <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" value="<?= htmlspecialchars($order['scheduled_date'] ?? '') ?>" min="<?= date('Y-m-d') ?>">
+                        <input type="date" class="form-control form-control-sm" id="scheduled_date" name="scheduled_date" value="<?= htmlspecialchars($order['scheduled_date'] ?? '') ?>" min="<?= date('Y-m-d') ?>">
                     </div>
-                    <div class="mb-3" id="scheduledTimeContainer" style="display: none;">
+                    <div class="col-md-6" id="scheduledTimeContainer" style="display: none;">
                         <label for="scheduled_time" class="form-label">Scheduled Delivery Time</label>
-                        <input type="time" class="form-control" id="scheduled_time" name="scheduled_time" value="<?= htmlspecialchars($order['scheduled_time'] ?? '') ?>">
+                        <input type="time" class="form-control form-control-sm" id="scheduled_time" name="scheduled_time" value="<?= htmlspecialchars($order['scheduled_time'] ?? '') ?>">
                     </div>
-                    <script>
-                        document.getElementById('scheduleDeliveryCheck').addEventListener('change', function() {
-                            var dateContainer = document.getElementById('scheduledDateContainer');
-                            var timeContainer = document.getElementById('scheduledTimeContainer');
-                            if (this.checked) {
-                                dateContainer.style.display = 'block';
-                                timeContainer.style.display = 'block';
-                            } else {
-                                dateContainer.style.display = 'none';
-                                timeContainer.style.display = 'none';
-                                document.getElementById('scheduled_date').value = '';
-                                document.getElementById('scheduled_time').value = '';
-                            }
-                        });
-                    </script>
-                    <button type="submit" class="btn btn-success"><i class="fas fa-check-circle"></i> Update Status</button>
-                    <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-times-circle"></i> Cancel</a>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-sm btn-success me-2"><i class="fas fa-check-circle"></i> Update Status</button>
+                        <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-times-circle"></i> Cancel</a>
+                    </div>
                 </form>
             </div>
         </div>
+        <script>
+            document.getElementById('scheduleDeliveryCheck').addEventListener('change', function() {
+                var dateContainer = document.getElementById('scheduledDateContainer');
+                var timeContainer = document.getElementById('scheduledTimeContainer');
+                if (this.checked) {
+                    dateContainer.style.display = 'block';
+                    timeContainer.style.display = 'block';
+                } else {
+                    dateContainer.style.display = 'none';
+                    timeContainer.style.display = 'none';
+                    document.getElementById('scheduled_date').value = '';
+                    document.getElementById('scheduled_time').value = '';
+                }
+            });
+        </script>
+
     <?php elseif ($action === 'customer_counts' && $user_role === 'admin'): ?>
+        <!-- Customer Order Counts Section -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Customer Order Counts</h2>
-            <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            <h2 class="h4">Customer Order Counts</h2>
+            <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
         </div>
         <?php if (!empty($customer_counts)): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered data-table">
+                <table class="table table-striped table-hover table-bordered table-sm mb-0">
                     <thead class="table-dark">
                         <tr>
                             <th>Customer Name</th>
@@ -949,27 +1112,29 @@ switch ($action) {
                 </table>
             </div>
         <?php else: ?>
-            <p>No orders recorded for customers.</p>
+            <p class="mb-0">No orders recorded for customers.</p>
         <?php endif; ?>
+
     <?php elseif ($action === 'view_trash' && $user_role === 'admin'): ?>
+        <!-- Trash - Deleted Orders Section -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Trash - Deleted Orders</h2>
-            <a href="orders.php?action=view" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
+            <h2 class="h4">Trash - Deleted Orders</h2>
+            <a href="orders.php?action=view" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i> Back to Orders</a>
         </div>
         <?php if (!empty($trash_orders)): ?>
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered data-table">
+                <table class="table table-striped table-hover table-bordered table-sm mb-0">
                     <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Customer Name</th>
+                            <th>Customer</th>
                             <th>Email</th>
                             <th>Phone</th>
                             <th>Address</th>
                             <th>Total (€)</th>
                             <th>Deleted At</th>
                             <th>Status</th>
-                            <th>Delivery Person</th>
+                            <th>Delivery</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -985,37 +1150,41 @@ switch ($action) {
                                 <td><?= htmlspecialchars($order['deleted_at']) ?></td>
                                 <td><?= htmlspecialchars($order['status']) ?></td>
                                 <td><?= $order['delivery_username'] ? htmlspecialchars($order['delivery_username']) : 'N/A' ?></td>
-                                <td>
+                                <td class="text-nowrap">
                                     <button type="button" class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#restoreModal<?= $order['id'] ?>" title="Restore"><i class="fas fa-undo"></i></button>
                                     <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#permanentDeleteModal<?= $order['id'] ?>" title="Permanently Delete"><i class="fas fa-trash-alt"></i></button>
                                 </td>
                             </tr>
+
+                            <!-- Restore Modal -->
                             <div class="modal fade" id="restoreModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="restoreModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content">
-                                        <div class="modal-header bg-success text-white">
+                                        <div class="modal-header bg-success text-white p-2">
                                             <h5 class="modal-title" id="restoreModalLabel<?= $order['id'] ?>">Restore Order</h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <div class="modal-body">Are you sure you want to restore this order?</div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                                            <a href="orders.php?action=restore&id=<?= $order['id'] ?>" class="btn btn-success">Yes, Restore</a>
+                                        <div class="modal-body p-2">Are you sure you want to restore this order?</div>
+                                        <div class="modal-footer p-2">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No</button>
+                                            <a href="orders.php?action=restore&id=<?= $order['id'] ?>" class="btn btn-success btn-sm">Yes, Restore</a>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Permanent Delete Modal -->
                             <div class="modal fade" id="permanentDeleteModal<?= $order['id'] ?>" tabindex="-1" aria-labelledby="permanentDeleteModalLabel<?= $order['id'] ?>" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content">
-                                        <div class="modal-header bg-danger text-white">
+                                        <div class="modal-header bg-danger text-white p-2">
                                             <h5 class="modal-title" id="permanentDeleteModalLabel<?= $order['id'] ?>">Permanently Delete Order</h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <div class="modal-body">Are you sure you want to permanently delete this order? This action cannot be undone.</div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
-                                            <a href="orders.php?action=permanent_delete&id=<?= $order['id'] ?>" class="btn btn-danger">Yes, Delete</a>
+                                        <div class="modal-body p-2">Are you sure you want to permanently delete this order? This action cannot be undone.</div>
+                                        <div class="modal-footer p-2">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No</button>
+                                            <a href="orders.php?action=permanent_delete&id=<?= $order['id'] ?>" class="btn btn-danger btn-sm">Yes, Delete</a>
                                         </div>
                                     </div>
                                 </div>
@@ -1025,13 +1194,14 @@ switch ($action) {
                 </table>
             </div>
         <?php else: ?>
-            <p>Trash is empty.</p>
+            <p class="mb-0">Trash is empty.</p>
         <?php endif; ?>
+
     <?php endif; ?>
 </div>
-<?php if ($action === 'view_details' && $id > 0): ?>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<?php if ($action === 'view_details' && $id > 0 && !empty($order['latitude']) && !empty($order['longitude'])): ?>
+    <!-- Leaflet Map Initialization -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var map = L.map('map').setView([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>], 15);
@@ -1041,24 +1211,39 @@ switch ($action) {
             }).addTo(map);
             L.marker([<?= htmlspecialchars($order['latitude']) ?>, <?= htmlspecialchars($order['longitude']) ?>])
                 .addTo(map)
-                .bindPopup("<b>Delivery Address</b><br><?= htmlspecialchars($order['delivery_address']) ?>")
+                .bindPopup("<b>Delivery Address</b><br><?= htmlspecialchars(addslashes($order['delivery_address'])) ?>")
                 .openPopup();
         });
     </script>
 <?php endif; ?>
+
+<!-- Include Leaflet CSS and JS if not already included in header.php -->
+<!-- If already included in header.php, you can remove these lines -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- DataTables and Bootstrap JS -->
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Initialize DataTables and Tooltips -->
 <script>
     $(document).ready(function() {
-        $('.data-table').DataTable({
+        $('.table').DataTable({
             "language": {
                 "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/English.json"
             },
             "paging": true,
             "searching": true,
             "ordering": true,
-            "responsive": true
+            "responsive": true,
+            "autoWidth": false,
+            "columnDefs": [{
+                    "orderable": false,
+                    "targets": -1
+                } // Disable ordering on the last column (Actions)
+            ]
         });
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
@@ -1066,12 +1251,7 @@ switch ($action) {
         });
     });
 </script>
+
 <?php
-function getDeliveredStatusId($pdo)
-{
-    $stmt = $pdo->prepare("SELECT id FROM order_statuses WHERE status = 'Delivered' LIMIT 1");
-    $stmt->execute();
-    return $stmt->fetchColumn();
-}
 require_once 'includes/footer.php';
 ?>

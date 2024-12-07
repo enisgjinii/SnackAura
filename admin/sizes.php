@@ -6,244 +6,277 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Include necessary files
+
+// Define constants
+define('MAX_FILE_SIZE', 2 * 1024 * 1024); // 2MB
+
+// Include database connection
 require_once 'includes/db_connect.php';
-require_once 'includes/header.php';
+
+// Helper Functions
+function sanitizeInput($data)
+{
+    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+}
+
+function fetchAllSizes($pdo)
+{
+    try {
+        $stmt = $pdo->query('SELECT * FROM sizes ORDER BY name ASC');
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+function displaySessionMessage()
+{
+    if (isset($_SESSION['message'])) {
+        echo $_SESSION['message'];
+        unset($_SESSION['message']);
+    }
+}
+
+function displayMessage($message)
+{
+    if ($message) {
+        echo $message;
+    }
+}
+
+// Function to generate error message with Copy and Report options
+function generateErrorMessage($error)
+{
+    $escapedError = sanitizeInput($error);
+    $email = 'egjini17@gmail.com';
+    // URL-encode the error message for the mailto link
+    $encodedError = urlencode($escapedError);
+    return <<<HTML
+<div class="alert alert-danger d-flex justify-content-between align-items-center">
+    <span>$escapedError</span>
+    <div>
+        <button class="btn btn-sm btn-outline-secondary me-2 copy-btn" data-text="$escapedError">
+            <i class="fas fa-copy"></i> Copy
+        </button>
+        <a href="mailto:$email?subject=Size%20Management%20Error&body=$encodedError" class="btn btn-sm btn-outline-danger">
+            <i class="fas fa-envelope"></i> Report
+        </a>
+    </div>
+</div>
+HTML;
+}
 
 // Determine the action and ID from GET parameters
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 
-// Handle POST requests for adding or editing sizes
+// Handle POST requests for adding, editing, or deleting sizes
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($action === 'add') {
-        // Sanitize and validate input
-        $name = trim($_POST['name']);
-        $description = trim($_POST['description']);
-        $base_price = isset($_POST['base_price']) ? floatval($_POST['base_price']) : 0.00;
+    switch ($action) {
+        case 'add':
+            // Sanitize and validate input
+            $name = sanitizeInput($_POST['name'] ?? '');
+            $description = sanitizeInput($_POST['description'] ?? '');
+            $base_price = isset($_POST['base_price']) ? floatval($_POST['base_price']) : 0.00;
 
-        if ($name === '') {
-            $message = '<div class="alert alert-danger">Size name is required.</div>';
-        } else {
-            // Prepare and execute the insert statement
-            $stmt = $pdo->prepare('INSERT INTO sizes (name, description, base_price) VALUES (?, ?, ?)');
-            try {
-                $stmt->execute([$name, $description, $base_price]);
-                $_SESSION['message'] = '<div class="alert alert-success">Size added successfully.</div>';
-                header('Location: sizes.php');
-                exit();
-            } catch (PDOException $e) {
-                if ($e->getCode() === '23000') {
-                    $message = '<div class="alert alert-danger">Size name already exists.</div>';
-                } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
-                }
-            }
-        }
-    } elseif ($action === 'edit' && $id > 0) {
-        // Sanitize and validate input
-        $name = trim($_POST['name']);
-        $description = trim($_POST['description']);
-        $base_price = isset($_POST['base_price']) ? floatval($_POST['base_price']) : 0.00;
-
-        if ($name === '') {
-            $message = '<div class="alert alert-danger">Size name is required.</div>';
-        } else {
-            // Prepare and execute the update statement
-            $stmt = $pdo->prepare('UPDATE sizes SET name = ?, description = ?, base_price = ? WHERE id = ?');
-            try {
-                $stmt->execute([$name, $description, $base_price, $id]);
-                $_SESSION['message'] = '<div class="alert alert-success">Size updated successfully.</div>';
-                header('Location: sizes.php');
-                exit();
-            } catch (PDOException $e) {
-                if ($e->getCode() === '23000') {
-                    $message = '<div class="alert alert-danger">Size name already exists.</div>';
-                } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
-                }
-            }
-        }
-    }
-} elseif ($action === 'delete' && $id > 0) {
-    // Handle deletion via POST to enhance security
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        try {
-            $pdo->beginTransaction();
-
-            // Check if any products are associated with this size
-            $stmt_check = $pdo->prepare('SELECT COUNT(*) FROM product_sizes WHERE size_id = ?');
-            $stmt_check->execute([$id]);
-            $count = $stmt_check->fetchColumn();
-
-            if ($count > 0) {
-                $pdo->rollBack();
-                $_SESSION['message'] = '<div class="alert alert-danger">Cannot delete size because it is associated with existing products.</div>';
+            if ($name === '') {
+                $message = generateErrorMessage('Size name is required.');
             } else {
-                // Proceed to delete the size
-                $stmt = $pdo->prepare('DELETE FROM sizes WHERE id = ?');
-                $stmt->execute([$id]);
-                $pdo->commit();
-                $_SESSION['message'] = '<div class="alert alert-success">Size deleted successfully.</div>';
+                // Prepare and execute the insert statement
+                $stmt = $pdo->prepare('INSERT INTO sizes (name, description, base_price) VALUES (?, ?, ?)');
+                try {
+                    $stmt->execute([$name, $description, $base_price]);
+                    $_SESSION['message'] = '<div class="alert alert-success">Size added successfully.</div>';
+                    header('Location: sizes.php');
+                    exit();
+                } catch (PDOException $e) {
+                    if ($e->getCode() === '23000') { // Integrity constraint violation
+                        $message = generateErrorMessage('Size name already exists.');
+                    } else {
+                        $message = generateErrorMessage('Database Error: ' . $e->getMessage());
+                    }
+                }
             }
-        } catch (PDOException $e) {
-            $pdo->rollBack();
-            $_SESSION['message'] = '<div class="alert alert-danger">Error deleting size: ' . htmlspecialchars($e->getMessage()) . '</div>';
-        }
-        header('Location: sizes.php');
-        exit();
-    } else {
-        // If deletion is requested via GET, show a confirmation modal or redirect
-        $_SESSION['message'] = '<div class="alert alert-warning">Invalid request method for deletion.</div>';
-        header('Location: sizes.php');
-        exit();
+            break;
+
+        case 'edit':
+            if ($id > 0) {
+                // Sanitize and validate input
+                $name = sanitizeInput($_POST['name'] ?? '');
+                $description = sanitizeInput($_POST['description'] ?? '');
+                $base_price = isset($_POST['base_price']) ? floatval($_POST['base_price']) : 0.00;
+
+                if ($name === '') {
+                    $message = generateErrorMessage('Size name is required.');
+                } else {
+                    // Prepare and execute the update statement
+                    $stmt = $pdo->prepare('UPDATE sizes SET name = ?, description = ?, base_price = ? WHERE id = ?');
+                    try {
+                        $stmt->execute([$name, $description, $base_price, $id]);
+                        $_SESSION['message'] = '<div class="alert alert-success">Size updated successfully.</div>';
+                        header('Location: sizes.php');
+                        exit();
+                    } catch (PDOException $e) {
+                        if ($e->getCode() === '23000') {
+                            $message = generateErrorMessage('Size name already exists.');
+                        } else {
+                            $message = generateErrorMessage('Database Error: ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
+            break;
+
+        case 'delete':
+            if ($id > 0) {
+                try {
+                    $pdo->beginTransaction();
+
+                    // Check if any products are associated with this size
+                    $stmt_check = $pdo->prepare('SELECT COUNT(*) FROM product_sizes WHERE size_id = ?');
+                    $stmt_check->execute([$id]);
+                    $count = $stmt_check->fetchColumn();
+
+                    if ($count > 0) {
+                        $pdo->rollBack();
+                        $_SESSION['message'] = generateErrorMessage('Cannot delete size because it is associated with existing products.');
+                    } else {
+                        // Proceed to delete the size
+                        $stmt = $pdo->prepare('DELETE FROM sizes WHERE id = ?');
+                        $stmt->execute([$id]);
+                        $pdo->commit();
+                        $_SESSION['message'] = '<div class="alert alert-success">Size deleted successfully.</div>';
+                    }
+                } catch (PDOException $e) {
+                    $pdo->rollBack();
+                    $_SESSION['message'] = generateErrorMessage('Error deleting size: ' . $e->getMessage());
+                }
+                header('Location: sizes.php');
+                exit();
+            }
+            break;
+
+        default:
+            break;
     }
 }
 
-// Fetch sizes for viewing
+// After handling actions, include the header (which sends output)
+require_once 'includes/header.php';
+
+// Fetch sizes for viewing if action is 'view'
 if ($action === 'view') {
-    try {
-        $stmt = $pdo->query('SELECT * FROM sizes ORDER BY name ASC');
-        $sizes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $sizes = [];
-        $message = '<div class="alert alert-danger">Error fetching sizes: ' . htmlspecialchars($e->getMessage()) . '</div>';
-    }
+    $sizes = fetchAllSizes($pdo);
 }
+?>
 
+<?php
 // Display session messages if any
-if (isset($_SESSION['message'])) {
-    echo $_SESSION['message'];
-    unset($_SESSION['message']);
-}
+displaySessionMessage();
 
 // Display messages from current actions
-if ($message) {
-    echo $message;
-}
+displayMessage($message);
+?>
 
-// Handle different actions
-if ($action === 'view'): ?>
-    <h2 class="mb-4">Manage Sizes</h2>
-    <a href="sizes.php?action=add" class="btn btn-primary mb-3">
-        <i class="fas fa-plus"></i> Add Size
-    </a>
-    <div class="table-responsive">
-        <table class="table table-bordered table-hover" id="sizesTable">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th>Base Price (€)</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($sizes)): ?>
-                    <?php foreach ($sizes as $size): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($size['id']) ?></td>
-                            <td><?= htmlspecialchars($size['name']) ?></td>
-                            <td><?= htmlspecialchars($size['description']) ?></td>
-                            <td><?= number_format($size['base_price'], 2) ?></td>
-                            <td>
-                                <a href="sizes.php?action=edit&id=<?= $size['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Edit Size">
-                                    <i class="fas fa-edit"></i> Edit
-                                </a>
-                                <!-- Delete button triggers a modal for confirmation -->
-                                <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?= $size['id'] ?>">
-                                    <i class="fas fa-trash-alt"></i> Delete
-                                </button>
+<?php if ($action === 'view'): ?>
+    <div class="container mt-4">
+        <h2 class="mb-4">Manage Sizes</h2>
+        <a href="sizes.php?action=add" class="btn btn-primary mb-3">
+            <i class="fas fa-plus"></i> Add Size
+        </a>
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover" id="sizesTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Base Price (€)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (!empty($sizes)): ?>
+                        <?php foreach ($sizes as $size): ?>
+                            <tr>
+                                <td><?= sanitizeInput($size['id']) ?></td>
+                                <td><?= sanitizeInput($size['name']) ?></td>
+                                <td><?= sanitizeInput($size['description']) ?></td>
+                                <td><?= number_format($size['base_price'], 2) ?></td>
+                                <td>
+                                    <a href="sizes.php?action=edit&id=<?= $size['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Edit Size">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    <!-- Delete button triggers a modal for confirmation -->
+                                    <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?= $size['id'] ?>" data-bs-toggle="tooltip" title="Delete Size">
+                                        <i class="fas fa-trash-alt"></i> Delete
+                                    </button>
 
-                                <!-- Delete Confirmation Modal -->
-                                <div class="modal fade" id="deleteModal<?= $size['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $size['id'] ?>" aria-hidden="true">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
+                                    <!-- Delete Confirmation Modal -->
+                                    <div class="modal fade" id="deleteModal<?= $size['id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $size['id'] ?>" aria-hidden="true">
+                                        <div class="modal-dialog">
                                             <form method="POST" action="sizes.php?action=delete&id=<?= $size['id'] ?>">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title" id="deleteModalLabel<?= $size['id'] ?>">Confirm Deletion</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    Are you sure you want to delete the size "<strong><?= htmlspecialchars($size['name']) ?></strong>"?
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                    <button type="submit" class="btn btn-danger">Delete</button>
+                                                <div class="modal-content">
+                                                    <div class="modal-header bg-danger text-white">
+                                                        <h5 class="modal-title" id="deleteModalLabel<?= $size['id'] ?>">Confirm Deletion</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Are you sure you want to delete the size "<strong><?= sanitizeInput($size['name']) ?></strong>"?
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                                    </div>
                                                 </div>
                                             </form>
                                         </div>
                                     </div>
-                                </div>
-                                <!-- End of Modal -->
-                            </td>
+                                    <!-- End of Modal -->
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="5" class="text-center">No sizes found.</td>
                         </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="5" class="text-center">No sizes found.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-    </div>
-
-<?php elseif ($action === 'add'): ?>
-    <div class="container mt-4">
-        <h2 class="mb-4">Add New Size</h2>
-        <form method="POST" action="sizes.php?action=add">
-            <div class="mb-3">
-                <label for="name" class="form-label">Size Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="name" name="name" required value="<?= isset($_POST['name']) ? htmlspecialchars($_POST['name']) : '' ?>">
-            </div>
-            <div class="mb-3">
-                <label for="description" class="form-label">Description</label>
-                <textarea class="form-control" id="description" name="description"><?= isset($_POST['description']) ? htmlspecialchars($_POST['description']) : '' ?></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="base_price" class="form-label">Base Price (€)</label>
-                <input type="number" step="0.01" class="form-control" id="base_price" name="base_price" value="<?= isset($_POST['base_price']) ? htmlspecialchars($_POST['base_price']) : '0.00' ?>">
-            </div>
-            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Add Size</button>
-            <a href="sizes.php" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
-        </form>
-    </div>
-
-    <?php elseif ($action === 'edit' && $id > 0):
-    // Fetch the size to edit
-    $stmt = $pdo->prepare('SELECT * FROM sizes WHERE id = ?');
-    $stmt->execute([$id]);
-    $size = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$size):
-    ?>
-        <div class="container mt-4">
-            <div class="alert alert-danger">Size not found.</div>
-            <a href="sizes.php" class="btn btn-secondary">Back to Sizes</a>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
+    </div>
+
+<?php elseif ($action === 'add' || ($action === 'edit' && $id > 0)): ?>
     <?php
-        require_once 'includes/footer.php';
-        exit();
-    endif;
+    // If editing, fetch the size details
+    if ($action === 'edit') {
+        $stmt = $pdo->prepare('SELECT * FROM sizes WHERE id = ?');
+        $stmt->execute([$id]);
+        $size = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$size) {
+            echo '<div class="container mt-4"><div class="alert alert-danger">Size not found.</div></div>';
+            require_once 'includes/footer.php';
+            exit();
+        }
+    }
     ?>
     <div class="container mt-4">
-        <h2 class="mb-4">Edit Size</h2>
-        <form method="POST" action="sizes.php?action=edit&id=<?= $id ?>">
+        <h2 class="mb-4"><?= $action === 'add' ? 'Add New Size' : 'Edit Size' ?></h2>
+        <form method="POST" action="sizes.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>">
             <div class="mb-3">
                 <label for="name" class="form-label">Size Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="name" name="name" required value="<?= htmlspecialchars($size['name']) ?>">
+                <input type="text" class="form-control" id="name" name="name" required value="<?= $action === 'edit' ? sanitizeInput($size['name']) : (isset($_POST['name']) ? sanitizeInput($_POST['name']) : '') ?>">
             </div>
             <div class="mb-3">
                 <label for="description" class="form-label">Description</label>
-                <textarea class="form-control" id="description" name="description"><?= htmlspecialchars($size['description']) ?></textarea>
+                <textarea class="form-control" id="description" name="description"><?= $action === 'edit' ? sanitizeInput($size['description']) : (isset($_POST['description']) ? sanitizeInput($_POST['description']) : '') ?></textarea>
             </div>
             <div class="mb-3">
                 <label for="base_price" class="form-label">Base Price (€)</label>
-                <input type="number" step="0.01" class="form-control" id="base_price" name="base_price" value="<?= htmlspecialchars($size['base_price']) ?>">
+                <input type="number" step="0.01" class="form-control" id="base_price" name="base_price" value="<?= $action === 'edit' ? sanitizeInput($size['base_price']) : (isset($_POST['base_price']) ? sanitizeInput($_POST['base_price']) : '0.00') ?>">
             </div>
-            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Update Size</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> <?= $action === 'add' ? 'Add Size' : 'Update Size' ?></button>
             <a href="sizes.php" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
         </form>
     </div>
@@ -264,7 +297,7 @@ if ($action === 'view'): ?>
         $('#sizesTable').DataTable({
             responsive: true,
             order: [
-                [0, 'asc']
+                [0, 'asc'] // Order by ID ascending
             ],
             language: {
                 "emptyTable": "No sizes available.",
@@ -285,6 +318,17 @@ if ($action === 'view'): ?>
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Handle Copy button functionality
+        $('.copy-btn').click(function() {
+            var textToCopy = $(this).data('text');
+            navigator.clipboard.writeText(textToCopy).then(function() {
+                // Optional: Show a success message
+                alert('Error message copied to clipboard.');
+            }, function(err) {
+                alert('Failed to copy text: ' + err);
+            });
         });
     });
 </script>
