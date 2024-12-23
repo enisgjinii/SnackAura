@@ -1,9 +1,8 @@
 <?php
-// Include header and navigation
-require_once 'includes/header.php';
-// Include database connection
+ob_start();
 require_once 'includes/db_connect.php';
-// Define user roles
+require_once 'includes/header.php';
+require 'vendor/autoload.php';
 define('ROLE_ADMIN', 'admin');
 define('ROLE_WAITER', 'waiter');
 define('ROLE_DELIVERY', 'delivery');

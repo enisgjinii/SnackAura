@@ -1,35 +1,33 @@
 <?php
-// admin/login.php
 session_start();
 require_once 'includes/db_connect.php';
 
-if (isset($_SESSION['user_id'])) {
-    header('Location: dashboard.php'); // Change to your desired landing page
-    exit();
-}
-
-$message = '';
+$response = [
+    'success' => false,
+    'message' => ''
+];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 
-    // Fetch user from the database
     $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ?');
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-        // Authentication successful
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['role'] = $user['role'];
 
-        header('Location: dashboard.php');
-        exit();
+        $response['success'] = true;
+        $response['message'] = 'Login successful!';
     } else {
-        $message = 'Invalid username or password.';
+        $response['message'] = 'Invalid username or password.';
     }
+
+    echo json_encode($response);
+    exit();
 }
 ?>
 
@@ -37,125 +35,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>Admin Login - Restaurant Delivery</title>
-    <!-- Tailwind CSS CDN -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.12.0/toastify.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.12.0/toastify.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-
-    <style>
-        /* Fade-in animation for the card */
-        @keyframes fadeIn {
-            0% {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-
-            100% {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out forwards;
-        }
-    </style>
 </head>
 
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="w-full max-w-sm bg-white shadow p-6 rounded-md fade-in">
-        <div class="text-center mb-6">
-            <div class="text-4xl text-gray-700 mb-4"><i class="fa fa-utensils"></i></div>
-            <h3 class="text-xl font-semibold text-gray-800">Admin Login</h3>
-            <p class="text-sm text-gray-500 mt-1">Please enter your credentials to continue.</p>
-        </div>
-
-        <?php if ($message): ?>
-            <div class="mb-4 text-center text-red-600 text-sm font-medium">
-                <?= htmlspecialchars($message) ?>
-            </div>
-        <?php endif; ?>
-
-        <form method="POST" action="login.php" class="space-y-5" novalidate>
-            <div>
-                <label for="username" class="block mb-1 text-gray-700 font-semibold">Username</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                        <i class="fa fa-user"></i>
-                    </span>
-                    <input type="text"
-                        id="username"
-                        name="username"
-                        required
-                        class="block w-full border border-gray-300 rounded px-3 py-2 pl-10 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                        placeholder="Enter your admin username">
+<body class="flex items-center justify-center min-h-screen bg-gray-100">
+    <div class="w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+        <h4 class="text-2xl font-bold text-center mb-6 text-gray-800">Admin Login</h4>
+        <form id="loginForm" method="POST" novalidate>
+            <!-- Username Field -->
+            <div class="mb-4">
+                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                <div class="relative mt-1">
+                    <input type="text" id="username" name="username" required placeholder="Enter your username"
+                        class="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-gray-50 text-gray-700">
+                    <div class="absolute inset-y-0 left-3 flex items-center text-gray-500">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
                 </div>
             </div>
 
-            <div>
-                <label for="password" class="block mb-1 text-gray-700 font-semibold">Password</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                        <i class="fa fa-lock"></i>
-                    </span>
-                    <input type="password"
-                        id="password"
-                        name="password"
-                        required
-                        class="block w-full border border-gray-300 rounded px-3 py-2 pl-10 pr-8 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                        placeholder="Enter your password">
-                    <button type="button" id="togglePassword"
-                        class="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
-                        tabindex="-1">
-                        <i class="fa fa-eye"></i>
-                    </button>
+            <!-- Password Field -->
+            <div class="mb-4">
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <div class="relative mt-1">
+                    <input type="password" id="password" name="password" required placeholder="Enter your password"
+                        class="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-gray-50 text-gray-700">
+                    <div class="absolute inset-y-0 left-3 flex items-center text-gray-500">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex items-center justify-between text-sm text-gray-600">
-                <label class="flex items-center">
-                    <input type="checkbox" class="mr-1 border-gray-300 rounded" /> Remember me
-                </label>
-                <a href="#" class="text-blue-600 hover:underline">Forgot password?</a>
-            </div>
-
-            <button type="submit"
-                class="relative w-full py-2 rounded bg-gray-800 text-white font-medium hover:bg-gray-900 transition-colors">
-                <span class="button-text">Login</span>
-                <span class="absolute inset-0 flex items-center justify-center hidden spinner">
-                    <i class="fa fa-spinner fa-spin"></i>
-                    <span class="ml-2">Logging in...</span>
-                </span>
+            <!-- Login Button -->
+            <button type="submit" id="loginBtn"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg focus:outline-none focus:ring focus:ring-blue-300 flex justify-center items-center">
+                <span id="btnText">Login</span>
+                <i id="btnSpinner" class="hidden fas fa-spinner fa-spin ml-2"></i>
             </button>
         </form>
     </div>
 
     <script>
-        const togglePassword = document.getElementById('togglePassword');
-        const passwordField = document.getElementById('password');
-        const form = document.querySelector('form');
-        const submitButton = form.querySelector('button[type="submit"]');
-        const buttonText = submitButton.querySelector('.button-text');
-        const spinner = submitButton.querySelector('.spinner');
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
 
-        togglePassword.addEventListener('click', () => {
-            const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordField.setAttribute('type', type);
-            togglePassword.innerHTML =
-                type === 'password' ? '<i class="fa fa-eye"></i>' : '<i class="fa fa-eye-slash"></i>';
-        });
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
 
-        form.addEventListener('submit', (e) => {
-            if (!form.checkValidity()) {
-                e.preventDefault();
-                e.stopPropagation();
-                form.classList.add('was-validated');
-            } else {
-                // Show spinner on submit
-                buttonText.classList.add('hidden');
-                spinner.classList.remove('hidden');
+            // Show spinner and disable button
+            btnText.classList.add('hidden');
+            btnSpinner.classList.remove('hidden');
+            loginBtn.setAttribute('disabled', true);
+
+            const formData = new FormData(loginForm);
+
+            try {
+                const response = await fetch('login.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+                loginBtn.removeAttribute('disabled');
+
+                // Display toast notification
+                Toastify({
+                    text: result.message,
+                    duration: 3000,
+                    gravity: "top",
+                    position: "center",
+                    backgroundColor: result.success ? "#48BB78" : "#F56565",
+                    stopOnFocus: true,
+                }).showToast();
+
+                if (result.success) {
+                    setTimeout(() => {
+                        window.location.href = "dashboard.php";
+                    }, 2000);
+                }
+            } catch (error) {
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+                loginBtn.removeAttribute('disabled');
+
+                Toastify({
+                    text: "An error occurred. Please try again.",
+                    duration: 3000,
+                    gravity: "top",
+                    position: "center",
+                    backgroundColor: "#F56565",
+                    stopOnFocus: true,
+                }).showToast();
             }
         });
     </script>

@@ -1,16 +1,19 @@
 <?php
 ob_start();
 require 'vendor/autoload.php';
-\Stripe\Stripe::setApiKey("sk_test_51QByfJE4KNNCb6nuElXbMZUUanhTipH5LGonlnO3bcq6eaxXINmWDuMzfw7RFTNTOb1jDsEm00IzfwoFx2");
+\Stripe\Stripe::setApiKey("sk_test_XXX"); // Replace with your Stripe test key
 session_start();
-require 'db.php';
+require 'includes/db_connect.php';
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
 if (!isset($_SESSION['selected_store'])) {
     $stmt = $pdo->query('SELECT id, name FROM stores WHERE is_active = 1 ORDER BY name ASC');
     $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
     $selected_store_id = (int)$_POST['store_id'];
     $stmt = $pdo->prepare('SELECT name FROM stores WHERE id = ? AND is_active = 1');
@@ -39,10 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'])) {
         $error_message = "Selected store is not available.";
     }
 }
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+
 function log_error_markdown($error_message, $context = '')
 {
     $timestamp = date('Y-m-d H:i:s');
@@ -55,29 +60,34 @@ function log_error_markdown($error_message, $context = '')
     $formatted_message .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $formatted_message, FILE_APPEND | LOCK_EX);
 }
+
 set_exception_handler(function ($exception) {
     log_error_markdown("Uncaught Exception: " . $exception->getMessage(), "File: " . $exception->getFile() . " Line: " . $exception->getLine());
     header("Location: index.php?error=unknown_error");
     exit;
 });
+
 set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
+
 include 'settings_fetch.php';
 $_SESSION['cart'] = $_SESSION['cart'] ?? [];
+
 $is_closed = false;
 $notification = [];
 $current_datetime = new DateTime();
 $current_date = $current_datetime->format('Y-m-d');
 $current_day = $current_datetime->format('l');
 $current_time = $current_datetime->format('H:i:s');
+
 $query = "
-SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week
-FROM operational_hours
-WHERE (type = 'holiday' AND date = :current_date)
-OR (type = 'regular' AND day_of_week = :current_day)
-LIMIT 1
+    SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week
+    FROM operational_hours
+    WHERE (type = 'holiday' AND date = :current_date)
+    OR (type = 'regular' AND day_of_week = :current_day)
+    LIMIT 1
 ";
 $stmt = $pdo->prepare($query);
 $stmt->execute(['current_date' => $current_date, 'current_day' => $current_day]);
@@ -91,7 +101,7 @@ if ($op_hours) {
             'end_datetime' => (new DateTime($op_hours['date'] . ' ' . $op_hours['close_time']))->format('c')
         ];
     } elseif ($op_hours['type'] === 'regular') {
-        if ($op_hours['is_closed'] || $current_time < $op_hours['open_time'] || $current_time > $op_hours['close_time']) {
+        if ($op_hours['is_closed'] || $current_time < ($op_hours['open_time'] ?? '00:00:00') || $current_time > ($op_hours['close_time'] ?? '23:59:59')) {
             $is_closed = true;
             $notification = [
                 'title' => 'Store Closed',
@@ -101,6 +111,7 @@ if ($op_hours) {
         }
     }
 }
+
 try {
     $stmt = $pdo->prepare("SELECT * FROM tips WHERE is_active = 1 ORDER BY percentage ASC, amount ASC");
     $stmt->execute();
@@ -109,6 +120,7 @@ try {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
+
 if (isset($_GET['select_tip'])) {
     $selected_tip_id = (int)$_GET['select_tip'];
     $tip_exists = false;
@@ -124,71 +136,72 @@ if (isset($_GET['select_tip'])) {
     header("Location: index.php");
     exit;
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $product_id = (int)$_POST['product_id'];
     $quantity = max(1, (int)$_POST['quantity']);
-    $size_id = isset($_POST['size']) ? (int)$_POST['size'] : null;
+    $size = $_POST['size'] ?? null;
     $extras = $_POST['extras'] ?? [];
+    $sauces = $_POST['sauces'] ?? [];
+    $dresses = $_POST['dresses'] ?? [];
     $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
     $special_instructions = trim($_POST['special_instructions']);
-    $selected_sauces = $_POST['sauces'] ?? [];
-    $product_query = "
-    SELECT p.*,
-    ps.size_id, s.name AS size_name, ps.price AS size_price,
-    e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
-    psu.sauce_id
-    FROM products p
-    LEFT JOIN product_sizes ps ON p.id = ps.product_id
-    LEFT JOIN sizes s ON ps.size_id = s.id
-    LEFT JOIN product_extras pe ON p.id = pe.product_id
-    LEFT JOIN extras e ON pe.extra_id = e.id
-    LEFT JOIN product_sauces psu ON p.id = psu.product_id
-    WHERE p.id = :product_id AND p.is_active = 1
-    ";
-    $stmt = $pdo->prepare($product_query);
+    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = :product_id AND is_active = 1");
     $stmt->execute(['product_id' => $product_id]);
-    $product_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if ($product_rows) {
-        $product = [
-            'id' => $product_rows[0]['id'],
-            'name' => $product_rows[0]['name'],
-            'description' => $product_rows[0]['description'],
-            'image_url' => $product_rows[0]['image_url'],
-            'is_new' => $product_rows[0]['is_new'],
-            'is_offer' => $product_rows[0]['is_offer'],
-            'allergies' => $product_rows[0]['allergies'],
-            'base_price' => (float)$product_rows[0]['price'],
-            'sizes' => [],
-            'extras' => [],
-            'sauces' => []
-        ];
-        foreach ($product_rows as $row) {
-            if ($row['size_id'] && !isset($product['sizes'][$row['size_id']])) {
-                $product['sizes'][$row['size_id']] = [
-                    'id' => $row['size_id'],
-                    'name' => $row['size_name'],
-                    'price' => (float)$row['size_price']
-                ];
+    $product_row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($product_row) {
+        $properties = json_decode($product_row['properties'], true) ?? [];
+        $extras_options = $properties['extras'] ?? [];
+        $sauces_options = $properties['sauces'] ?? [];
+        $sizes_options = $properties['sizes'] ?? [];
+        $dresses_options = $properties['dresses'] ?? [];
+        $base_price = (float)($product_row['price'] ?? 0.0);
+        $selected_size = null;
+        $size_price = 0.00;
+        if ($size) {
+            foreach ($sizes_options as $sz) {
+                if (isset($sz['size']) && $sz['size'] === $size) {
+                    $selected_size = $sz;
+                    $size_price = (float)($sz['price'] ?? 0.0);
+                    break;
+                }
             }
-            if ($row['extra_id'] && !isset($product['extras'][$row['extra_id']])) {
-                $product['extras'][$row['extra_id']] = [
-                    'id' => $row['extra_id'],
-                    'name' => $row['extra_name'],
-                    'price' => (float)$row['extra_price']
-                ];
-            }
-            if ($row['sauce_id'] && !in_array($row['sauce_id'], $product['sauces'])) {
-                $product['sauces'][] = $row['sauce_id'];
+            if (!$selected_size) {
+                log_error_markdown("Invalid size selected: $size for Product ID: $product_id", "Adding to Cart");
+                header("Location: index.php?error=invalid_size");
+                exit;
             }
         }
-        $size_price = $size_id && isset($product['sizes'][$size_id]) ? $product['sizes'][$size_id]['price'] : 0.00;
+        $selected_extras = [];
         $extras_total = 0.00;
-        $extras_details = [];
-        if ($extras) {
-            foreach ($extras as $extra_id) {
-                if (isset($product['extras'][$extra_id])) {
-                    $extras_details[] = $product['extras'][$extra_id];
-                    $extras_total += $product['extras'][$extra_id]['price'];
+        foreach ($extras as $extra_name) {
+            foreach ($extras_options as $extra) {
+                if (isset($extra['name']) && $extra['name'] === $extra_name) {
+                    $selected_extras[] = $extra;
+                    $extras_total += (float)($extra['price'] ?? 0.0);
+                    break;
+                }
+            }
+        }
+        $selected_sauces = [];
+        $sauces_total = 0.00;
+        foreach ($sauces as $sauce_name) {
+            foreach ($sauces_options as $sauce) {
+                if (isset($sauce['name']) && $sauce['name'] === $sauce_name) {
+                    $selected_sauces[] = $sauce;
+                    $sauces_total += (float)($sauce['price'] ?? 0.0);
+                    break;
+                }
+            }
+        }
+        $selected_dresses = [];
+        $dresses_total = 0.00;
+        foreach ($dresses as $dress_name) {
+            foreach ($dresses_options as $dress) {
+                if (isset($dress['name']) && $dress['name'] === $dress_name) {
+                    $selected_dresses[] = $dress;
+                    $dresses_total += (float)($dress['price'] ?? 0.0);
+                    break;
                 }
             }
         }
@@ -200,47 +213,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             $drink = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($drink) {
                 $drink_details = $drink;
-                $drink_total = (float)$drink['price'];
+                $drink_total = (float)($drink['price'] ?? 0.0);
             }
         }
-        $sauces_details = [];
-        $sauces_total = 0.00;
-        if ($selected_sauces) {
-            $placeholders = implode(',', array_fill(0, count($selected_sauces), '?'));
-            $stmt = $pdo->prepare("SELECT * FROM sauces WHERE id IN ($placeholders)");
-            $stmt->execute($selected_sauces);
-            $sauces = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($sauces as $sauce) {
-                $sauces_details[] = $sauce;
-                $sauces_total += (float)$sauce['price'];
-            }
-        }
-        $unit_price = $product['base_price'] + $size_price + $extras_total + $drink_total + $sauces_total;
+        $unit_price = $base_price + $size_price + $extras_total + $sauces_total + $dresses_total + $drink_total;
         $total_price = $unit_price * $quantity;
         $cart_item = [
-            'product_id' => $product['id'],
-            'name' => $product['name'],
-            'description' => $product['description'],
-            'image_url' => $product['image_url'],
-            'size' => $size_id ? $product['sizes'][$size_id]['name'] : null,
-            'size_id' => $size_id,
-            'extras' => $extras_details,
+            'product_id' => $product_row['id'],
+            'name' => $product_row['name'],
+            'description' => $product_row['description'],
+            'image_url' => $product_row['image_url'],
+            'size' => $selected_size['size'] ?? null,
+            'size_price' => $size_price,
+            'extras' => $selected_extras,
+            'sauces' => $selected_sauces,
+            'dresses' => $selected_dresses,
             'drink' => $drink_details,
-            'sauces' => $sauces_details,
             'special_instructions' => $special_instructions,
             'quantity' => $quantity,
             'unit_price' => $unit_price,
-            'total_price' => $total_price,
-            'base_price' => $product['base_price']
+            'total_price' => $total_price
         ];
         $duplicate_index = array_search(true, array_map(function ($item) use ($cart_item) {
             return (
                 $item['product_id'] === $cart_item['product_id'] &&
-                $item['size_id'] === $cart_item['size_id'] &&
-                ($item['drink']['id'] ?? null) === ($cart_item['drink']['id'] ?? null) &&
+                $item['size'] === $cart_item['size'] &&
+                ((isset($item['drink']['id']) && isset($cart_item['drink']['id']) && $item['drink']['id'] === $cart_item['drink']['id']) || (!isset($item['drink']) && !isset($cart_item['drink']))) &&
                 $item['special_instructions'] === $cart_item['special_instructions'] &&
-                count(array_intersect(array_column($item['extras'], 'id'), array_column($cart_item['extras'], 'id'))) === count($cart_item['extras']) &&
-                count(array_intersect(array_column($item['sauces'], 'id'), array_column($cart_item['sauces'], 'id'))) === count($cart_item['sauces'])
+                count(array_intersect(array_column($item['extras'], 'name'), array_column($cart_item['extras'], 'name'))) === count($cart_item['extras']) &&
+                count(array_intersect(array_column($item['sauces'], 'name'), array_column($cart_item['sauces'], 'name'))) === count($cart_item['sauces']) &&
+                count(array_intersect(array_column($item['dresses'], 'name'), array_column($cart_item['dresses'], 'name'))) === count($cart_item['dresses'])
             );
         }, $_SESSION['cart']), true);
         if ($duplicate_index !== false) {
@@ -257,6 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         exit;
     }
 }
+
 if (isset($_GET['remove'])) {
     $remove_index = (int)$_GET['remove'];
     if (isset($_SESSION['cart'][$remove_index])) {
@@ -268,73 +271,75 @@ if (isset($_GET['remove'])) {
     header("Location: index.php?removed=1");
     exit;
 }
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
     $item_index = (int)$_POST['item_index'];
     if (isset($_SESSION['cart'][$item_index])) {
         $quantity = max(1, (int)$_POST['quantity']);
-        $size_id = isset($_POST['size']) ? (int)$_POST['size'] : null;
+        $size = $_POST['size'] ?? null;
         $extras = $_POST['extras'] ?? [];
+        $sauces = $_POST['sauces'] ?? [];
+        $dresses = $_POST['dresses'] ?? [];
         $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
         $special_instructions = trim($_POST['special_instructions']);
-        $selected_sauces = $_POST['sauces'] ?? [];
         $product_id = $_SESSION['cart'][$item_index]['product_id'];
-        $product_query = "
-    SELECT p.*,
-    ps.size_id, s.name AS size_name, ps.price AS size_price,
-    e.id AS extra_id, e.name AS extra_name, e.price AS extra_price,
-    psu.sauce_id
-    FROM products p
-    LEFT JOIN product_sizes ps ON p.id = ps.product_id
-    LEFT JOIN sizes s ON ps.size_id = s.id
-    LEFT JOIN product_extras pe ON p.id = pe.product_id
-    LEFT JOIN extras e ON pe.extra_id = e.id
-    LEFT JOIN product_sauces psu ON p.id = psu.product_id
-    WHERE p.id = :product_id AND p.is_active = 1
-    ";
-        $stmt = $pdo->prepare($product_query);
+        $stmt = $pdo->prepare("SELECT * FROM products WHERE id = :product_id AND is_active = 1");
         $stmt->execute(['product_id' => $product_id]);
-        $product_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        if ($product_rows) {
-            $product = [
-                'id' => $product_rows[0]['id'],
-                'name' => $product_rows[0]['name'],
-                'description' => $product_rows[0]['description'],
-                'image_url' => $product_rows[0]['image_url'],
-                'is_new' => $product_rows[0]['is_new'],
-                'is_offer' => $product_rows[0]['is_offer'],
-                'allergies' => $product_rows[0]['allergies'],
-                'base_price' => (float)$product_rows[0]['price'],
-                'sizes' => [],
-                'extras' => [],
-                'sauces' => []
-            ];
-            foreach ($product_rows as $row) {
-                if ($row['size_id'] && !isset($product['sizes'][$row['size_id']])) {
-                    $product['sizes'][$row['size_id']] = [
-                        'id' => $row['size_id'],
-                        'name' => $row['size_name'],
-                        'price' => (float)$row['size_price']
-                    ];
+        $product_row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($product_row) {
+            $properties = json_decode($product_row['properties'], true) ?? [];
+            $extras_options = $properties['extras'] ?? [];
+            $sauces_options = $properties['sauces'] ?? [];
+            $sizes_options = $properties['sizes'] ?? [];
+            $dresses_options = $properties['dresses'] ?? [];
+            $base_price = (float)($product_row['price'] ?? 0.0);
+            $selected_size = null;
+            $size_price = 0.00;
+            if ($size) {
+                foreach ($sizes_options as $sz) {
+                    if (isset($sz['size']) && $sz['size'] === $size) {
+                        $selected_size = $sz;
+                        $size_price = (float)($sz['price'] ?? 0.0);
+                        break;
+                    }
                 }
-                if ($row['extra_id'] && !isset($product['extras'][$row['extra_id']])) {
-                    $product['extras'][$row['extra_id']] = [
-                        'id' => $row['extra_id'],
-                        'name' => $row['extra_name'],
-                        'price' => (float)$row['extra_price']
-                    ];
-                }
-                if ($row['sauce_id'] && !in_array($row['sauce_id'], $product['sauces'])) {
-                    $product['sauces'][] = $row['sauce_id'];
+                if (!$selected_size) {
+                    log_error_markdown("Invalid size selected: $size for Product ID: $product_id", "Updating Cart");
+                    header("Location: index.php?error=invalid_size");
+                    exit;
                 }
             }
-            $size_price = $size_id && isset($product['sizes'][$size_id]) ? $product['sizes'][$size_id]['price'] : 0.00;
+            $selected_extras = [];
             $extras_total = 0.00;
-            $extras_details = [];
-            if ($extras) {
-                foreach ($extras as $extra_id) {
-                    if (isset($product['extras'][$extra_id])) {
-                        $extras_details[] = $product['extras'][$extra_id];
-                        $extras_total += $product['extras'][$extra_id]['price'];
+            foreach ($extras as $extra_name) {
+                foreach ($extras_options as $extra) {
+                    if (isset($extra['name']) && $extra['name'] === $extra_name) {
+                        $selected_extras[] = $extra;
+                        $extras_total += (float)($extra['price'] ?? 0.0);
+                        break;
+                    }
+                }
+            }
+            $selected_sauces = [];
+            $sauces_total = 0.00;
+            foreach ($sauces as $sauce_name) {
+                foreach ($sauces_options as $sauce) {
+                    if (isset($sauce['name']) && $sauce['name'] === $sauce_name) {
+                        $selected_sauces[] = $sauce;
+                        $sauces_total += (float)($sauce['price'] ?? 0.0);
+                        break;
+                    }
+                }
+            }
+            $selected_dresses = [];
+            $dresses_total = 0.00;
+            foreach ($dresses as $dress_name) {
+                foreach ($dresses_options as $dress) {
+                    if (isset($dress['name']) && $dress['name'] === $dress_name) {
+                        $selected_dresses[] = $dress;
+                        $dresses_total += (float)($dress['price'] ?? 0.0);
+                        break;
                     }
                 }
             }
@@ -346,38 +351,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
                 $drink = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($drink) {
                     $drink_details = $drink;
-                    $drink_total = (float)$drink['price'];
+                    $drink_total = (float)($drink['price'] ?? 0.0);
                 }
             }
-            $sauces_details = [];
-            $sauces_total = 0.00;
-            if ($selected_sauces) {
-                $placeholders = implode(',', array_fill(0, count($selected_sauces), '?'));
-                $stmt = $pdo->prepare("SELECT * FROM sauces WHERE id IN ($placeholders)");
-                $stmt->execute($selected_sauces);
-                $sauces = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($sauces as $sauce) {
-                    $sauces_details[] = $sauce;
-                    $sauces_total += (float)$sauce['price'];
-                }
-            }
-            $unit_price = $product['base_price'] + $size_price + $extras_total + $drink_total + $sauces_total;
+            $unit_price = $base_price + $size_price + $extras_total + $sauces_total + $dresses_total + $drink_total;
             $total_price = $unit_price * $quantity;
             $_SESSION['cart'][$item_index] = [
-                'product_id' => $product['id'],
-                'name' => $product['name'],
-                'description' => $product['description'],
-                'image_url' => $product['image_url'],
-                'size' => $size_id ? $product['sizes'][$size_id]['name'] : null,
-                'size_id' => $size_id,
-                'extras' => $extras_details,
+                'product_id' => $product_row['id'],
+                'name' => $product_row['name'],
+                'description' => $product_row['description'],
+                'image_url' => $product_row['image_url'],
+                'size' => $selected_size['size'] ?? null,
+                'size_price' => $size_price,
+                'extras' => $selected_extras,
+                'sauces' => $selected_sauces,
+                'dresses' => $selected_dresses,
                 'drink' => $drink_details,
-                'sauces' => $sauces_details,
                 'special_instructions' => $special_instructions,
                 'quantity' => $quantity,
                 'unit_price' => $unit_price,
-                'total_price' => $total_price,
-                'base_price' => $product['base_price']
+                'total_price' => $total_price
             ];
             header("Location: index.php?updated=1");
             exit;
@@ -392,6 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_cart'])) {
         exit;
     }
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
     if (empty($_SESSION['cart'])) {
         header("Location: index.php?error=empty_cart");
@@ -401,6 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         header("Location: index.php?error=invalid_csrf_token");
         exit;
     }
+
     $store_id = $_SESSION['selected_store'] ?? null;
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_email = trim($_POST['customer_email'] ?? '');
@@ -429,6 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         $scheduled_date = null;
         $scheduled_time = null;
     }
+
     $payment_method = $_POST['payment_method'] ?? '';
     $allowed_payment_methods = ['stripe', 'pickup', 'cash'];
     if (!in_array($payment_method, $allowed_payment_methods)) {
@@ -439,62 +435,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         header("Location: index.php?error=invalid_order_details");
         exit;
     }
-    $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
+
+    $cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + ($item['total_price'] ?? 0.0), 0.00);
     $tip_amount = 0.00;
     if ($selected_tip_id) {
         foreach ($tip_options as $tip) {
             if ($tip['id'] == $selected_tip_id) {
-                if ($tip['percentage']) {
-                    $tip_amount = $cart_total * ($tip['percentage'] / 100);
-                } elseif ($tip['amount']) {
-                    $tip_amount = $tip['amount'];
+                if (isset($tip['percentage']) && $tip['percentage']) {
+                    $tip_amount = $cart_total * ((float)$tip['percentage'] / 100);
+                } elseif (isset($tip['amount']) && $tip['amount']) {
+                    $tip_amount = (float)$tip['amount'];
                 }
                 break;
             }
         }
     }
     $total_amount = $cart_total + $tip_amount;
+
+    $order_data = [
+        'items' => $_SESSION['cart'],
+        'latitude' => $_SESSION['latitude'] ?? null,
+        'longitude' => $_SESSION['longitude'] ?? null,
+        'tip_id' => $selected_tip_id,
+        'tip_amount' => $tip_amount,
+        'store_id' => $store_id,
+        'is_event' => $is_event
+    ];
+    $order_details_json = json_encode($order_data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method,store_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method, $store_id]);
+        $stmt = $pdo->prepare("INSERT INTO orders (user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method, store_id, order_details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([null, $customer_name, $customer_email, $customer_phone, $delivery_address, $total_amount, 2, $selected_tip_id, $tip_amount, $scheduled_date, $scheduled_time, $payment_method, $store_id, $order_details_json]);
         $order_id = $pdo->lastInsertId();
-        $stmt_item = $pdo->prepare("INSERT INTO order_items (order_id, product_id, size_id, quantity, price, extras, special_instructions) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt_extras = $pdo->prepare("INSERT INTO order_extras (order_item_id, extra_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
-        $stmt_drinks = $pdo->prepare("INSERT INTO order_drinks (order_item_id, drink_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)");
-        foreach ($_SESSION['cart'] as $item) {
-            $extras_ids = $item['extras'] ? implode(',', array_column($item['extras'], 'id')) : null;
-            $sauces_names = $item['sauces'] ? implode(', ', array_column($item['sauces'], 'name')) : null;
-            $combined_instructions = $sauces_names ? ($sauces_names . ($item['special_instructions'] ? "; " . $item['special_instructions'] : "")) : $item['special_instructions'];
-            $stmt_item->execute([
-                $order_id,
-                $item['product_id'],
-                $item['size_id'],
-                $item['quantity'],
-                $item['unit_price'],
-                $extras_ids,
-                $combined_instructions
-            ]);
-            $order_item_id = $pdo->lastInsertId();
-            foreach ($item['extras'] as $extra) {
-                $stmt_extras->execute([
-                    $order_item_id,
-                    $extra['id'],
-                    1,
-                    $extra['price'],
-                    $extra['price']
-                ]);
-            }
-            if ($item['drink']) {
-                $stmt_drinks->execute([
-                    $order_item_id,
-                    $item['drink']['id'],
-                    1,
-                    $item['drink']['price'],
-                    $item['drink']['price']
-                ]);
-            }
-        }
+
         if ($payment_method === 'stripe') {
             $stripe_payment_method = $_POST['stripe_payment_method'] ?? '';
             if (empty($stripe_payment_method)) {
@@ -509,42 +483,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
                 'confirmation_method' => 'manual',
                 'confirm' => true,
                 'description' => "Order ID: $order_id",
-                'metadata' => [
-                    'order_id' => $order_id
-                ],
+                'metadata' => ['order_id' => $order_id],
                 'return_url' => $return_url,
             ]);
             if ($payment_intent->status == 'requires_action' && $payment_intent->next_action->type == 'use_stripe_sdk') {
                 header('Content-Type: application/json');
-                echo json_encode([
-                    'requires_action' => true,
-                    'payment_intent_client_secret' => $payment_intent->client_secret
-                ]);
+                echo json_encode(['requires_action' => true, 'payment_intent_client_secret' => $payment_intent->client_secret]);
                 exit;
             } elseif ($payment_intent->status == 'succeeded') {
                 $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
-                $stmt->execute([2, $order_id]);
+                $stmt->execute([5, $order_id]);
                 $pdo->commit();
                 $_SESSION['cart'] = [];
                 $_SESSION['selected_tip'] = null;
                 header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => true,
-                    'redirect_url' => $return_url
-                ]);
+                echo json_encode(['success' => true, 'redirect_url' => $return_url]);
                 exit;
             } else {
                 throw new Exception("Invalid PaymentIntent status: " . $payment_intent->status);
             }
         } elseif ($payment_method === 'pickup') {
-            $new_status_id = 2;
+            $new_status_id = 3;
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         } elseif ($payment_method === 'cash') {
-            $new_status_id = 2;
+            $new_status_id = 4;
             $stmt = $pdo->prepare("UPDATE orders SET status_id = ? WHERE id = ?");
             $stmt->execute([$new_status_id, $order_id]);
         }
+
         if ($payment_method !== 'stripe') {
             $pdo->commit();
             $_SESSION['cart'] = [];
@@ -561,140 +528,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['checkout'])) {
         exit;
     }
 }
+
 $stmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC, name ASC");
 $stmt->execute();
 $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $selected_category_id = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-$sql = "SELECT p.*, c.name as category_name FROM products p
-JOIN categories c ON p.category_id = c.id
-WHERE p.is_active = 1";
-$params = [];
+
+$product_query = "
+    SELECT
+        p.id AS product_id,
+        p.product_code,
+        p.name AS product_name,
+        p.category,
+        p.description,
+        p.allergies,
+        p.image_url,
+        p.is_new,
+        p.is_offer,
+        p.is_active,
+        p.properties,
+        p.base_price,
+        p.created_at,
+        p.updated_at,
+        p.category_id
+    FROM products p
+    WHERE p.is_active = 1" . ($selected_category_id > 0 ? " AND p.category_id = :category_id" : "") . "
+    ORDER BY p.created_at DESC
+";
+$stmt = $pdo->prepare($product_query);
 if ($selected_category_id > 0) {
-    $sql .= " AND p.category_id = :category_id";
-    $params[':category_id'] = $selected_category_id;
+    $stmt->bindParam(':category_id', $selected_category_id, PDO::PARAM_INT);
 }
-$sql .= " ORDER BY p.name ASC";
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$raw_base_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt->execute();
+$raw_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $products = [];
-foreach ($raw_base_products as $base) {
-    $product_id = $base['id'];
-    $is_pizza = stripos($base['category_name'], 'pizza') !== false;
-    $product = [
-        'id' => $product_id,
-        'name' => $base['name'],
-        'description' => $base['description'],
-        'image_url' => $base['image_url'],
-        'is_new' => $base['is_new'],
-        'is_offer' => $base['is_offer'],
-        'allergies' => $base['allergies'],
-        'base_price' => (float)$base['price'],
-        'sizes' => [],
-        'extras' => [],
-        'sauces' => []
+foreach ($raw_products as $row) {
+    $properties = json_decode($row['properties'], true) ?? [];
+    $sizes = $properties['sizes'] ?? [];
+    $base_price = (float)($row['base_price'] ?? 0.0);
+    $display_price = $base_price;
+    if (!empty($sizes)) {
+        $min_size_price = min(array_map(fn($s) => (float)($s['price'] ?? 0.0), $sizes));
+        $display_price = $base_price + $min_size_price;
+    }
+    $products[] = [
+        'id' => $row['product_id'],
+        'product_code' => $row['product_code'],
+        'name' => $row['product_name'],
+        'category' => $row['category'],
+        'description' => $row['description'],
+        'allergies' => $row['allergies'],
+        'image_url' => $row['image_url'],
+        'is_new' => $row['is_new'],
+        'is_offer' => $row['is_offer'],
+        'is_active' => $row['is_active'],
+        'base_price' => $base_price,
+        'created_at' => $row['created_at'],
+        'updated_at' => $row['updated_at'],
+        'category_id' => $row['category_id'],
+        'extras' => $properties['extras'] ?? [],
+        'sauces' => $properties['sauces'] ?? [],
+        'sizes' => $sizes,
+        'dresses' => $properties['dresses'] ?? [],
+        'display_price' => $display_price
     ];
-    if ($is_pizza) {
-        $stmtSz = $pdo->prepare("SELECT * FROM product_dynamic_sizes WHERE product_id = ?");
-        $stmtSz->execute([$product_id]);
-        $dyn_sizes = $stmtSz->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($dyn_sizes as $sz) {
-            $size_id = $sz['id'];
-            $size_entry = [
-                'id' => $size_id,
-                'name' => $sz['name'],
-                'price' => (float)$sz['price'],
-                'extras' => [],
-                'sauces' => []
-            ];
-            $stmtEx = $pdo->prepare("SELECT e.id, e.name, pse.price FROM product_size_extras pse JOIN extras e ON pse.extra_id = e.id WHERE pse.product_size_id = ?");
-            $stmtEx->execute([$size_id]);
-            $size_extras = $stmtEx->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($size_extras as $ex) {
-                $size_entry['extras'][] = [
-                    'id' => $ex['id'],
-                    'name' => $ex['name'],
-                    'price' => (float)$ex['price']
-                ];
-            }
-            $stmtSc = $pdo->prepare("SELECT s.id, s.name, pss.price FROM product_size_sauces pss JOIN sauces s ON pss.sauce_id = s.id WHERE pss.product_size_id = ?");
-            $stmtSc->execute([$size_id]);
-            $size_sauces = $stmtSc->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($size_sauces as $sc) {
-                $size_entry['sauces'][] = [
-                    'id' => $sc['id'],
-                    'name' => $sc['name'],
-                    'price' => (float)$sc['price']
-                ];
-            }
-            $product['sizes'][] = $size_entry;
-        }
-    } else {
-        $stmtOldSz = $pdo->prepare("SELECT ps.size_id, s.name AS size_name, ps.price AS size_price FROM product_sizes ps JOIN sizes s ON ps.size_id = s.id WHERE ps.product_id = ?");
-        $stmtOldSz->execute([$product_id]);
-        $old_sizes = $stmtOldSz->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($old_sizes as $sz) {
-            $product['sizes'][] = [
-                'id' => $sz['size_id'],
-                'name' => $sz['size_name'],
-                'price' => (float)$sz['size_price']
-            ];
-        }
-        $stmtExtra = $pdo->prepare("SELECT e.id, e.name, e.price FROM product_extras pe JOIN extras e ON pe.extra_id = e.id WHERE pe.product_id = ?");
-        $stmtExtra->execute([$product_id]);
-        $all_extras = $stmtExtra->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($all_extras as $ex) {
-            $product['extras'][] = [
-                'id' => $ex['id'],
-                'name' => $ex['name'],
-                'price' => (float)$ex['price']
-            ];
-        }
-        $stmtSauce = $pdo->prepare("SELECT s.id, s.name, s.price FROM product_sauces ps JOIN sauces s ON ps.sauce_id = s.id WHERE ps.product_id = ?");
-        $stmtSauce->execute([$product_id]);
-        $all_sauces = $stmtSauce->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($all_sauces as $sc) {
-            $product['sauces'][] = [
-                'id' => $sc['id'],
-                'name' => $sc['name'],
-                'price' => (float)$sc['price']
-            ];
-        }
-    }
-    $products[$product_id] = $product;
 }
-$products = array_values($products);
-$sauce_details = [];
-$all_sauce_ids = array_unique(array_merge(...array_map(fn($p) => array_map(fn($s) => isset($s['id']) ? $s['id'] : $s, $p['sauces'] ?: []), $products)));
-$all_sauce_ids = array_filter($all_sauce_ids, 'is_numeric');
-if ($all_sauce_ids) {
-    $placeholders = implode(',', array_fill(0, count($all_sauce_ids), '?'));
-    $stmt = $pdo->prepare("SELECT * FROM sauces WHERE id IN ($placeholders)");
-    $stmt->execute($all_sauce_ids);
-    $sauce_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($sauce_rows as $sauce_row) {
-        $sauce_details[$sauce_row['id']] = $sauce_row;
-    }
-}
+
 $stmt = $pdo->prepare("SELECT * FROM drinks ORDER BY name ASC");
 $stmt->execute();
 $drinks = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + $item['total_price'], 0.00);
+
+$cart_total = array_reduce($_SESSION['cart'], fn($carry, $item) => $carry + ($item['total_price'] ?? 0.0), 0.00);
 $selected_tip = $_SESSION['selected_tip'] ?? null;
 $tip_amount = 0.00;
 if ($selected_tip) {
     foreach ($tip_options as $tip) {
         if ($tip['id'] == $selected_tip) {
-            if ($tip['percentage']) {
-                $tip_amount = $cart_total * ($tip['percentage'] / 100);
-            } elseif ($tip['amount']) {
-                $tip_amount = $tip['amount'];
+            if (isset($tip['percentage']) && $tip['percentage']) {
+                $tip_amount = $cart_total * ((float)$tip['percentage'] / 100);
+            } elseif (isset($tip['amount']) && $tip['amount']) {
+                $tip_amount = (float)$tip['amount'];
             }
             break;
         }
     }
 }
 $cart_total_with_tip = $cart_total + $tip_amount;
+
 try {
     $stmt = $pdo->prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY created_at DESC");
     $stmt->execute();
@@ -703,6 +623,7 @@ try {
     log_error_markdown("Failed to fetch banners: " . $e->getMessage(), "Fetching Banners");
     $banners = [];
 }
+
 try {
     $current_date = date('Y-m-d');
     $stmt = $pdo->prepare("SELECT * FROM offers WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date>= ?) ORDER BY created_at DESC");
@@ -730,65 +651,26 @@ try {
     <?php endif; ?>
     <style>
         .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            z-index: 9999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;
         }
-        .promo-banner .carousel-item img {
-            height: 400px;
-            object-fit: cover;
+        .promo-banner .carousel-item img { height:400px; object-fit:cover; }
+        .offers-section .card-img-top { height:200px; object-fit:cover; }
+        .offers-section .card-title { font-size:1.25rem; font-weight:600; }
+        .offers-section .card-text { font-size:0.95rem; color:#555; }
+        @media (max-width:768px) {
+            .promo-banner .carousel-item img { height:250px; }
+            .offers-section .card-img-top { height:150px; }
         }
-        .offers-section .card-img-top {
-            height: 200px;
-            object-fit: cover;
-        }
-        .offers-section .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        .offers-section .card-text {
-            font-size: 0.95rem;
-            color: #555;
-        }
-        @media (max-width: 768px) {
-            .promo-banner .carousel-item img {
-                height: 250px;
-            }
-            .offers-section .card-img-top {
-                height: 150px;
-            }
-        }
-        .btn.disabled,
-        .btn:disabled {
-            opacity: 0.65;
-            cursor: not-allowed;
-        }
-        .language-switcher {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
-        .order-summary {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 5px;
-            position: sticky;
-            top: 20px;
-        }
-        .order-title {
-            margin-bottom: 15px;
-        }
+        .btn.disabled, .btn:disabled { opacity:0.65; cursor:not-allowed; }
+        .language-switcher { position:absolute; top:10px; right:10px; }
+        .order-summary { background-color:#f8f9fa; padding:20px; border-radius:5px; position:sticky; top:20px; }
+        .order-title { margin-bottom:15px; }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css" type="text/css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
 <body>
     <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
@@ -800,9 +682,7 @@ try {
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
-                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo"
-                                style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy"
-                                onerror="this.src='https://via.placeholder.com/150?text=Logo';">
+                            <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo" style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
@@ -824,7 +704,7 @@ try {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Select Location on Map</label>
-                                <div id="map" style="height: 300px;"></div>
+                                <div id="map" class="map-container" style="height: 300px; width: 100%;"></div>
                             </div>
                             <input type="hidden" id="latitude" name="latitude">
                             <input type="hidden" id="longitude" name="longitude">
@@ -836,77 +716,66 @@ try {
                 </div>
             </div>
         </div>
-        <!-- Improved map initialization script -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                const storeModalElement = document.getElementById('storeModal');
-                const storeModal = new bootstrap.Modal(storeModalElement, {
-                    backdrop: 'static',
-                    keyboard: false
-                });
-                storeModal.show();
-                let map = L.map('map', {
-                    center: [51.505, -0.09],
-                    zoom: 13
-                });
+            $(document).ready(function() {
+                $('#storeModal').modal('show');
+                var map = L.map('map').setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
-                    attribution: '© OpenStreetMap'
+                    attribution: '&copy; OpenStreetMap contributors'
                 }).addTo(map);
-                let marker;
+                var marker;
                 function onMapClick(e) {
                     if (marker) {
                         map.removeLayer(marker);
                     }
                     marker = L.marker(e.latlng).addTo(map);
-                    document.getElementById('latitude').value = e.latlng.lat;
-                    document.getElementById('longitude').value = e.latlng.lng;
+                    $('#latitude').val(e.latlng.lat);
+                    $('#longitude').val(e.latlng.lng);
                     fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.display_name) {
-                                document.getElementById('delivery_address').value = data.display_name;
+                                $('#delivery_address').val(data.display_name);
+                            } else {
+                                alert('Unable to fetch address. Please enter manually.');
                             }
                         })
-                        .catch(error => console.error('Error:', error));
+                        .catch(error => console.error('Error fetching address:', error));
                 }
                 map.on('click', onMapClick);
-                document.getElementById('delivery_address').addEventListener('change', function() {
-                    let address = this.value.trim();
+                $('#delivery_address').on('change', function() {
+                    var address = $(this).val();
                     if (address.length > 5) {
                         fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`)
                             .then(response => response.json())
                             .then(data => {
                                 if (data && data.length > 0) {
-                                    let firstResult = data[0];
-                                    let lat = firstResult.lat;
-                                    let lon = firstResult.lon;
+                                    var lat = data[0].lat;
+                                    var lon = data[0].lon;
                                     if (marker) {
                                         map.removeLayer(marker);
                                     }
                                     marker = L.marker([lat, lon]).addTo(map);
                                     map.setView([lat, lon], 13);
-                                    document.getElementById('latitude').value = lat;
-                                    document.getElementById('longitude').value = lon;
+                                    $('#latitude').val(lat);
+                                    $('#longitude').val(lon);
                                 } else {
-                                    alert('Address not found. Please try again.');
+                                    alert('Address not found. Please select manually on the map.');
                                 }
                             })
-                            .catch(error => console.error('Error:', error));
+                            .catch(error => console.error('Error geocoding address:', error));
                     }
                 });
-                storeModalElement.addEventListener('shown.bs.modal', function() {
-                    map.invalidateSize();
-                });
-                document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
-                    let address = document.getElementById('delivery_address').value.trim();
-                    let lat = document.getElementById('latitude').value;
-                    let lon = document.getElementById('longitude').value;
+                $('#storeSelectionForm').on('submit', function(e) {
+                    var address = $('#delivery_address').val().trim();
+                    var lat = $('#latitude').val();
+                    var lon = $('#longitude').val();
                     if (address === '' || lat === '' || lon === '') {
                         e.preventDefault();
-                        alert('Please enter a valid address and select your location on the map.');
+                        alert('Please provide a valid address and select your location on the map.');
                     }
                 });
             });
@@ -938,6 +807,121 @@ try {
         include $file;
     }
     ?>
+    <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" action="index.php" id="checkoutForm">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="customer_name" class="form-label">Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="customer_name" name="customer_name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="customer_email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="customer_email" name="customer_email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="customer_phone" class="form-label">Phone <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" id="customer_phone" name="customer_phone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="delivery_address" class="form-label">Delivery Address <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label><input class="form-check-input" type="checkbox" id="event_checkbox"> Event</label>
+                        </div>
+                        <div id="event_details" style="display: none;">
+                            <div class="mb-3">
+                                <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" min="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="scheduled_time" name="scheduled_time">
+                            </div>
+                        </div>
+                        <script>
+                            document.getElementById('event_checkbox').addEventListener('change', function() {
+                                const eventDetails = document.getElementById('event_details');
+                                const scheduledDate = document.getElementById('scheduled_date');
+                                const scheduledTime = document.getElementById('scheduled_time');
+                                if (this.checked) {
+                                    eventDetails.style.display = 'block';
+                                    scheduledDate.setAttribute('required', 'required');
+                                    scheduledTime.setAttribute('required', 'required');
+                                } else {
+                                    eventDetails.style.display = 'none';
+                                    scheduledDate.removeAttribute('required');
+                                    scheduledTime.removeAttribute('required');
+                                }
+                            });
+                        </script>
+                        <div class="mb-3">
+                            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+                            <div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentStripe" value="stripe" required>
+                                    <label class="form-check-label" for="paymentStripe">Stripe (Online Payment)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentPickup" value="pickup" required>
+                                    <label class="form-check-label" for="paymentPickup">Pick-Up (Pay on Collection)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="payment_method" id="paymentCash" value="cash" required>
+                                    <label class="form-check-label" for="paymentCash">Cash on Delivery</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="stripe-payment-section" class="mb-3" style="display: none;">
+                            <label class="form-label">Credit or Debit Card</label>
+                            <div id="card-element"></div>
+                            <div id="card-errors" role="alert" class="text-danger mt-2"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tip_selection" class="form-label">Select Tip</label>
+                            <select class="form-select" id="tip_selection" name="selected_tip">
+                                <?php foreach ($tip_options as $tip): ?>
+                                    <option value="<?= htmlspecialchars($tip['id']) ?>" <?= ($selected_tip == $tip['id']) ? 'selected' : '' ?>>
+                                        <?php
+                                        if (isset($tip['percentage']) && $tip['percentage']) {
+                                            echo htmlspecialchars($tip['name']) . " (" . htmlspecialchars($tip['percentage']) . "%)";
+                                        } elseif (isset($tip['amount']) && $tip['amount']) {
+                                            echo htmlspecialchars($tip['name']) . " (+" . number_format($tip['amount'], 2) . "€)";
+                                        }
+                                        ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <h5>Order Summary</h5>
+                        <ul class="list-group mb-3">
+                            <?php foreach ($_SESSION['cart'] as $item): ?>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div><?= htmlspecialchars($item['name']) ?> x<?= htmlspecialchars($item['quantity']) ?><?= isset($item['size']) ? " ({$item['size']})" : '' ?></div>
+                                    <div><?= number_format($item['total_price'], 2) ?>€</div>
+                                </li>
+                            <?php endforeach; ?>
+                            <?php if ($tip_amount > 0): ?>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>Tip</div>
+                                    <div><?= number_format($tip_amount, 2) ?>€</div>
+                                </li>
+                            <?php endif; ?>
+                        </ul>
+                        <h4>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h4>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    </div>
+                    <div class="modal-footer">
+                        <input type="hidden" name="checkout" value="1">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Place Order</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <ul class="nav nav-tabs justify-content-center my-4" id="categoryTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <a class="nav-link <?= ($selected_category_id === 0) ? 'active' : '' ?>" href="index.php" role="tab">All</a>
@@ -963,17 +947,19 @@ try {
                                                 <?= $product['is_new'] ? 'New' : 'Offer' ?>
                                             </span>
                                         <?php endif; ?>
-                                        <?php if ($product['allergies']): ?>
-                                            <button type="button" class="btn btn-sm btn-danger position-absolute" style="top: 10px; left: 10px;" data-bs-toggle="modal" data-bs-target="#allergiesModal<?= $product['id'] ?>">
-                                                <i class="bi bi-exclamation-triangle-fill"></i>
-                                            </button>
-                                        <?php endif; ?>
                                     </div>
                                     <div class="card-body d-flex flex-column">
                                         <h5 class="card-title"><?= htmlspecialchars($product['name']) ?></h5>
                                         <p class="card-text"><?= htmlspecialchars($product['description']) ?></p>
-                                        <div class="mt-auto d-flex justify-content-between align-items-center">
-                                            <strong><?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?></strong>
+                                        <?php if (!empty($product['allergies'])): ?>
+                                            <p class="card-text text-danger"><strong>Allergies:</strong> <?= htmlspecialchars($product['allergies']) ?></p>
+                                        <?php endif; ?>
+                                        <div class="mt-auto">
+                                            <?php if (!empty($product['sizes'])): ?>
+                                                <strong>From <?= number_format($product['display_price'], 2) ?>€</strong>
+                                            <?php else: ?>
+                                                <strong><?= number_format($product['base_price'], 2) ?>€</strong>
+                                            <?php endif; ?>
                                             <button class="btn btn-sm btn-primary btn-add-to-cart" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $product['id'] ?>">
                                                 <i class="bi bi-cart-plus me-1"></i> Add to Cart
                                             </button>
@@ -993,87 +979,77 @@ try {
                                                     <div class="col-8">
                                                         <h2 class="text-uppercase"><b><?= htmlspecialchars($product['name']) ?></b></h2>
                                                         <hr style="width: 10%; border: 2px solid black; border-radius: 5px;">
-                                                        <h3 style="color:#d3b213"><b><?= number_format(!empty($product['sizes']) ? $product['sizes'][0]['price'] : $product['base_price'], 2) . '€' ?></b></h3>
-                                                        <?php if (!empty($product['sizes'])): ?>
+                                                        <?php if (empty($product['sizes'])): ?>
+                                                            <h3 style="color:#d3b213"><b><?= number_format($product['base_price'], 2) ?>€</b></h3>
+                                                        <?php else: ?>
+                                                            <h5>Select a size to see final price</h5>
                                                             <div class="mb-3">
-                                                                <label class="form-label">Size</label>
-                                                                <select class="form-select" name="size" required id="sizeSelect<?= $product['id'] ?>">
+                                                                <label class="form-label">Select Size:</label>
+                                                                <select class="form-select" name="size" required>
                                                                     <option value="">Choose a size</option>
-                                                                    <?php foreach ($product['sizes'] as $dyn_size): ?>
-                                                                        <option value="<?= htmlspecialchars($dyn_size['id']) ?>" data-extras='<?= json_encode($dyn_size['extras']) ?>' data-sauces='<?= json_encode($dyn_size['sauces']) ?>'><?= htmlspecialchars($dyn_size['name']) ?> (+<?= number_format($dyn_size['price'], 2) ?>€)</option>
+                                                                    <?php foreach ($product['sizes'] as $size): 
+                                                                        $sz_price = (float)($size['price'] ?? 0.0);
+                                                                        $final_sz_price = $product['base_price'] + $sz_price;
+                                                                    ?>
+                                                                        <option value="<?= htmlspecialchars($size['size']) ?>"><?= htmlspecialchars($size['size']) ?> (<?= number_format($final_sz_price, 2) ?>€)</option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
-                                                            <div id="extrasContainer<?= $product['id'] ?>" class="mt-3" style="display:none;">
-                                                                <h6>Extras:</h6>
-                                                                <div id="extrasList<?= $product['id'] ?>"></div>
-                                                            </div>
-                                                            <div id="saucesContainer<?= $product['id'] ?>" class="mt-3" style="display:none;">
-                                                                <h6>Sauces:</h6>
-                                                                <div id="saucesList<?= $product['id'] ?>"></div>
-                                                            </div>
-                                                            <script>
-                                                                $(document).ready(function() {
-                                                                    $('#sizeSelect<?= $product['id'] ?>').change(function() {
-                                                                        const selectedOption = $(this).find(':selected');
-                                                                        const extras = JSON.parse(selectedOption.data('extras') || '[]');
-                                                                        const sauces = JSON.parse(selectedOption.data('sauces') || '[]');
-                                                                        if (extras.length > 0) {
-                                                                            let html = '';
-                                                                            extras.forEach(ex => {
-                                                                                html += `<div class="form-check"><input class="form-check-input" type="checkbox" name="extras[]" value="${ex.id}"><label class="form-check-label">${ex.name} (+${parseFloat(ex.price).toFixed(2)}€)</label></div>`;
-                                                                            });
-                                                                            $('#extrasList<?= $product['id'] ?>').html(html);
-                                                                            $('#extrasContainer<?= $product['id'] ?>').show();
-                                                                        } else {
-                                                                            $('#extrasContainer<?= $product['id'] ?>').hide();
-                                                                            $('#extrasList<?= $product['id'] ?>').empty();
-                                                                        }
-                                                                        if (sauces.length > 0) {
-                                                                            let html = '';
-                                                                            sauces.forEach(sc => {
-                                                                                html += `<div class="form-check"><input class="form-check-input" type="checkbox" name="sauces[]" value="${sc.id}"><label class="form-check-label">${sc.name} (+${parseFloat(sc.price).toFixed(2)}€)</label></div>`;
-                                                                            });
-                                                                            $('#saucesList<?= $product['id'] ?>').html(html);
-                                                                            $('#saucesContainer<?= $product['id'] ?>').show();
-                                                                        } else {
-                                                                            $('#saucesContainer<?= $product['id'] ?>').hide();
-                                                                            $('#saucesList<?= $product['id'] ?>').empty();
-                                                                        }
-                                                                    });
-                                                                });
-                                                            </script>
-                                                        <?php else: ?>
-                                                            <?php if (!empty($product['extras'])): ?>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Extras</label>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($product['extras'])): ?>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Extras</label>
+                                                                <div>
                                                                     <?php foreach ($product['extras'] as $extra): ?>
                                                                         <div class="form-check">
-                                                                            <input class="form-check-input" type="checkbox" name="extras[]" value="<?= htmlspecialchars($extra['id']) ?>">
-                                                                            <label class="form-check-label"><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</label>
+                                                                            <input class="form-check-input" type="checkbox" id="extra<?= $product['id'] ?>_<?= htmlspecialchars($extra['name']) ?>" name="extras[]" value="<?= htmlspecialchars($extra['name']) ?>">
+                                                                            <label class="form-check-label" for="extra<?= $product['id'] ?>_<?= htmlspecialchars($extra['name']) ?>">
+                                                                                <?= htmlspecialchars($extra['name']) ?> (+<?= number_format((float)($extra['price'] ?? 0.0), 2) ?>€)
+                                                                            </label>
                                                                         </div>
                                                                     <?php endforeach; ?>
                                                                 </div>
-                                                            <?php endif; ?>
-                                                            <?php if (!empty($product['sauces'])): ?>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Sauces</label>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($product['sauces'])): ?>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Sauces</label>
+                                                                <div>
                                                                     <?php foreach ($product['sauces'] as $sauce): ?>
                                                                         <div class="form-check">
-                                                                            <input class="form-check-input" type="checkbox" name="sauces[]" value="<?= htmlspecialchars($sauce['id']) ?>">
-                                                                            <label class="form-check-label"><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</label>
+                                                                            <input class="form-check-input" type="checkbox" id="sauce<?= $product['id'] ?>_<?= htmlspecialchars($sauce['name']) ?>" name="sauces[]" value="<?= htmlspecialchars($sauce['name']) ?>">
+                                                                            <label class="form-check-label" for="sauce<?= $product['id'] ?>_<?= htmlspecialchars($sauce['name']) ?>">
+                                                                                <?= htmlspecialchars($sauce['name']) ?> (+<?= number_format((float)($sauce['price'] ?? 0.0), 2) ?>€)
+                                                                            </label>
                                                                         </div>
                                                                     <?php endforeach; ?>
                                                                 </div>
-                                                            <?php endif; ?>
+                                                            </div>
                                                         <?php endif; ?>
-                                                        <?php if ($drinks): ?>
+                                                        <?php if (!empty($product['dresses'])): ?>
+                                                            <div class="mb-3">
+                                                                <label class="form-label">Dresses</label>
+                                                                <div>
+                                                                    <?php foreach ($product['dresses'] as $dress): ?>
+                                                                        <div class="form-check">
+                                                                            <input class="form-check-input" type="checkbox" id="dress<?= $product['id'] ?>_<?= htmlspecialchars($dress['name']) ?>" name="dresses[]" value="<?= htmlspecialchars($dress['name']) ?>">
+                                                                            <label class="form-check-label" for="dress<?= $product['id'] ?>_<?= htmlspecialchars($dress['name']) ?>">
+                                                                                <?= htmlspecialchars($dress['name']) ?> (+<?= number_format((float)($dress['price'] ?? 0.0), 2) ?>€)
+                                                                            </label>
+                                                                        </div>
+                                                                    <?php endforeach; ?>
+                                                                </div>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($drinks)): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Drinks</label>
                                                                 <select class="form-select" name="drink">
                                                                     <option value="">Choose a drink</option>
                                                                     <?php foreach ($drinks as $drink): ?>
-                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>"><?= htmlspecialchars($drink['name']) ?> (+<?= number_format($drink['price'], 2) ?>€)</option>
+                                                                        <option value="<?= htmlspecialchars($drink['id']) ?>">
+                                                                            <?= htmlspecialchars($drink['name']) ?> (+<?= number_format((float)($drink['price'] ?? 0.0), 2) ?>€)
+                                                                        </option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
@@ -1142,7 +1118,8 @@ try {
                     <?php endif; ?>
                     <p class="card-text">
                         <strong>Working hours:</strong>
-                        <?= !empty($notification['message']) ? htmlspecialchars($notification['message']) : "10:00 - 21:45" ?><br>
+                        <?= !empty($notification['message']) ? htmlspecialchars($notification['message']) : "10:00 - 21:45" ?>
+                        <br>
                         <strong>Minimum order:</strong> 5.00€
                     </p>
                     <?php if (!empty($_SESSION['delivery_address'])): ?>
@@ -1160,19 +1137,22 @@ try {
                                 <?php foreach ($_SESSION['cart'] as $index => $item): ?>
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6><?= htmlspecialchars($item['name']) ?> (<?= htmlspecialchars($item['size'] ?? 'N/A') ?>) x<?= htmlspecialchars($item['quantity']) ?></h6>
+                                            <h6><?= htmlspecialchars($item['name']) ?><?= isset($item['size']) ? " ({$item['size']})" : '' ?> x<?= htmlspecialchars($item['quantity']) ?></h6>
                                             <?php if (!empty($item['extras'])): ?>
                                                 <ul>
                                                     <?php foreach ($item['extras'] as $extra): ?>
-                                                        <li><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</li>
+                                                        <li><?= htmlspecialchars($extra['name'] ?? '') ?> (+<?= number_format((float)($extra['price'] ?? 0.0), 2) ?>€)</li>
                                                     <?php endforeach; ?>
                                                 </ul>
                                             <?php endif; ?>
                                             <?php if (!empty($item['drink'])): ?>
-                                                <p>Drink: <?= htmlspecialchars($item['drink']['name']) ?> (+<?= number_format($item['drink']['price'], 2) ?>€)</p>
+                                                <p>Drink: <?= htmlspecialchars($item['drink']['name'] ?? '') ?> (+<?= number_format((float)($item['drink']['price'] ?? 0.0), 2) ?>€)</p>
                                             <?php endif; ?>
                                             <?php if (!empty($item['sauces'])): ?>
-                                                <p>Sauces: <?= htmlspecialchars(implode(', ', array_column($item['sauces'], 'name'))) ?> (+<?= number_format(array_reduce($item['sauces'], fn($carry, $sauce) => $carry + $sauce['price'], 0.00), 2) ?>€)</p>
+                                                <p>Sauces: <?= htmlspecialchars(implode(', ', array_column($item['sauces'], 'name'))) ?> (+<?= number_format(array_reduce($item['sauces'], fn($carry, $s) => $carry+(float)($s['price']??0.0),0.0), 2) ?>€)</p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($item['dresses'])): ?>
+                                                <p>Dresses: <?= htmlspecialchars(implode(', ', array_column($item['dresses'], 'name'))) ?> (+<?= number_format(array_reduce($item['dresses'], fn($carry, $d) => $carry+(float)($d['price']??0.0),0.0), 2) ?>€)</p>
                                             <?php endif; ?>
                                             <?php if (!empty($item['special_instructions'])): ?>
                                                 <p><em>Instructions:</em> <?= htmlspecialchars($item['special_instructions']) ?></p>
@@ -1181,7 +1161,9 @@ try {
                                         <div>
                                             <strong><?= number_format($item['total_price'], 2) ?>€</strong><br>
                                             <a href="index.php?remove=<?= $index ?>" class="btn btn-sm btn-danger mt-2"><i class="bi bi-trash"></i> Remove</a>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>"><i class="bi bi-pencil-square"></i> Edit</button>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $index ?>">
+                                                <i class="bi bi-pencil-square"></i> Edit
+                                            </button>
                                         </div>
                                     </li>
                                 <?php endforeach; ?>
@@ -1208,8 +1190,11 @@ try {
         <div class="container text-md-left">
             <div class="row text-md-left">
                 <div class="col-md-3 col-lg-3 col-xl-3 mx-auto mt-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark"><img src="https://images.unsplash.com/photo-1550547660-d9450f859349?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&h=40&w=40" alt="Restaurant Logo" width="40" height="40" class="me-2">Restaurant</h5>
-                    <p>Experience the finest dining with us. We offer a variety of dishes crafted from the freshest ingredients to delight your palate.</p>
+                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">
+                        <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&h=40&w=40" alt="Restaurant Logo" width="40" height="40" class="me-2">
+                        Restaurant
+                    </h5>
+                    <p>Experience the finest dining with us. We offer a variety of dishes crafted from the freshest ingredients.</p>
                 </div>
                 <div class="col-md-2 col-lg-2 col-xl-2 mx-auto mt-3">
                     <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Quick Links</h5>
@@ -1267,22 +1252,18 @@ try {
                 const $form = $(this);
                 const $submitBtn = $form.find('button[type="submit"]').prop('disabled', true);
                 $.post('submit_reservation.php', $form.serialize(), (response) => {
-                        $('#reservationModal').modal('hide');
-                        $form[0].reset();
-                        Swal.fire({
-                            icon: response.status === 'success' ? 'success' : 'error',
-                            title: response.status === 'success' ? 'Rezervim i Suksesshëm' : 'Gabim',
-                            text: response.message,
-                            timer: response.status === 'success' ? 3000 : null,
-                            showConfirmButton: response.status !== 'success'
-                        });
-                    }, 'json')
-                    .fail(() => Swal.fire({
-                        icon: 'error',
-                        title: 'Gabim',
-                        text: 'Ka ndodhur një gabim gjatë dërgimit të rezervimit. Ju lutem provoni më vonë.'
-                    }))
-                    .always(() => $submitBtn.prop('disabled', false));
+                    $('#reservationModal').modal('hide');
+                    $form[0].reset();
+                    Swal.fire({
+                        icon: response.status === 'success' ? 'success' : 'error',
+                        title: response.status === 'success' ? 'Rezervim i Suksesshëm' : 'Gabim',
+                        text: response.message,
+                        timer: response.status === 'success' ? 3000 : null,
+                        showConfirmButton: response.status !== 'success'
+                    });
+                }, 'json')
+                .fail(() => Swal.fire({icon:'error', title:'Gabim', text:'Ka ndodhur një gabim. Provoni më vonë.'}))
+                .always(() => $submitBtn.prop('disabled', false));
             });
             <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
                 setTimeout(() => {
@@ -1297,81 +1278,37 @@ try {
                         $('#storeClosedModalLabel').text(data.notification.title);
                         $('#storeClosedMessage').text(data.notification.message);
                         $('#storeClosedEndTime').text(`We will reopen on ${new Date(data.notification.end_datetime).toLocaleString()}.`);
-                        new bootstrap.Modal('#storeClosedModal', {
-                            backdrop: 'static',
-                            keyboard: false
-                        }).show();
-                        $controls.prop('disabled', true).addClass('disabled').attr('title', 'Store is currently closed');
+                        new bootstrap.Modal('#storeClosedModal',{backdrop:'static',keyboard:false}).show();
+                        $controls.prop('disabled', true).addClass('disabled').attr('title','Store is currently closed');
                     } else {
                         const modal = bootstrap.Modal.getInstance($('#storeClosedModal')[0]);
-                        modal?.hide();
-                        $controls.prop('disabled', false).removeClass('disabled').attr('title', '');
+                        if (modal) modal.hide();
+                        $controls.prop('disabled', false).removeClass('disabled').attr('title','');
                     }
                 }).fail(err => console.error('Error fetching store status:', err));
             };
             updateStoreStatus();
             setInterval(updateStoreStatus, 60000);
             const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym');
-            const card = stripe.elements().create('card');
-            card.mount('#card-element');
+            const card = stripe.elements().create('card').mount('#card-element');
             $('input[name="payment_method"]').change(() => $('#stripe-payment-section').toggle($('#paymentStripe').is(':checked')));
             $('#checkoutForm').submit(async function(e) {
                 if ($('#paymentStripe').is(':checked')) {
                     e.preventDefault();
                     const $submitBtn = $(this).find('button[type="submit"]').prop('disabled', true);
                     try {
-                        const {
-                            paymentMethod,
-                            error
-                        } = await stripe.createPaymentMethod({
-                            type: 'card',
-                            card: card,
-                            billing_details: {
-                                name: $('#customer_name').val(),
-                                email: $('#customer_email').val(),
-                                phone: $('#customer_phone').val(),
-                                address: {
-                                    line1: $('#delivery_address').val()
-                                }
-                            }
-                        });
-                        if (error) {
-                            $('#card-errors').text(error.message);
-                            $submitBtn.prop('disabled', false);
-                            return;
-                        }
-                        $(this).append($('<input>', {
-                            type: 'hidden',
-                            name: 'stripe_payment_method',
-                            value: paymentMethod.id
-                        }));
+                        const {paymentMethod, error} = await stripe.createPaymentMethod({type:'card',card:card,billing_details:{name:$('#customer_name').val(),email:$('#customer_email').val(),phone:$('#customer_phone').val(),address:{line1:$('#delivery_address').val()}}});
+                        if (error) { $('#card-errors').text(error.message); $submitBtn.prop('disabled', false); return; }
+                        $(this).append($('<input>', {type:'hidden', name:'stripe_payment_method',value:paymentMethod.id}));
                         const formData = new URLSearchParams(new FormData(this)).toString();
-                        const response = await fetch('index.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded'
-                            },
-                            body: formData
-                        }).then(res => res.json());
+                        const response = await fetch('index.php',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:formData}).then(res=>res.json());
                         if (response.requires_action) {
-                            const {
-                                error: confirmError,
-                                paymentIntent
-                            } = await stripe.confirmCardPayment(response.payment_intent_client_secret);
-                            if (confirmError) {
-                                $('#card-errors').text(confirmError.message);
-                            } else if (paymentIntent.status === 'succeeded') {
-                                window.location.href = response.redirect_url;
-                            }
-                        } else if (response.success) {
-                            window.location.href = response.redirect_url;
-                        }
+                            const {error:confirmError,paymentIntent} = await stripe.confirmCardPayment(response.payment_intent_client_secret);
+                            if (confirmError) { $('#card-errors').text(confirmError.message); }
+                            else if (paymentIntent.status === 'succeeded') { window.location.href = response.redirect_url; }
+                        } else if (response.success) { window.location.href = response.redirect_url; }
                     } catch {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: 'There was an issue processing your payment. Please try again.'
-                        });
+                        Swal.fire({icon:'error', title:'Error', text:'Issue processing your payment. Try again.'});
                     } finally {
                         $(this).find('button[type="submit"]').prop('disabled', false);
                     }

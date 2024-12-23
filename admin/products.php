@@ -10,7 +10,6 @@ define('UPLOAD_DIR', 'uploads/');
 define('MAX_FILE_SIZE', 2 * 1024 * 1024);
 define('ALLOWED_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif']);
 define('ALLOWED_MIME_TYPES', ['image/jpeg', 'image/png', 'image/gif']);
-define('COMPLETED_STATUS_ID', 3);
 
 function fetchAll($pdo, $query, $params = [])
 {
@@ -22,681 +21,900 @@ function fetchAll($pdo, $query, $params = [])
         return [];
     }
 }
-function sanitizeInput($data)
+
+function s($d)
 {
-    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars(trim((string)$d), ENT_QUOTES, 'UTF-8');
 }
-function handleImageUpload($file, $is_edit = false, $current_image = '')
+
+function handleImageUpload($file, $edit = false, $curr = '')
 {
-    $response = ['success' => false, 'url' => '', 'error' => ''];
-    if ($file['error'] !== UPLOAD_ERR_OK) return ['error' => 'Error uploading image.'];
-    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($file_ext, ALLOWED_EXTENSIONS)) return ['error' => 'Invalid image format. Allowed: ' . implode(', ', ALLOWED_EXTENSIONS) . '.'];
-    if ($file['size'] > MAX_FILE_SIZE) return ['error' => 'Image exceeds 2MB.'];
-    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0755, true)) return ['error' => 'Failed to create upload directory.'];
-    $new_file = uniqid('product_', true) . '.' . $file_ext;
-    $dest = UPLOAD_DIR . $new_file;
-    if (move_uploaded_file($file['tmp_name'], $dest)) {
-        $response = ['success' => true, 'url' => $dest];
-        if ($is_edit && strpos($current_image, UPLOAD_DIR) === 0 && file_exists($current_image)) unlink($current_image);
-    } else {
-        $response['error'] = 'Failed to move uploaded file.';
+    $r = ['success' => false, 'url' => '', 'error' => ''];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $r['error'] = 'Error uploading image.';
+        return $r;
     }
-    return $response;
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ALLOWED_EXTENSIONS)) {
+        $r['error'] = 'Invalid image format.';
+        return $r;
+    }
+    if ($file['size'] > MAX_FILE_SIZE) {
+        $r['error'] = 'Image exceeds 2MB.';
+        return $r;
+    }
+    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0755, true)) {
+        $r['error'] = 'Failed to create upload dir.';
+        return $r;
+    }
+    $new_name = uniqid('product_', true) . '.' . $ext;
+    $dest = UPLOAD_DIR . $new_name;
+    if (move_uploaded_file($file['tmp_name'], $dest)) {
+        $r['success'] = true;
+        $r['url'] = $dest;
+        if ($edit && strpos($curr, UPLOAD_DIR) === 0 && file_exists($curr)) {
+            unlink($curr);
+        }
+    } else {
+        $r['error'] = 'Failed to move file.';
+    }
+    return $r;
 }
+
 function validateImageUrl($url)
 {
-    $url = filter_var(trim($url), FILTER_SANITIZE_URL);
-    if (!filter_var($url, FILTER_VALIDATE_URL)) return ['valid' => false, 'error' => 'Invalid URL.'];
-    $headers = @get_headers($url, 1);
-    if ($headers && isset($headers['Content-Type'])) {
-        $ct = is_array($headers['Content-Type']) ? end($headers['Content-Type']) : $headers['Content-Type'];
-        if (in_array(strtolower($ct), ALLOWED_MIME_TYPES)) return ['valid' => true, 'url' => $url];
-        return ['valid' => false, 'error' => 'Unsupported image MIME type.'];
+    $url = filter_var(trim((string)$url), FILTER_SANITIZE_URL);
+    if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        return ['valid' => false, 'error' => 'Invalid URL.'];
     }
-    return ['valid' => false, 'error' => 'Unable to verify image URL.'];
-}
-function getTop10Products($pdo, $status_id = COMPLETED_STATUS_ID)
-{
-    $q = 'SELECT p.*,SUM(oi.quantity) AS total_sold FROM products p JOIN order_items oi ON p.id=oi.product_id JOIN orders o ON oi.order_id=o.id WHERE o.status_id=? GROUP BY p.id ORDER BY total_sold DESC LIMIT 10';
-    return fetchAll($pdo, $q, [$status_id]);
+    $h = @get_headers($url, 1);
+    if ($h && isset($h['Content-Type'])) {
+        $ct = is_array($h['Content-Type']) ? end($h['Content-Type']) : $h['Content-Type'];
+        return in_array(strtolower($ct), ALLOWED_MIME_TYPES) ? ['valid' => true, 'url' => $url] : ['valid' => false, 'error' => 'Unsupported image type.'];
+    }
+    return ['valid' => false, 'error' => 'Cannot verify image URL.'];
 }
 
-$categories = fetchAll($pdo, 'SELECT * FROM categories ORDER BY name ASC');
-$extras = fetchAll($pdo, 'SELECT * FROM extras ORDER BY name ASC');
-$sauces = fetchAll($pdo, 'SELECT * FROM sauces ORDER BY name ASC');
-$sizes = fetchAll($pdo, 'SELECT * FROM sizes ORDER BY name ASC');
+$db_categories = fetchAll($pdo, "SELECT id,name FROM categories");
 $action = $_GET['action'] ?? 'view';
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$id = (int)($_GET['id'] ?? 0);
 $message = '';
+$editing = ($action === 'edit');
+$adding = ($action === 'add');
+$viewing = ($action === 'view');
+$deleting = ($action === 'delete');
 
-switch ($action) {
-    case 'add':
-    case 'edit':
-        $is_edit = ($action === 'edit');
-        $product = [];
-        $selected_extras = $selected_sauces = $selected_mixes = $selected_sizes = [];
-        if ($is_edit) {
-            $product = fetchAll($pdo, 'SELECT * FROM products WHERE id=?', [$id])[0] ?? [];
-            if (!$product) {
-                $message = '<div class="alert alert-danger">Product not found.</div>';
-                break;
+$product = $editing ? fetchAll($pdo, 'SELECT * FROM products WHERE id=?', [$id]) : [];
+$product = $editing && !empty($product) ? $product[0] : [];
+
+if ($adding || $editing) {
+    $post_image_source = $_POST['image_source'] ?? '';
+    $image_source = $editing ? $post_image_source : ($post_image_source ?: 'upload');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $product_code = s($_POST['product_code'] ?? '');
+        $name = s($_POST['name'] ?? '');
+        $category_id = (int)($_POST['category_id'] ?? 0);
+        $description = s($_POST['description'] ?? '');
+        $allergies = s($_POST['allergies'] ?? '');
+        $is_new = isset($_POST['is_new']) ? 1 : 0;
+        $is_offer = isset($_POST['is_offer']) ? 1 : 0;
+        $is_active = isset($_POST['is_active']) ? 1 : 0;
+        $has_extras_sauces = isset($_POST['has_extras_sauces']) ? 1 : 0;
+        $has_sizes = isset($_POST['has_sizes']) ? 1 : 0;
+        $has_dresses = isset($_POST['has_dresses']) ? 1 : 0;
+
+        $message = (empty($product_code) || empty($name) || $category_id === 0) ? '<div class="alert alert-danger">Code, name, and category are required.</div>' : '';
+
+        if (!$message) {
+            // Check unique product code
+            $sql_check = 'SELECT COUNT(*) FROM products WHERE product_code=?' . ($editing ? ' AND id!=?' : '');
+            $params_check = $editing ? [$product_code, $id] : [$product_code];
+            $stmt_check = $pdo->prepare($sql_check);
+            $stmt_check->execute($params_check);
+            if ($stmt_check->fetchColumn() > 0) {
+                $message = '<div class="alert alert-danger">Product code already exists.</div>';
             }
-            $selected_extras = array_column(fetchAll($pdo, 'SELECT extra_id FROM product_extras WHERE product_id=?', [$id]), 'extra_id');
-            $selected_sauces = array_column(fetchAll($pdo, 'SELECT sauce_id FROM product_sauces WHERE product_id=?', [$id]), 'sauce_id');
-            $selected_mixes = array_column(fetchAll($pdo, 'SELECT mixed_product_id FROM product_mixes WHERE main_product_id=?', [$id]), 'mixed_product_id');
-            $selected_sizes = array_column(fetchAll($pdo, 'SELECT size_id FROM product_sizes WHERE product_id=?', [$id]), 'size_id');
         }
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $product_code = sanitizeInput($_POST['product_code'] ?? '');
-            $name = sanitizeInput($_POST['name'] ?? '');
-            $price = filter_var($_POST['price'] ?? 0, FILTER_VALIDATE_FLOAT);
-            $description = sanitizeInput($_POST['description'] ?? '');
-            $allergies = sanitizeInput($_POST['allergies'] ?? '');
-            $category_id = filter_var($_POST['category_id'] ?? 0, FILTER_VALIDATE_INT);
-            $is_new = isset($_POST['is_new']) ? 1 : 0;
-            $is_offer = isset($_POST['is_offer']) ? 1 : 0;
-            $is_active = isset($_POST['is_active']) ? 1 : 0;
-            $image_source = $_POST['image_source'] ?? 'upload';
-            $selected_extras = array_map('intval', $_POST['extras'] ?? []);
-            $selected_sauces = array_map('intval', $_POST['sauces'] ?? []);
-            $selected_mixes = array_map('intval', $_POST['mixes'] ?? []);
-            $selected_sizes = array_map('intval', $_POST['sizes'] ?? []);
+
+        if (!$message) {
+            // Handle image
             $image_url = '';
-            if (empty($product_code) || empty($name) || $price <= 0 || $category_id === 0) {
-                $message = '<div class="alert alert-danger">Code, name, price, category required.</div>';
-            } else {
-                $sql_check = 'SELECT COUNT(*) FROM products WHERE product_code=?' . ($is_edit ? ' AND id!=?' : '');
-                $params_check = $is_edit ? [$product_code, $id] : [$product_code];
-                $stmt_check = $pdo->prepare($sql_check);
-                $stmt_check->execute($params_check);
-                if ($stmt_check->fetchColumn() > 0) {
-                    $message = '<div class="alert alert-danger">Product code exists.</div>';
+            if ($image_source === 'upload') {
+                if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $upload = handleImageUpload($_FILES['image_file'], $editing, $product['image_url'] ?? '');
+                    if (!$upload['success']) $message = '<div class="alert alert-danger">' . $upload['error'] . '</div>';
+                    $image_url = $upload['success'] ? $upload['url'] : '';
+                } elseif ($editing) {
+                    $image_url = $product['image_url'];
                 } else {
-                    if ($image_source === 'upload') {
-                        if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                            $upload = handleImageUpload($_FILES['image_file'], $is_edit, $product['image_url'] ?? '');
-                            if ($upload['success']) $image_url = $upload['url'];
-                            else {
-                                $message = '<div class="alert alert-danger">' . $upload['error'] . '</div>';
-                            }
-                        } elseif ($is_edit) {
-                            $image_url = $product['image_url'];
-                        } else {
-                            $message = '<div class="alert alert-danger">Upload an image.</div>';
-                        }
-                    } elseif ($image_source === 'url') {
-                        $validate = validateImageUrl($_POST['image_url'] ?? '');
-                        if ($validate['valid']) $image_url = $validate['url'];
-                        elseif ($is_edit) $image_url = $product['image_url'];
-                        else {
-                            $message = '<div class="alert alert-danger">' . $validate['error'] . '</div>';
+                    $message = '<div class="alert alert-danger">Please upload an image.</div>';
+                }
+            } else {
+                $validate = validateImageUrl($_POST['image_url'] ?? '');
+                if ($validate['valid']) {
+                    $image_url = $validate['url'];
+                } elseif ($editing) {
+                    $image_url = $product['image_url'];
+                } else {
+                    $message = '<div class="alert alert-danger">' . $validate['error'] . '</div>';
+                }
+            }
+
+            if (!$message) {
+                $properties = [];
+                // Base price if no sizes
+                if (!$has_sizes) {
+                    $base_price = (float)($_POST['base_price'] ?? 0);
+                    $properties['base_price'] = $base_price;
+                }
+
+                if ($has_extras_sauces) {
+                    $properties['extras'] = [];
+                    if (!empty($_POST['global_extras'])) {
+                        foreach ($_POST['global_extras'] as $ge) {
+                            $en = s($ge['name'] ?? '');
+                            $ep = (float)($ge['price'] ?? 0);
+                            if ($en !== '') $properties['extras'][] = ['name' => $en, 'price' => $ep];
                         }
                     }
-                    if (($image_source === 'upload' && ($is_edit || (isset($upload) && $upload['success']))) || ($image_source === 'url' && ($is_edit || (isset($validate) && $validate['valid'])))) {
-                        try {
-                            $pdo->beginTransaction();
-                            if ($is_edit) {
-                                $sql = 'UPDATE products SET product_code=?,category_id=?,name=?,price=?,description=?,allergies=?,image_url=?,is_new=?,is_offer=?,is_active=? WHERE id=?';
-                                $params = [$product_code, $category_id, $name, $price, $description, $allergies, $image_url, $is_new, $is_offer, $is_active, $id];
-                            } else {
-                                $sql = 'INSERT INTO products(product_code,category_id,name,price,description,allergies,image_url,is_new,is_offer,is_active) VALUES(?,?,?,?,?,?,?,?,?,?)';
-                                $params = [$product_code, $category_id, $name, $price, $description, $allergies, $image_url, $is_new, $is_offer, $is_active];
-                            }
-                            $stmt = $pdo->prepare($sql);
-                            $stmt->execute($params);
-                            $product_id = $is_edit ? $id : $pdo->lastInsertId();
-                            $pdo->prepare('DELETE FROM product_extras WHERE product_id=?')->execute([$product_id]);
-                            if (!empty($selected_extras)) {
-                                $stmt_extras = $pdo->prepare('INSERT INTO product_extras(product_id,extra_id) VALUES(?,?)');
-                                foreach ($selected_extras as $extra_id) $stmt_extras->execute([$product_id, $extra_id]);
-                            }
-                            $pdo->prepare('DELETE FROM product_sauces WHERE product_id=?')->execute([$product_id]);
-                            if (!empty($selected_sauces)) {
-                                $stmt_sauces = $pdo->prepare('INSERT INTO product_sauces(product_id,sauce_id) VALUES(?,?)');
-                                foreach ($selected_sauces as $sauce_id) $stmt_sauces->execute([$product_id, $sauce_id]);
-                            }
-                            $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id=?')->execute([$product_id]);
-                            if (!empty($selected_mixes)) {
-                                $stmt_mixes = $pdo->prepare('INSERT INTO product_mixes(main_product_id,mixed_product_id) VALUES(?,?)');
-                                foreach ($selected_mixes as $mixed_product_id) $stmt_mixes->execute([$product_id, $mixed_product_id]);
-                            }
-                            $pdo->prepare('DELETE FROM product_sizes WHERE product_id=?')->execute([$product_id]);
-                            if (!empty($selected_sizes)) {
-                                $stmt_sizes = $pdo->prepare('INSERT INTO product_sizes(product_id,size_id) VALUES(?,?)');
-                                foreach ($selected_sizes as $size_id) $stmt_sizes->execute([$product_id, $size_id]);
-                            }
-                            $pdo->commit();
-                            $_SESSION['message'] = '<div class="alert alert-success">Product ' . ($is_edit ? 'updated' : 'added') . ' successfully.</div>';
-                            header('Location: products.php');
-                            exit();
-                        } catch (PDOException $e) {
-                            $pdo->rollBack();
-                            $message = '<div class="alert alert-danger">DB error: ' . sanitizeInput($e->getMessage()) . '</div>';
+
+                    $properties['sauces'] = [];
+                    if (!empty($_POST['global_sauces'])) {
+                        foreach ($_POST['global_sauces'] as $gs) {
+                            $sn = s($gs['name'] ?? '');
+                            $sp = (float)($gs['price'] ?? 0);
+                            if ($sn !== '') $properties['sauces'][] = ['name' => $sn, 'price' => $sp];
                         }
                     }
                 }
+
+                if ($has_sizes) {
+                    $properties['sizes'] = [];
+                    if (!empty($_POST['sizes_block'])) {
+                        foreach ($_POST['sizes_block'] as $block) {
+                            $size = s($block['size'] ?? '');
+                            $price = (float)($block['price'] ?? 0);
+                            $exs = [];
+                            $sas = [];
+
+                            if ($has_extras_sauces && !empty($block['extras_selected'])) {
+                                foreach ($block['extras_selected'] as $ex_i) {
+                                    $ex_i = (int)$ex_i;
+                                    $gex = $properties['extras'][$ex_i] ?? null;
+                                    $ex_pr = (float)($block['extras_prices'][$ex_i] ?? 0);
+                                    if ($gex) $exs[] = ['name' => $gex['name'], 'price' => $ex_pr];
+                                }
+                            }
+
+                            if ($has_extras_sauces && !empty($block['sauces_selected'])) {
+                                foreach ($block['sauces_selected'] as $sa_i) {
+                                    $sa_i = (int)$sa_i;
+                                    $gsa = $properties['sauces'][$sa_i] ?? null;
+                                    $sa_pr = (float)($block['sauces_prices'][$sa_i] ?? 0);
+                                    if ($gsa) $sas[] = ['name' => $gsa['name'], 'price' => $sa_pr];
+                                }
+                            }
+
+                            if ($size) $properties['sizes'][] = ['size' => $size, 'price' => $price, 'extras' => $exs, 'sauces' => $sas];
+                        }
+                    }
+                }
+
+                if ($has_dresses) {
+                    $properties['dresses'] = [];
+                    if (!empty($_POST['dresses'])) {
+                        foreach ($_POST['dresses'] as $d) {
+                            $dn = s($d['dress'] ?? '');
+                            $dp = (float)($d['price'] ?? 0);
+                            if ($dn !== '') $properties['dresses'][] = ['name' => $dn, 'price' => $dp];
+                        }
+                    }
+                }
+
+                $props_json = json_encode($properties);
+                try {
+                    if ($editing) {
+                        $sql = 'UPDATE products SET product_code=?,category_id=?,name=?,description=?,allergies=?,image_url=?,is_new=?,is_offer=?,is_active=?,properties=? WHERE id=?';
+                        $params = [$product_code, $category_id, $name, $description, $allergies, $image_url, $is_new, $is_offer, $is_active, $props_json, $id];
+                    } else {
+                        $sql = 'INSERT INTO products (product_code,category_id,name,description,allergies,image_url,is_new,is_offer,is_active,properties) VALUES (?,?,?,?,?,?,?,?,?,?)';
+                        $params = [$product_code, $category_id, $name, $description, $allergies, $image_url, $is_new, $is_offer, $is_active, $props_json];
+                    }
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute($params);
+                    $_SESSION['message'] = '<div class="alert alert-success">' . ($editing ? 'Updated' : 'Added') . ' product successfully.</div>';
+                    header('Location: products.php');
+                    exit();
+                } catch (PDOException $e) {
+                    $message = '<div class="alert alert-danger">DB error: ' . s($e->getMessage()) . '</div>';
+                }
             }
         }
-        $mixes = fetchAll($pdo, 'SELECT * FROM products WHERE id!=? ORDER BY name ASC', [$id ?? 0]);
+    }
+}
+
+// Pre-fill form fields
+$pc = $editing ? $product['product_code'] : ($_POST['product_code'] ?? '');
+$pn = $editing ? $product['name'] : ($_POST['name'] ?? '');
+$category_id = $editing ? $product['category_id'] : ($_POST['category_id'] ?? 0);
+$desc = $editing ? $product['description'] : ($_POST['description'] ?? '');
+$allg = $editing ? $product['allergies'] : ($_POST['allergies'] ?? '');
+$i_new = $editing ? $product['is_new'] : (isset($_POST['is_new']) ? 1 : 0);
+$i_off = $editing ? $product['is_offer'] : (isset($_POST['is_offer']) ? 1 : 0);
+$i_act = $editing ? $product['is_active'] : (isset($_POST['is_active']) ? 1 : 0);
+$img_src = $editing ? ($product['image_url'] ?? '') : ($_POST['image_url'] ?? '');
+if ($img_src === null) $img_src = '';
+$props = $editing && $product['properties'] ? json_decode($product['properties'], true) : [];
+$has_extras_sauces = (!empty($props['extras']) || !empty($props['sauces']) || isset($_POST['has_extras_sauces']));
+$has_sizes = (!empty($props['sizes']) || isset($_POST['has_sizes']));
+$has_dresses = (!empty($props['dresses']) || isset($_POST['has_dresses']));
+$base_price = isset($props['base_price']) ? $props['base_price'] : (float)($_POST['base_price'] ?? 0);
+$image_source = $editing ? (isset($_POST['image_source']) ? $_POST['image_source'] : ((!empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === false) ? 'url' : 'upload')) : (isset($_POST['image_source']) ? $_POST['image_source'] : 'upload');
+$img_u = ($image_source === 'upload') ? 'block' : 'none';
+$img_ul = ($image_source === 'url') ? 'block' : 'none';
 ?>
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h3 class="mb-0"><?= $action === 'add' ? 'Add New Product' : 'Edit Product' ?></h3>
+<div class="container mt-5">
+    <?php
+    if ($adding) echo '<h2>Add Product</h2>';
+    elseif ($editing) echo '<h2>Edit Product</h2>';
+    echo $message;
+
+    if ($adding || $editing) {
+    ?>
+        <form method="POST" enctype="multipart/form-data" action="products.php?action=<?= $editing ? 'edit&id=' . $id : 'add' ?>">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label>Product Code *</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-id-badge"></i></span>
+                        <input type="text" class="form-control" name="product_code" required value="<?= s($pc) ?>" placeholder="e.g., P1234">
+                    </div>
                 </div>
-                <div class="card-body">
-                    <?= $message ?>
-                    <form method="POST" action="products.php?action=<?= $action ?><?= $is_edit ? '&id=' . $id : '' ?>" enctype="multipart/form-data">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Product Code <span class="text-danger">*</span></label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-id-badge"></i></span>
-                                    <input type="text" class="form-control" name="product_code" required value="<?= sanitizeInput($is_edit ? $product['product_code'] : ($_POST['product_code'] ?? '')) ?>">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Product Name <span class="text-danger">*</span></label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-heading"></i></span>
-                                    <input type="text" class="form-control" name="name" required value="<?= sanitizeInput($is_edit ? $product['name'] : ($_POST['name'] ?? '')) ?>">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Category <span class="text-danger">*</span></label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-list"></i></span>
-                                    <select class="form-select" name="category_id" required>
-                                        <option value="">Select a category</option>
-                                        <?php foreach ($categories as $cat): ?>
-                                            <option value="<?= $cat['id'] ?>" <?= (($is_edit && $product['category_id'] == $cat['id']) || (isset($_POST['category_id']) && $_POST['category_id'] == $cat['id'])) ? 'selected' : '' ?>>
-                                                <?= sanitizeInput($cat['name']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Price ($) <span class="text-danger">*</span></label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
-                                    <input type="number" step="0.01" class="form-control" name="price" required value="<?= sanitizeInput($is_edit ? $product['price'] : ($_POST['price'] ?? '')) ?>">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mt-4">
-                            <h5>Image Source</h5>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="image_source" value="upload" <?= (($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0) || (!isset($_POST['image_source']) || $_POST['image_source'] === 'upload')) ? 'checked' : '' ?>>
-                                <label class="form-check-label"><i class="fas fa-upload me-1"></i> Upload Image</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="image_source" value="url" <?= (($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0) || (isset($_POST['image_source']) && $_POST['image_source'] === 'url')) ? 'checked' : '' ?>>
-                                <label class="form-check-label"><i class="fas fa-link me-1"></i> Image URL</label>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-3" id="image_upload_field" style="display: <?= (($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0) || (!isset($_POST['image_source']) || $_POST['image_source'] === 'upload')) ? 'block' : 'none' ?>;">
-                            <div class="col-md-6">
-                                <label class="form-label">Upload Image</label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-image"></i></span>
-                                    <input type="file" class="form-control" name="image_file" accept="image/*">
-                                </div>
-                                <?php if ($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0): ?>
-                                    <div class="mt-2"><img src="<?= sanitizeInput($product['image_url']) ?>" class="img-thumbnail" style="max-width:200px;"></div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-3" id="image_url_field" style="display: <?= (($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0) || (isset($_POST['image_source']) && $_POST['image_source'] === 'url')) ? 'block' : 'none' ?>;">
-                            <div class="col-md-6">
-                                <label class="form-label">Image URL</label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-link"></i></span>
-                                    <input type="url" class="form-control" name="image_url" placeholder="https://example.com/image.jpg" value="<?= sanitizeInput($is_edit ? $product['image_url'] : ($_POST['image_url'] ?? '')) ?>">
-                                </div>
-                                <?php if ($is_edit && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0): ?>
-                                    <div class="mt-2"><img src="<?= sanitizeInput($product['image_url']) ?>" class="img-thumbnail" style="max-width:200px;"></div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-4">
-                            <div class="col-md-6">
-                                <label class="form-label">Allergies</label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-exclamation-triangle"></i></span>
-                                    <input type="text" class="form-control" name="allergies" placeholder="e.g., Nuts, Milk" value="<?= sanitizeInput($is_edit ? $product['allergies'] : ($_POST['allergies'] ?? '')) ?>">
-                                </div>
-                                <div class="form-text">Separate allergies with commas.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Description</label>
-                                <div class="input-group"><span class="input-group-text"><i class="fas fa-align-left"></i></span>
-                                    <textarea class="form-control" name="description" rows="3"><?= sanitizeInput($is_edit ? $product['description'] : ($_POST['description'] ?? '')) ?></textarea>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-4">
-                            <div class="col-md-4">
-                                <label class="form-label">Extras</label>
-                                <select class="form-select" id="extras" name="extras[]" multiple>
-                                    <?php foreach ($extras as $extra): ?>
-                                        <option value="<?= $extra['id'] ?>" <?= ((isset($_POST['extras']) && in_array($extra['id'], $_POST['extras'])) || ($is_edit && in_array($extra['id'], $selected_extras))) ? 'selected' : '' ?>>
-                                            <?= sanitizeInput($extra['name']) ?> - $<?= number_format($extra['price'], 2) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Sauces</label>
-                                <select class="form-select" id="sauces" name="sauces[]" multiple>
-                                    <?php foreach ($sauces as $sauce): ?>
-                                        <option value="<?= $sauce['id'] ?>" <?= ((isset($_POST['sauces']) && in_array($sauce['id'], $_POST['sauces'])) || ($is_edit && in_array($sauce['id'], $selected_sauces))) ? 'selected' : '' ?>>
-                                            <?= sanitizeInput($sauce['name']) ?> - $<?= number_format($sauce['price'], 2) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Mix Options</label>
-                                <select class="form-select" id="mixes" name="mixes[]" multiple>
-                                    <?php foreach ($mixes as $mp): ?>
-                                        <option value="<?= $mp['id'] ?>" <?= ((isset($_POST['mixes']) && in_array($mp['id'], $_POST['mixes'])) || ($is_edit && in_array($mp['id'], $selected_mixes))) ? 'selected' : '' ?>>
-                                            <?= sanitizeInput($mp['name']) ?> - $<?= number_format($mp['price'], 2) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Sizes</label>
-                                <select class="form-select" id="sizes" name="sizes[]" multiple>
-                                    <?php foreach ($sizes as $size): ?>
-                                        <option value="<?= $size['id'] ?>" <?= ((isset($_POST['sizes']) && in_array($size['id'], $_POST['sizes'])) || ($is_edit && in_array($size['id'], $selected_sizes))) ? 'selected' : '' ?>>
-                                            <?= sanitizeInput($size['name']) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-4">
-                            <div class="col-md-4">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="is_new" name="is_new" <?= (($is_edit && $product['is_new']) || (isset($_POST['is_new']) && $_POST['is_new'])) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="is_new"><i class="fas fa-star text-warning me-1"></i>New</label>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="is_offer" name="is_offer" <?= (($is_edit && $product['is_offer']) || (isset($_POST['is_offer']) && $_POST['is_offer'])) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="is_offer"><i class="fas fa-tags text-success me-1"></i>On Offer</label>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="is_active" name="is_active" <?= (($is_edit && $product['is_active']) || (!$is_edit && !isset($_POST['is_active'])) || (isset($_POST['is_active']) && $_POST['is_active'])) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="is_active"><i class="fas fa-toggle-on text-primary me-1"></i>Active</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mt-4 d-flex justify-content-end">
-                            <button type="submit" class="btn btn-success me-2"><i class="fas fa-save me-1"></i><?= $action === 'add' ? 'Add' : 'Update' ?> Product</button>
-                            <a href="products.php" class="btn btn-secondary"><i class="fas fa-times me-1"></i> Cancel</a>
-                        </div>
-                    </form>
+                <div class="col-md-6">
+                    <label>Product Name *</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-heading"></i></span>
+                        <input type="text" class="form-control" name="name" required value="<?= s($pn) ?>" placeholder="e.g., Margherita Pizza">
+                    </div>
                 </div>
             </div>
-        </div>
-        <?php if (isset($_SESSION['message'])): ?>
-            <div class="container mt-3"><?= $_SESSION['message'] ?><?php unset($_SESSION['message']); ?></div>
-        <?php endif; ?>
-        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-        <script>
-            $(function() {
-                $('#extras,#sauces,#mixes,#sizes').select2({
-                    placeholder: "Select options",
-                    allowClear: true,
-                    width: '100%'
-                });
-                $('input[name="image_source"]').change(function() {
-                    if ($(this).val() === 'upload') {
-                        $('#image_upload_field').slideDown();
-                        $('#image_url_field').slideUp();
-                        $('#image_url').prop('required', false).prop('disabled', true);
-                        $('#image_file').prop('required', true).prop('disabled', false);
-                    } else {
-                        $('#image_upload_field').slideUp();
-                        $('#image_url_field').slideDown();
-                        $('#image_file').prop('required', false).prop('disabled', true);
-                        $('#image_url').prop('required', true).prop('disabled', false);
+            <div class="row g-3 mt-3">
+                <div class="col-md-4">
+                    <label>Category *</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-list"></i></span>
+                        <select class="form-select" name="category_id" required>
+                            <option value="">Select</option>
+                            <?php foreach ($db_categories as $c) {
+                                echo '<option value="' . $c['id'] . '"' . ($category_id == $c['id'] ? 'selected' : '') . '>' . s($c['name']) . '</option>';
+                            } ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="form-check form-check-inline mt-2">
+                        <input class="form-check-input" type="checkbox" name="has_extras_sauces" <?= $has_extras_sauces ? 'checked' : '' ?>>
+                        <label class="form-check-label">Has Extras & Sauces</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="has_sizes" <?= $has_sizes ? 'checked' : '' ?>>
+                        <label class="form-check-label">Has Sizes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="has_dresses" <?= $has_dresses ? 'checked' : '' ?>>
+                        <label class="form-check-label">Has Dresses</label>
+                    </div>
+
+                    <!-- Base Price if no sizes -->
+                    <div id="basePriceField" style="display:<?= $has_sizes ? 'none' : 'block' ?>;" class="mt-3">
+                        <label><strong>Base Price</strong></label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" class="form-control" name="base_price" value="<?= s($base_price) ?>" placeholder="e.g., 9.99">
+                        </div>
+                    </div>
+
+                    <!-- Extras & Sauces -->
+                    <div id="extrasSaucesFields" style="display:<?= $has_extras_sauces ? 'block' : 'none' ?>;" class="mt-3">
+                        <label>Global Extras & Sauces</label>
+                        <small class="text-muted d-block">Define global extras and sauces for all sizes or base product.</small>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <label><strong>Extras (name/price)</strong></label>
+                                <div id="globalExtrasContainer">
+                                    <?php
+                                    if ($editing && isset($props['extras'])) {
+                                        foreach ($props['extras'] as $ei => $ev) {
+                                            echo '<div class="row g-2 mb-2 global-extra">
+                                                <div class="col"><input type="text" class="form-control" name="global_extras[' . $ei . '][name]" value="' . s($ev['name']) . '" placeholder="Extra name"></div>
+                                                <div class="col"><input type="number" step="0.01" class="form-control" name="global_extras[' . $ei . '][price]" value="' . s($ev['price']) . '" placeholder="Price"></div>
+                                                <div class="col-auto"><button type="button" class="btn btn-danger remove-global-extra">&times;</button></div>
+                                            </div>';
+                                        }
+                                    }
+                                    ?>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-primary mt-2" id="addGlobalExtra">Add Extra</button>
+                            </div>
+                            <div class="col-md-6">
+                                <label><strong>Sauces (name/price)</strong></label>
+                                <div id="globalSaucesContainer">
+                                    <?php
+                                    if ($editing && isset($props['sauces'])) {
+                                        foreach ($props['sauces'] as $si => $sv) {
+                                            echo '<div class="row g-2 mb-2 global-sauce">
+                                                <div class="col"><input type="text" class="form-control" name="global_sauces[' . $si . '][name]" value="' . s($sv['name']) . '" placeholder="Sauce name"></div>
+                                                <div class="col"><input type="number" step="0.01" class="form-control" name="global_sauces[' . $si . '][price]" value="' . s($sv['price']) . '" placeholder="Price"></div>
+                                                <div class="col-auto"><button type="button" class="btn btn-danger remove-global-sauce">&times;</button></div>
+                                            </div>';
+                                        }
+                                    }
+                                    ?>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-primary mt-2" id="addGlobalSauce">Add Sauce</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sizes -->
+                    <div id="sizesFields" style="display:<?= $has_sizes ? 'block' : 'none' ?>;" class="mt-3">
+                        <label><strong>Sizes</strong></label>
+                        <small class="text-muted d-block">Define sizes and set their prices and extras/sauces.</small>
+                        <div id="sizeBlocks">
+                            <?php
+                            if ($editing && isset($props['sizes']) && is_array($props['sizes'])) {
+                                foreach ($props['sizes'] as $sz_id => $szb) {
+                                    $sz_name = s($szb['size']);
+                                    $sz_price = (float)$szb['price'];
+                                    echo '<div class="size-block border p-3 mb-3" data-block-index="' . $sz_id . '">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-4"><label>Size</label><input type="text" class="form-control" name="sizes_block[' . $sz_id . '][size]" value="' . $sz_name . '" required></div>
+                                            <div class="col-md-4"><label>Base Price($)</label><input type="number" step="0.01" class="form-control" name="sizes_block[' . $sz_id . '][price]" value="' . $sz_price . '" required></div>
+                                            <div class="col-md-4 text-end"><button type="button" class="btn btn-danger remove-size-block"><i class="fas fa-minus-circle"></i></button></div>
+                                        </div>
+                                        <div class="row g-2 mt-3">
+                                            <div class="col-md-6"><label>Extras</label><select class="form-select extras-select" name="sizes_block[' . $sz_id . '][extras_selected][]" multiple></select></div>
+                                            <div class="col-md-6"><label>Sauces</label><select class="form-select sauces-select" name="sizes_block[' . $sz_id . '][sauces_selected][]" multiple></select></div>
+                                        </div>
+                                        <div class="extras-prices mt-3"></div>
+                                        <div class="sauces-prices mt-3"></div>
+                                    </div>';
+                                }
+                            }
+                            ?>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm mt-2" id="addSizeBlock"><i class="fas fa-plus-circle"></i> Add Size</button>
+                    </div>
+
+                    <!-- Dresses -->
+                    <div id="dressesFields" class="mt-3" style="display:<?= $has_dresses ? 'block' : 'none' ?>;">
+                        <label><strong>Dresses</strong></label>
+                        <small class="text-muted d-block">Additional dress options.</small>
+                        <div id="dressBlocks">
+                            <?php
+                            if ($editing && isset($props['dresses']) && is_array($props['dresses'])) {
+                                foreach ($props['dresses'] as $db_i => $db) {
+                                    $dname = s($db['name']);
+                                    $dprice = (float)$db['price'];
+                                    echo '<div class="dress-block border p-3 mb-3">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-md-6"><label>Dress</label><input type="text" class="form-control" name="dresses[' . $db_i . '][dress]" required value="' . $dname . '"></div>
+                                            <div class="col-md-4"><label>Price($)</label><input type="number" step="0.01" class="form-control" name="dresses[' . $db_i . '][price]" required value="' . $dprice . '"></div>
+                                            <div class="col-md-2 text-end"><button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button></div>
+                                        </div>
+                                    </div>';
+                                }
+                            }
+                            ?>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm mt-2" id="addDressBlock"><i class="fas fa-plus-circle"></i> Add Dress</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Image source -->
+            <div class="row g-3 mt-3">
+                <div class="col-md-6">
+                    <label>Image Source *</label><br>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="image_source" value="upload" <?= $image_source === 'upload' ? 'checked' : '' ?>>
+                        <label class="form-check-label">Upload</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="image_source" value="url" <?= $image_source === 'url' ? 'checked' : '' ?>>
+                        <label class="form-check-label">URL</label>
+                    </div>
+                </div>
+            </div>
+            <!-- Upload image -->
+            <div class="row g-3 mt-3" id="image_upload_field" style="display:<?= $img_u ?>;">
+                <div class="col-md-6">
+                    <label>Upload Image</label>
+                    <div class="input-group"><span class="input-group-text"><i class="fas fa-upload"></i></span><input type="file" class="form-control" name="image_file" accept="image/*"></div>
+                    <div id="image_file_preview" class="mt-2"></div>
+                    <?php if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0) {
+                        echo '<div class="mt-2"><img src="' . s($product['image_url']) . '" style="max-width:200px;"></div>';
+                    } ?>
+                </div>
+            </div>
+            <!-- Image URL -->
+            <div class="row g-3 mt-3" id="image_url_field" style="display:<?= $img_ul ?>;">
+                <div class="col-md-6">
+                    <label>Image URL</label>
+                    <div class="input-group"><span class="input-group-text"><i class="fas fa-image"></i></span>
+                        <input type="url" class="form-control" name="image_url" placeholder="https://example.com/img.jpg" value="<?= s($img_src) ?>">
+                    </div>
+                    <div id="image_url_preview" class="mt-2"></div>
+                    <?php if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0) {
+                        echo '<div class="mt-2"><img src="' . s($product['image_url']) . '" style="max-width:200px;"></div>';
+                    } ?>
+                </div>
+            </div>
+            <!-- Allergies & Description -->
+            <div class="row g-3 mt-3">
+                <div class="col-md-6">
+                    <label>Allergies</label>
+                    <div class="input-group"><span class="input-group-text"><i class="fas fa-exclamation-triangle"></i></span><input type="text" class="form-control" name="allergies" value="<?= s($allg) ?>" placeholder="e.g., Contains Nuts"></div>
+                </div>
+                <div class="col-md-6">
+                    <label>Description</label>
+                    <div class="input-group"><span class="input-group-text"><i class="fas fa-align-left"></i></span><textarea class="form-control" name="description"><?= s($desc) ?></textarea></div>
+                </div>
+            </div>
+            <!-- Flags -->
+            <div class="row g-3 mt-3">
+                <div class="col-md-4">
+                    <div class="form-check"><input type="checkbox" class="form-check-input" name="is_new" <?= $i_new ? 'checked' : '' ?>><label class="form-check-label">New</label></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check"><input type="checkbox" class="form-check-input" name="is_offer" <?= $i_off ? 'checked' : '' ?>><label class="form-check-label">Offer</label></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check"><input type="checkbox" class="form-check-input" name="is_active" <?= $i_act ? 'checked' : '' ?>><label class="form-check-label">Active</label></div>
+                </div>
+            </div>
+            <div class="mt-4">
+                <button type="submit" class="btn btn-success me-2"><?= $editing ? 'Update' : 'Add' ?> Product</button>
+                <a href="products.php" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    <?php } elseif ($viewing) {
+        $products = fetchAll($pdo, 'SELECT p.*,c.name as category_name FROM products p JOIN categories c ON p.category_id=c.id ORDER BY p.created_at DESC');
+        echo '<h2 class="mb-4">Manage Products</h2>';
+        echo $_SESSION['message'] ?? '';
+        unset($_SESSION['message']);
+        echo '<a href="products.php?action=add" class="btn btn-success mb-3"><i class="fas fa-plus-circle"></i> Add New Product</a>';
+        echo '<div class="table-responsive"><table class="table table-bordered"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Category</th><th>Details</th><th>Allergies</th><th>Description</th><th>Image</th><th>New</th><th>Offer</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        foreach ($products as $p) {
+            $pr = json_decode($p['properties'], true);
+            echo '<tr><td>' . s($p['id']) . '</td><td>' . s($p['product_code']) . '</td><td>' . s($p['name']) . '</td><td>' . s($p['category_name']) . '</td><td>';
+            // Details
+            if (!empty($pr['sizes'])) {
+                foreach ($pr['sizes'] as $sz) {
+                    echo '<strong>Size:</strong> ' . s($sz['size']) . ' - $' . number_format($sz['price'], 2) . '<br>';
+                    if (!empty($sz['extras'])) {
+                        echo '&nbsp;&nbsp;<strong>Extras:</strong> ';
+                        $exarr = [];
+                        foreach ($sz['extras'] as $ex) {
+                            $exarr[] = $ex['name'] . '($' . number_format($ex['price'], 2) . ')';
+                        }
+                        echo implode(', ', $exarr) . '<br>';
                     }
-                }).trigger('change');
-                var tt = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tt.map(function(el) {
-                    return new bootstrap.Tooltip(el);
-                });
-            });
-        </script>
-    <?php break;
-    case 'delete':
+                    if (!empty($sz['sauces'])) {
+                        echo '&nbsp;&nbsp;<strong>Sauces:</strong> ';
+                        $saarr = [];
+                        foreach ($sz['sauces'] as $sa) {
+                            $saarr[] = $sa['name'] . '($' . number_format($sa['price'], 2) . ')';
+                        }
+                        echo implode(', ', $saarr) . '<br>';
+                    }
+                }
+            } elseif (isset($pr['base_price'])) {
+                echo '<strong>Base Price:</strong> $' . number_format($pr['base_price'], 2) . '<br>';
+            }
+
+            if (isset($pr['extras']) && empty($pr['sizes'])) {
+                echo '<strong>Extras:</strong> ';
+                $exarr = [];
+                foreach ($pr['extras'] as $ex) {
+                    $exarr[] = $ex['name'] . '($' . number_format($ex['price'], 2) . ')';
+                }
+                echo implode(', ', $exarr) . '<br>';
+            }
+            if (isset($pr['sauces']) && empty($pr['sizes'])) {
+                echo '<strong>Sauces:</strong> ';
+                $saarr = [];
+                foreach ($pr['sauces'] as $sa) {
+                    $saarr[] = $sa['name'] . '($' . number_format($sa['price'], 2) . ')';
+                }
+                echo implode(', ', $saarr) . '<br>';
+            }
+            if (isset($pr['dresses'])) {
+                foreach ($pr['dresses'] as $d) {
+                    echo '<strong>Dress:</strong> ' . s($d['name']) . ' - $' . number_format($d['price'], 2) . '<br>';
+                }
+            }
+            echo '</td><td>' . (s($p['allergies']) ?: '-') . '</td><td>' . (s($p['description']) ?: '-') . '</td>
+            <td>' . (!empty($p['image_url']) ? '<img src="' . s($p['image_url']) . '" style="max-width:100px;">' : '-') . '</td>
+            <td>' . ($p['is_new'] ? '<span class="badge bg-success"><i class="fas fa-star"></i></span>' : '-') . '</td>
+            <td>' . ($p['is_offer'] ? '<span class="badge bg-warning text-dark"><i class="fas fa-tags"></i></span>' : '-') . '</td>
+            <td>' . ($p['is_active'] ? '<span class="badge bg-primary"><i class="fas fa-check-circle"></i></span>' : '<span class="badge bg-secondary"><i class="fas fa-times-circle"></i></span>') . '</td>
+            <td>' . s($p['created_at']) . '</td>
+            <td><a href="products.php?action=edit&id=' . $p['id'] . '" class="btn btn-warning btn-sm">Edit</a> <a href="products.php?action=delete&id=' . $p['id'] . '" class="btn btn-danger btn-sm">Delete</a></td></tr>';
+        }
+        echo '</tbody></table></div>';
+    } elseif ($deleting) {
         if ($id > 0) {
             try {
                 $pdo->beginTransaction();
-                $stmt_image = $pdo->prepare('SELECT image_url FROM products WHERE id=?');
-                $stmt_image->execute([$id]);
-                $image_url = $stmt_image->fetchColumn();
-                $pdo->prepare('DELETE FROM product_extras WHERE product_id=?')->execute([$id]);
-                $pdo->prepare('DELETE FROM product_sauces WHERE product_id=?')->execute([$id]);
-                $pdo->prepare('DELETE FROM product_mixes WHERE main_product_id=?')->execute([$id]);
-                $pdo->prepare('DELETE FROM product_sizes WHERE product_id=?')->execute([$id]);
+                $stmt = $pdo->prepare('SELECT image_url FROM products WHERE id=?');
+                $stmt->execute([$id]);
+                $img = $stmt->fetchColumn();
                 $pdo->prepare('DELETE FROM products WHERE id=?')->execute([$id]);
-                if ($image_url && strpos($image_url, UPLOAD_DIR) === 0 && file_exists($image_url)) unlink($image_url);
+                if ($img && strpos($img, UPLOAD_DIR) === 0 && file_exists($img)) {
+                    unlink($img);
+                }
                 $pdo->commit();
-                $_SESSION['message'] = '<div class="alert alert-success">Product deleted successfully.</div>';
+                $_SESSION['message'] = '<div class="alert alert-success">Deleted successfully.</div>';
                 header('Location: products.php');
                 exit();
             } catch (PDOException $e) {
                 $pdo->rollBack();
-                $message = '<div class="alert alert-danger">Error deleting product: ' . sanitizeInput($e->getMessage()) . '</div>';
+                $message = '<div class="alert alert-danger">Error deleting.</div>';
             }
         } else {
             $message = '<div class="alert alert-danger">Invalid product ID.</div>';
         }
+        echo '<h2 class="mb-4">Delete Product</h2>' . $message . '<a href="products.php" class="btn btn-secondary">Return</a>';
+    }
     ?>
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header bg-danger text-white">
-                    <h3 class="mb-0">Delete Product</h3>
-                </div>
-                <div class="card-body">
-                    <?= $message ?>
-                    <a href="products.php" class="btn btn-secondary mt-3"><i class="fas fa-arrow-left me-1"></i> Return</a>
-                </div>
-            </div>
-        </div>
-    <?php break;
-    case 'top10':
-        $topProducts = getTop10Products($pdo);
-    ?>
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0">Top 10 Best-Selling Products</h3>
-                    <a href="products.php" class="btn btn-light btn-sm"><i class="fas fa-arrow-left me-1"></i> Back</a>
-                </div>
-                <div class="card-body">
-                    <?= $message ?>
-                    <?php if (!empty($topProducts)): ?>
-                        <canvas id="topProductsChart" width="400" height="200" class="mb-4"></canvas>
-                        <div class="table-responsive">
-                            <table id="top10Table" class="table table-striped table-hover align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Product Code</th>
-                                        <th>Name</th>
-                                        <th>Category</th>
-                                        <th>Sizes</th>
-                                        <th>Total Sold</th>
-                                        <th>Price ($)</th>
-                                        <th>Image</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($topProducts as $p): ?>
-                                        <tr>
-                                            <td><?= sanitizeInput($p['id']) ?></td>
-                                            <td><?= sanitizeInput($p['product_code']) ?></td>
-                                            <td><?= sanitizeInput($p['name']) ?></td>
-                                            <td><?php foreach ($categories as $c) {
-                                                    if ($c['id'] == $p['category_id']) {
-                                                        echo sanitizeInput($c['name']);
-                                                        break;
-                                                    }
-                                                } ?></td>
-                                            <td>
-                                                <?php
-                                                $ps = fetchAll($pdo, 'SELECT s.name FROM sizes s JOIN product_sizes ps ON s.id=ps.size_id WHERE ps.product_id=?', [$p['id']]);
-                                                echo !empty($ps) ? sanitizeInput(implode(', ', array_column($ps, 'name'))) : '-';
-                                                ?>
-                                            </td>
-                                            <td><?= sanitizeInput($p['total_sold']) ?></td>
-                                            <td><?= number_format($p['price'], 2) ?></td>
-                                            <td><?php if (!empty($p['image_url'])): ?>
-                                                    <a href="<?= sanitizeInput($p['image_url']) ?>" target="_blank" class="text-primary" data-bs-toggle="tooltip" title="View Image"><i class="fas fa-image"></i></a>
-                                                    <?php else: ?>- <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-                        <script>
-                            $(function() {
-                                $('#top10Table').DataTable({
-                                    responsive: true,
-                                    order: [
-                                        [5, 'desc']
-                                    ],
-                                    language: {
-                                        emptyTable: "No data",
-                                        info: "Showing _START_ to _END_ of _TOTAL_",
-                                        infoEmpty: "0 to 0 of 0",
-                                        lengthMenu: "Show _MENU_",
-                                        paginate: {
-                                            first: "First",
-                                            last: "Last",
-                                            next: "Next",
-                                            previous: "Previous"
-                                        },
-                                        search: "Search:"
-                                    }
-                                });
-                                var labels = [<?php foreach ($topProducts as $tp): ?> '<?= addslashes(sanitizeInput($tp['name'])) ?>', <?php endforeach; ?>];
-                                var data = [<?php foreach ($topProducts as $tp): ?><?= sanitizeInput($tp['total_sold']) ?>, <?php endforeach; ?>];
-                                var ctx = document.getElementById('topProductsChart').getContext('2d');
-                                new Chart(ctx, {
-                                    type: 'bar',
-                                    data: {
-                                        labels: labels,
-                                        datasets: [{
-                                            label: 'Total Sold',
-                                            data: data,
-                                            backgroundColor: 'rgba(54,162,235,0.6)',
-                                            borderColor: 'rgba(54,162,235,1)',
-                                            borderWidth: 1
-                                        }]
-                                    },
-                                    options: {
-                                        responsive: true,
-                                        scales: {
-                                            y: {
-                                                beginAtZero: true,
-                                                precision: 0
-                                            }
-                                        },
-                                        plugins: {
-                                            legend: {
-                                                display: false
-                                            },
-                                            tooltip: {
-                                                enabled: true
-                                            }
-                                        }
-                                    }
-                                });
-                                var tts = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                                tts.map(function(el) {
-                                    return new bootstrap.Tooltip(el);
-                                });
-                            });
-                        </script>
-                    <?php else: ?>
-                        <div class="alert alert-info">No sales data available.</div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    <?php break;
-    case 'view':
-    default:
-        $products = fetchAll($pdo, 'SELECT p.*,c.name AS category_name FROM products p JOIN categories c ON p.category_id=c.id ORDER BY p.created_at DESC');
-    ?>
-        <div class="container mt-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h3>Manage Products</h3>
-                <a href="products.php?action=add" class="btn btn-success"><i class="fas fa-plus me-1"></i> Add New Product</a>
-            </div>
-            <div class="mb-3">
-                <a href="products.php?action=top10" class="btn btn-primary"><i class="fas fa-chart-line me-1"></i> Top 10 Products</a>
-            </div>
-            <?= $message ?>
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table id="productsTable" class="table table-striped table-hover align-middle mb-0">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Product Code</th>
-                                    <th>Name</th>
-                                    <th>Category</th>
-                                    <th>Extras</th>
-                                    <th>Sauces</th>
-                                    <th>Mix Options</th>
-                                    <th>Sizes</th>
-                                    <th>Allergies</th>
-                                    <th>Description</th>
-                                    <th>Price ($)</th>
-                                    <th>Image</th>
-                                    <th>New</th>
-                                    <th>Offer</th>
-                                    <th>Status</th>
-                                    <th>Created At</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php if (!empty($products)): foreach ($products as $pr): ?>
-                                        <tr>
-                                            <td><?= sanitizeInput($pr['id']) ?></td>
-                                            <td><?= sanitizeInput($pr['product_code']) ?></td>
-                                            <td><?= sanitizeInput($pr['name']) ?></td>
-                                            <td><?= sanitizeInput($pr['category_name']) ?></td>
-                                            <td><?php $pe = fetchAll($pdo, 'SELECT e.name FROM extras e JOIN product_extras pe ON e.id=pe.extra_id WHERE pe.product_id=?', [$pr['id']]);
-                                                echo !empty($pe) ? sanitizeInput(implode(', ', array_column($pe, 'name'))) : '-'; ?></td>
-                                            <td><?php $ps = fetchAll($pdo, 'SELECT s.name FROM sauces s JOIN product_sauces ps ON s.id=ps.sauce_id WHERE ps.product_id=?', [$pr['id']]);
-                                                echo !empty($ps) ? sanitizeInput(implode(', ', array_column($ps, 'name'))) : '-'; ?></td>
-                                            <td><?php $pm = fetchAll($pdo, 'SELECT p2.name FROM product_mixes pm JOIN products p2 ON pm.mixed_product_id=p2.id WHERE pm.main_product_id=?', [$pr['id']]);
-                                                echo !empty($pm) ? sanitizeInput(implode(', ', array_column($pm, 'name'))) : '-'; ?></td>
-                                            <td><?php $pz = fetchAll($pdo, 'SELECT s.name FROM sizes s JOIN product_sizes psz ON s.id=psz.size_id WHERE psz.product_id=?', [$pr['id']]);
-                                                echo !empty($pz) ? sanitizeInput(implode(', ', array_column($pz, 'name'))) : '-'; ?></td>
-                                            <td><?= sanitizeInput($pr['allergies']) ?: '-' ?></td>
-                                            <td><?= sanitizeInput($pr['description']) ?: '-' ?></td>
-                                            <td><?= number_format($pr['price'], 2) ?></td>
-                                            <td><?php if (!empty($pr['image_url'])): ?><img src="<?= sanitizeInput($pr['image_url']) ?>" class="img-thumbnail" style="max-width:100px;"><?php else: ?>-<?php endif; ?></td>
-                                            <td><?= $pr['is_new'] ? '<span class="badge bg-warning text-dark"><i class="fas fa-star"></i></span>' : '-' ?></td>
-                                            <td><?= $pr['is_offer'] ? '<span class="badge bg-success"><i class="fas fa-tags"></i></span>' : '-' ?></td>
-                                            <td><?= $pr['is_active'] ? '<span class="badge bg-primary"><i class="fas fa-check-circle"></i></span>' : '<span class="badge bg-secondary"><i class="fas fa-times-circle"></i></span>' ?></td>
-                                            <td><?= sanitizeInput($pr['created_at']) ?></td>
-                                            <td>
-                                                <a href="products.php?action=edit&id=<?= $pr['id'] ?>" class="btn btn-sm btn-warning me-1" data-bs-toggle="tooltip" title="Edit"><i class="fas fa-edit"></i></a>
-                                                <button class="btn btn-sm btn-danger" onclick="showDeleteModal(<?= $pr['id'] ?>)" data-bs-toggle="tooltip" title="Delete"><i class="fas fa-trash-alt"></i></button>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach;
-                                else: ?>
-                                    <tr>
-                                        <td colspan="17" class="text-center">No products available.</td>
-                                    </tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <form method="GET" action="products.php">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id" id="deleteProductId">
-                    <div class="modal-content">
-                        <div class="modal-header bg-danger text-white">
-                            <h5 class="modal-title">Confirm Deletion</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">Are you sure? This cannot be undone.</div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-danger"><i class="fas fa-trash-alt me-1"></i> Delete</button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i> Cancel</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <?php if (isset($_SESSION['message'])): ?>
-            <div class="container mt-3"><?= $_SESSION['message'] ?><?php unset($_SESSION['message']); ?></div>
-        <?php endif; ?>
-        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-        <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
-        <link href="https://cdn.datatables.net/1.13.5/css/jquery.dataTables.min.css" rel="stylesheet" />
-        <script>
-            $(function() {
-                $('#extras,#sauces,#mixes,#sizes').select2({
-                    placeholder: "Select options",
-                    allowClear: true,
-                    width: '100%'
-                });
-                $('input[name="image_source"]').change(function() {
-                    if ($(this).val() === 'upload') {
-                        $('#image_upload_field').slideDown();
-                        $('#image_url_field').slideUp();
-                        $('#image_url').prop('required', false).prop('disabled', true);
-                        $('#image_file').prop('required', true).prop('disabled', false);
-                    } else {
-                        $('#image_upload_field').slideUp();
-                        $('#image_url_field').slideDown();
-                        $('#image_file').prop('required', false).prop('disabled', true);
-                        $('#image_url').prop('required', true).prop('disabled', false);
-                    }
-                }).trigger('change');
-                $('#productsTable').DataTable({
-                    paging: true,
-                    searching: true,
-                    info: true,
-                    responsive: true,
-                    order: [
-                        [0, 'desc']
-                    ],
-                    language: {
-                        emptyTable: "No products.",
-                        info: "Showing _START_ to _END_ of _TOTAL_",
-                        infoEmpty: "0 to 0 of 0",
-                        lengthMenu: "Show _MENU_",
-                        paginate: {
-                            first: "First",
-                            last: "Last",
-                            next: "Next",
-                            previous: "Previous"
-                        },
-                        search: "Search:"
-                    }
-                });
-                var tt = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tt.map(function(el) {
-                    return new bootstrap.Tooltip(el);
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        var sizeBlockCounter = 1000;
+
+        function toggleFields() {
+            $('#extrasSaucesFields').toggle($('input[name="has_extras_sauces"]').is(':checked'));
+            $('#sizesFields').toggle($('input[name="has_sizes"]').is(':checked'));
+            $('#dressesFields').toggle($('input[name="has_dresses"]').is(':checked'));
+            $('#basePriceField').toggle(!$('input[name="has_sizes"]').is(':checked'));
+            updatePreview();
+        }
+
+        $('input[name="has_extras_sauces"],input[name="has_sizes"],input[name="has_dresses"]').change(function() {
+            toggleFields();
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+        });
+
+        function getGlobalExtras() {
+            var globalExtras = [];
+            $('#globalExtrasContainer .global-extra').each(function() {
+                var en = $(this).find('input[name*="name"]').val() || '';
+                var ep = $(this).find('input[name*="price"]').val() || 0;
+                if (en.trim() !== '') globalExtras.push({
+                    name: en,
+                    price: ep
                 });
             });
+            return globalExtras;
+        }
 
-            function showDeleteModal(id) {
-                $('#deleteProductId').val(id);
-                new bootstrap.Modal(document.getElementById('deleteModal')).show();
+        function getGlobalSauces() {
+            var globalSauces = [];
+            $('#globalSaucesContainer .global-sauce').each(function() {
+                var sn = $(this).find('input[name*="name"]').val() || '';
+                var sp = $(this).find('input[name*="price"]').val() || 0;
+                if (sn.trim() !== '') globalSauces.push({
+                    name: sn,
+                    price: sp
+                });
+            });
+            return globalSauces;
+        }
+
+        function populateExtrasSaucesSelects() {
+            var globalExtras = getGlobalExtras();
+            var globalSauces = getGlobalSauces();
+            $('#sizeBlocks .size-block').each(function() {
+                var $block = $(this);
+                var $extrasSelect = $block.find('.extras-select');
+                var $saucesSelect = $block.find('.sauces-select');
+                var extrasVal = $extrasSelect.val() || [];
+                var saucesVal = $saucesSelect.val() || [];
+                $extrasSelect.empty();
+                $saucesSelect.empty();
+
+                $.each(globalExtras, function(i, ex) {
+                    $extrasSelect.append('<option value="' + i + '">' + ex.name + '</option>');
+                });
+                $.each(globalSauces, function(i, sa) {
+                    $saucesSelect.append('<option value="' + i + '">' + sa.name + '</option>');
+                });
+
+                $extrasSelect.val(extrasVal).trigger('change');
+                $saucesSelect.val(saucesVal).trigger('change');
+            });
+        }
+
+        $(document).on('change', '.extras-select', function() {
+            updateSizeExtrasPrices($(this).closest('.size-block'));
+        });
+
+        $(document).on('change', '.sauces-select', function() {
+            updateSizeSaucesPrices($(this).closest('.size-block'));
+        });
+
+        function getSizeBlockName($block) {
+            var firstInput = $block.find('input[name^="sizes_block["]').first();
+            return firstInput.attr('name').replace(/\[size\]$/, '');
+        }
+
+        function updateSizeExtrasPrices($block) {
+            var globalExtras = getGlobalExtras();
+            var selectedExtras = $block.find('.extras-select').val() || [];
+            var $extrasPrices = $block.find('.extras-prices').empty();
+
+            $.each(selectedExtras, function(_, exIndex) {
+                exIndex = parseInt(exIndex, 10);
+                if (globalExtras[exIndex]) {
+                    var blockName = getSizeBlockName($block);
+                    $extrasPrices.append('<div class="row g-2 mb-2"><div class="col-md-6"><label>' + globalExtras[exIndex].name + ' Price($)</label><input type="number" step="0.01" class="form-control" name="' + blockName + '[extras_prices][' + exIndex + ']" value="' + globalExtras[exIndex].price + '"></div></div>');
+                }
+            });
+            updatePreview();
+        }
+
+        function updateSizeSaucesPrices($block) {
+            var globalSauces = getGlobalSauces();
+            var selectedSauces = $block.find('.sauces-select').val() || [];
+            var $saucesPrices = $block.find('.sauces-prices').empty();
+
+            $.each(selectedSauces, function(_, saIndex) {
+                saIndex = parseInt(saIndex, 10);
+                if (globalSauces[saIndex]) {
+                    var blockName = getSizeBlockName($block);
+                    $saucesPrices.append('<div class="row g-2 mb-2"><div class="col-md-6"><label>' + globalSauces[saIndex].name + ' Price($)</label><input type="number" step="0.01" class="form-control" name="' + blockName + '[sauces_prices][' + saIndex + ']" value="' + globalSauces[saIndex].price + '"></div></div>');
+                }
+            });
+            updatePreview();
+        }
+
+        $('#addSizeBlock').click(function() {
+            var index = sizeBlockCounter++;
+            $('#sizeBlocks').append(renderSizeBlock(index));
+            $('.extras-select,.sauces-select').select2({
+                width: '100%'
+            });
+            populateExtrasSaucesSelects();
+            updatePreview();
+        });
+
+        $(document).on('click', '.remove-size-block', function() {
+            $(this).closest('.size-block').remove();
+            updatePreview();
+        });
+
+        $(document).on('click', '.remove-dress-block', function() {
+            $(this).closest('.dress-block').remove();
+            updatePreview();
+        });
+
+        $(document).on('click', '.remove-global-extra', function() {
+            $(this).closest('.global-extra').remove();
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+
+        $(document).on('click', '.remove-global-sauce', function() {
+            $(this).closest('.global-sauce').remove();
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+
+        $('#addDressBlock').click(function() {
+            $('#dressBlocks').append(renderDressBlock());
+            updatePreview();
+        });
+
+        $('#addGlobalExtra').click(function() {
+            var c = $('#globalExtrasContainer .global-extra').length;
+            $('#globalExtrasContainer').append('<div class="row g-2 mb-2 global-extra"><div class="col"><input type="text" class="form-control" name="global_extras[' + c + '][name]" placeholder="Extra name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_extras[' + c + '][price]" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-extra">&times;</button></div></div>');
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+
+        $('#addGlobalSauce').click(function() {
+            var c = $('#globalSaucesContainer .global-sauce').length;
+            $('#globalSaucesContainer').append('<div class="row g-2 mb-2 global-sauce"><div class="col"><input type="text" class="form-control" name="global_sauces[' + c + '][name]" placeholder="Sauce name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_sauces[' + c + '][price]" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-sauce">&times;</button></div></div>');
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+
+        function refreshAllPrices() {
+            $('#sizeBlocks .size-block').each(function() {
+                updateSizeExtrasPrices($(this));
+                updateSizeSaucesPrices($(this));
+            });
+        }
+
+        $('input[name="image_source"]').change(function() {
+            var v = $(this).val();
+            $('#image_upload_field').toggle(v === 'upload');
+            $('#image_url_field').toggle(v === 'url');
+            if (v === 'upload') {
+                $('input[name="image_url"]').prop('required', false).prop('disabled', true);
+                $('input[name="image_file"]').prop('required', true).prop('disabled', false);
+            } else {
+                $('input[name="image_file"]').prop('required', false).prop('disabled', true);
+                $('input[name="image_url"]').prop('required', true).prop('disabled', false);
             }
-        </script>
-        <?php include 'includes/footer.php'; ?>
-<?php break;
-} ?>
+        }).trigger('change');
+
+        $('.extras-select,.sauces-select').select2({
+            placeholder: "Select options",
+            width: '100%'
+        });
+
+        $('body').append('<div id="previewBox" class="card mt-5"><div class="card-header">Real-Time Preview</div><div class="card-body" id="previewContent">No data yet...</div></div>');
+        $(document).on('input change', 'input, textarea, select', function() {
+            updatePreview();
+        });
+
+        $(document).on('change', 'input[name="image_file"]', function() {
+            var input = this;
+            if (input.files && input.files[0]) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    $('#image_file_preview').html('<img src="' + e.target.result + '" style="max-width:200px;">');
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else {
+                $('#image_file_preview').empty();
+            }
+        });
+
+        $(document).on('input', 'input[name="image_url"]', function() {
+            var url = $(this).val();
+            if (url.trim() !== '') {
+                $('#image_url_preview').html('<img src="' + url + '" onload="this.style.maxWidth=\'200px\'" onerror="$(\'#image_url_preview\').html(\'<small class=\'text-danger\'>Invalid image URL</small>\')" />');
+            } else {
+                $('#image_url_preview').empty();
+            }
+        });
+
+        function updatePreview() {
+            var extrasSauces = $('input[name="has_extras_sauces"]').is(':checked');
+            var sizes = $('input[name="has_sizes"]').is(':checked');
+            var dresses = $('input[name="has_dresses"]').is(':checked');
+
+            var productCode = $('input[name="product_code"]').val() || '';
+            var productName = $('input[name="name"]').val() || '';
+            var categoryName = $('select[name="category_id"] option:selected').text() || '';
+            var allergies = $('input[name="allergies"]').val() || '';
+            var description = $('textarea[name="description"]').val() || '';
+            var isNew = $('input[name="is_new"]').is(':checked');
+            var isOffer = $('input[name="is_offer"]').is(':checked');
+            var isActive = $('input[name="is_active"]').is(':checked');
+            var globalExtras = getGlobalExtras();
+            var globalSauces = getGlobalSauces();
+
+            var preview = '<strong>Product:</strong> ' + productName + ' (Code: ' + productCode + ')<br>';
+            preview += '<strong>Category:</strong> ' + categoryName + '<br>';
+            if (allergies.trim() !== '') preview += '<strong>Allergies:</strong> ' + allergies + '<br>';
+            if (description.trim() !== '') preview += '<strong>Description:</strong> ' + description + '<br>';
+            if (isNew) preview += '<span class="badge bg-success">New</span> ';
+            if (isOffer) preview += '<span class="badge bg-warning text-dark">Offer</span> ';
+            if (isActive) preview += '<span class="badge bg-primary">Active</span><br>';
+
+            if (extrasSauces) {
+                preview += '<strong>Global Extras:</strong><br>';
+                if (globalExtras.length > 0) {
+                    $.each(globalExtras, function(i, ex) {
+                        preview += '- ' + ex.name + ' ($' + ex.price + ')<br>';
+                    });
+                } else preview += '(None)<br>';
+
+                preview += '<strong>Global Sauces:</strong><br>';
+                if (globalSauces.length > 0) {
+                    $.each(globalSauces, function(i, sa) {
+                        preview += '- ' + sa.name + ' ($' + sa.price + ')<br>';
+                    });
+                } else preview += '(None)<br>';
+            }
+
+            if (sizes) {
+                preview += '<strong>Sizes:</strong><br>';
+                $('#sizeBlocks .size-block').each(function() {
+                    var $thisBlock = $(this);
+                    var sz = $thisBlock.find('input[name*="[size]"]').val() || '';
+                    var szp = $thisBlock.find('input[name*="[price]"]').val() || 0;
+                    if (sz.trim() !== '') {
+                        preview += sz + ' ($' + szp + ')<br>';
+                        var extrasSelected = $thisBlock.find('.extras-select').val() || [];
+                        var saucesSelected = $thisBlock.find('.sauces-select').val() || [];
+
+                        if (extrasSelected.length > 0) {
+                            preview += '&nbsp;&nbsp;Extras:<br>';
+                            $.each(extrasSelected, function(_, exIndex) {
+                                exIndex = parseInt(exIndex, 10);
+                                if (globalExtras[exIndex]) {
+                                    var exPrice = $thisBlock.find('input[name*="[extras_prices][' + exIndex + ']"]').val() || globalExtras[exIndex].price || 0;
+                                    preview += '&nbsp;&nbsp;- ' + globalExtras[exIndex].name + ' ($' + exPrice + ')<br>';
+                                }
+                            });
+                        }
+
+                        if (saucesSelected.length > 0) {
+                            preview += '&nbsp;&nbsp;Sauces:<br>';
+                            $.each(saucesSelected, function(_, saIndex) {
+                                saIndex = parseInt(saIndex, 10);
+                                if (globalSauces[saIndex]) {
+                                    var saPrice = $thisBlock.find('input[name*="[sauces_prices][' + saIndex + ']"]').val() || globalSauces[saIndex].price || 0;
+                                    preview += '&nbsp;&nbsp;- ' + globalSauces[saIndex].name + ' ($' + saPrice + ')<br>';
+                                }
+                            });
+                        }
+                    }
+                });
+            } else {
+                // Show base price if no sizes
+                var basePrice = $('input[name="base_price"]').val() || 0;
+                preview += '<strong>Base Price:</strong> $' + basePrice + '<br>';
+            }
+
+            if (dresses) {
+                preview += '<strong>Dresses:</strong><br>';
+                $('#dressBlocks .dress-block').each(function() {
+                    var dn = $(this).find('input[name*="dress"]').val() || '';
+                    var dp = $(this).find('input[name*="price"]').val() || 0;
+                    if (dn.trim() !== '') preview += '- ' + dn + ' ($' + dp + ')<br>';
+                });
+            }
+
+            $('#previewContent').html(preview);
+        }
+
+        function renderSizeBlock(index) {
+            return '<div class="size-block border p-3 mb-3" data-block-index="' + index + '">\
+                <div class="row g-2 align-items-end">\
+                    <div class="col-md-4"><label>Size</label><input type="text" class="form-control" name="sizes_block[' + index + '][size]" required placeholder="Medium"></div>\
+                    <div class="col-md-4"><label>Base Price($)</label><input type="number" step="0.01" class="form-control" name="sizes_block[' + index + '][price]" required placeholder="9.99"></div>\
+                    <div class="col-md-4 text-end"><button type="button" class="btn btn-danger remove-size-block"><i class="fas fa-minus-circle"></i></button></div>\
+                </div>\
+                <div class="row g-2 mt-3">\
+                    <div class="col-md-6"><label>Extras</label><select class="form-select extras-select" name="sizes_block[' + index + '][extras_selected][]" multiple></select></div>\
+                    <div class="col-md-6"><label>Sauces</label><select class="form-select sauces-select" name="sizes_block[' + index + '][sauces_selected][]" multiple></select></div>\
+                </div>\
+                <div class="extras-prices mt-3"></div>\
+                <div class="sauces-prices mt-3"></div>\
+            </div>';
+        }
+
+        function renderDressBlock() {
+            var c = $('#dressBlocks .dress-block').length;
+            return '<div class="dress-block border p-3 mb-3">\
+                <div class="row g-2 align-items-end">\
+                    <div class="col-md-6"><label>Dress</label><input type="text" class="form-control" name="dresses[' + c + '][dress]" required placeholder="Italian Dressing"></div>\
+                    <div class="col-md-4"><label>Price($)</label><input type="number" step="0.01" class="form-control" name="dresses[' + c + '][price]" required placeholder="1.50"></div>\
+                    <div class="col-md-2 text-end"><button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button></div>\
+                </div>\
+            </div>';
+        }
+
+        // Initial setup
+        toggleFields();
+        populateExtrasSaucesSelects();
+        refreshAllPrices();
+    });
+</script>
+<?php require_once 'includes/footer.php'; ?>
