@@ -1,75 +1,57 @@
 <?php
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 $success_message = '';
 $error_message = '';
-
+function validate_entry($data, $type)
+{
+    $errors = [];
+    if ($type === 'holiday') {
+        if (empty($data['date'])) $errors[] = "Date is required.";
+        if (empty(trim($data['title']))) $errors[] = "Title is required.";
+    } elseif ($type === 'regular') {
+        if (empty($data['day_of_week'])) $errors[] = "Day of week is required.";
+    } else {
+        $errors[] = "Invalid entry type.";
+    }
+    return $errors;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
-    if ($action === 'add_entry') {
-        $type = $_POST['type'];
-        $day_of_week = $type === 'regular' ? $_POST['day_of_week'] : NULL;
-        $date = $type === 'holiday' ? $_POST['date'] : NULL;
-        $title = $type === 'holiday' ? trim($_POST['title']) : NULL;
-        $description = $type === 'holiday' ? trim($_POST['description']) : NULL;
-        $is_closed = isset($_POST['is_closed']) ? 1 : 0;
-        $open_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['open_time'] : NULL;
-        $close_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['close_time'] : NULL;
-        $errors = [];
-        if ($type === 'holiday') {
-            if (empty($date)) $errors[] = "Date is required.";
-            if (empty($title)) $errors[] = "Title is required.";
-        } elseif ($type === 'regular') {
-            if (empty($day_of_week)) $errors[] = "Day of week is required.";
-        } else {
-            $errors[] = "Invalid entry type.";
-        }
+    $type = $_POST['type'] ?? '';
+    $is_closed = isset($_POST['is_closed']) ? 1 : 0;
+    $day_of_week = $type === 'regular' ? $_POST['day_of_week'] : NULL;
+    $date = $type === 'holiday' ? $_POST['date'] : NULL;
+    $title = $type === 'holiday' ? trim($_POST['title']) : NULL;
+    $description = $type === 'holiday' ? trim($_POST['description']) : NULL;
+    $open_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['open_time'] : NULL;
+    $close_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['close_time'] : NULL;
+    $errors = validate_entry($_POST, $type);
+    if ($action === 'add_entry' || $action === 'edit_entry') {
         if (!empty($errors)) {
             $error_message = implode(' ', $errors);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO operational_hours (type, day_of_week, date, title, description, open_time, close_time, is_closed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            try {
-                $stmt->execute([$type, $day_of_week, $date, $title, $description, $open_time, $close_time, $is_closed]);
-                $success_message = ucfirst($type) . " entry added successfully.";
-            } catch (Exception $e) {
-                $error_message = "Failed to add entry: " . $e->getMessage();
+            if ($action === 'add_entry') {
+                $stmt = $pdo->prepare("INSERT INTO operational_hours (type, day_of_week, date, title, description, open_time, close_time, is_closed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $message = "added";
+            } else {
+                $id = $_POST['entry_id'];
+                $stmt = $pdo->prepare("UPDATE operational_hours SET type = ?, day_of_week = ?, date = ?, title = ?, description = ?, open_time = ?, close_time = ?, is_closed = ? WHERE id = ?");
+                $message = "updated";
             }
-        }
-    }
-    if ($action === 'edit_entry') {
-        $id = $_POST['entry_id'];
-        $type = $_POST['type'];
-        $day_of_week = $type === 'regular' ? $_POST['day_of_week'] : NULL;
-        $date = $type === 'holiday' ? $_POST['date'] : NULL;
-        $title = $type === 'holiday' ? trim($_POST['title']) : NULL;
-        $description = $type === 'holiday' ? trim($_POST['description']) : NULL;
-        $is_closed = isset($_POST['is_closed']) ? 1 : 0;
-        $open_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['open_time'] : NULL;
-        $close_time = ($type === 'regular' || ($type === 'holiday' && !$is_closed)) ? $_POST['close_time'] : NULL;
-        $errors = [];
-        if ($type === 'holiday') {
-            if (empty($date)) $errors[] = "Date is required.";
-            if (empty($title)) $errors[] = "Title is required.";
-        } elseif ($type === 'regular') {
-            if (empty($day_of_week)) $errors[] = "Day of week is required.";
-        } else {
-            $errors[] = "Invalid entry type.";
-        }
-        if (!empty($errors)) {
-            $error_message = implode(' ', $errors);
-        } else {
-            $stmt = $pdo->prepare("UPDATE operational_hours SET type = ?, day_of_week = ?, date = ?, title = ?, description = ?, open_time = ?, close_time = ?, is_closed = ? WHERE id = ?");
             try {
-                $stmt->execute([$type, $day_of_week, $date, $title, $description, $open_time, $close_time, $is_closed, $id]);
-                $success_message = ucfirst($type) . " entry updated successfully.";
+                if ($action === 'add_entry') {
+                    $stmt->execute([$type, $day_of_week, $date, $title, $description, $open_time, $close_time, $is_closed]);
+                } else {
+                    $stmt->execute([$type, $day_of_week, $date, $title, $description, $open_time, $close_time, $is_closed, $id]);
+                }
+                $success_message = ucfirst($type) . " entry successfully {$message}.";
             } catch (Exception $e) {
-                $error_message = "Failed to update entry: " . $e->getMessage();
+                $error_message = "Failed to {$message} entry: " . $e->getMessage();
             }
         }
     }
 }
-
 if (isset($_GET['delete_entry'])) {
     $delete_id = (int)$_GET['delete_entry'];
     $stmt = $pdo->prepare("DELETE FROM operational_hours WHERE id = ?");
@@ -80,11 +62,9 @@ if (isset($_GET['delete_entry'])) {
         $error_message = "Failed to delete entry: " . $e->getMessage();
     }
 }
-
 $stmt = $pdo->prepare("SELECT * FROM operational_hours ORDER BY type, date DESC, day_of_week ASC");
 $stmt->execute();
 $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$events = [];
 $day_map = [
     'Sunday' => 0,
     'Monday' => 1,
@@ -94,75 +74,7 @@ $day_map = [
     'Friday' => 5,
     'Saturday' => 6,
 ];
-foreach ($entries as $entry) {
-    if ($entry['type'] === 'regular') {
-        if (!$entry['is_closed']) {
-            $events[] = [
-                'title' => 'Open',
-                'daysOfWeek' => [$day_map[$entry['day_of_week']]],
-                'startTime' => substr($entry['open_time'], 0, 5),
-                'endTime' => substr($entry['close_time'], 0, 5),
-                'display' => 'background',
-                'color' => '#d4edda',
-            ];
-        } else {
-            $events[] = [
-                'title' => 'Closed',
-                'daysOfWeek' => [$day_map[$entry['day_of_week']]],
-                'allDay' => true,
-                'display' => 'background',
-                'color' => '#f8d7da',
-            ];
-        }
-    } elseif ($entry['type'] === 'holiday') {
-        if ($entry['is_closed']) {
-            $events[] = [
-                'title' => $entry['title'],
-                'start' => $entry['date'],
-                'allDay' => true,
-                'display' => 'background',
-                'color' => '#f5c6cb',
-                'description' => $entry['description'],
-            ];
-        } else {
-            $events[] = [
-                'title' => $entry['title'],
-                'start' => $entry['date'] . 'T' . $entry['open_time'],
-                'end' => $entry['date'] . 'T' . $entry['close_time'],
-                'display' => 'background',
-                'color' => '#ffeeba',
-                'description' => $entry['description'],
-            ];
-        }
-    }
-}
-$events_json = json_encode($events);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Operational Hours</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
-    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-    <style>
-        #calendar {
-            max-width: 900px;
-            margin: 40px auto;
-        }
-
-        .fc-event-title {
-            color: #000 !important;
-        }
-
-        .tooltip-inner {
-            max-width: 200px;
-            text-align: left;
-        }
-    </style>
-</head>
 
 <body>
     <div class="container my-5">
@@ -216,6 +128,7 @@ $events_json = json_encode($events);
                                         <button type="button" class="btn btn-sm btn-danger btn-delete" data-id="<?= htmlspecialchars($entry['id']) ?>">Delete</button>
                                     </td>
                                 </tr>
+                                <!-- Edit Entry Modal -->
                                 <div class="modal fade" id="editEntryModal<?= $entry['id'] ?>" tabindex="-1" aria-labelledby="editEntryModalLabel<?= $entry['id'] ?>" aria-hidden="true">
                                     <div class="modal-dialog modal-lg modal-dialog-centered">
                                         <div class="modal-content">
@@ -234,7 +147,7 @@ $events_json = json_encode($events);
                                                             <option value="holiday" <?= $entry['type'] === 'holiday' ? 'selected' : '' ?>>Holiday</option>
                                                         </select>
                                                     </div>
-                                                    <div id="regularFields<?= $entry['id'] ?>" style="display: <?= $entry['type'] === 'regular' ? 'block' : 'none' ?>;">
+                                                    <div id="regularFields<?= $entry['id'] ?>" class="toggleFields" style="display: <?= $entry['type'] === 'regular' ? 'block' : 'none' ?>;">
                                                         <div class="mb-3">
                                                             <label for="day_of_week<?= $entry['id'] ?>" class="form-label">Day of Week</label>
                                                             <select class="form-select" id="day_of_week<?= $entry['id'] ?>" name="day_of_week">
@@ -244,7 +157,7 @@ $events_json = json_encode($events);
                                                             </select>
                                                         </div>
                                                     </div>
-                                                    <div id="holidayFields<?= $entry['id'] ?>" style="display: <?= $entry['type'] === 'holiday' ? 'block' : 'none' ?>;">
+                                                    <div id="holidayFields<?= $entry['id'] ?>" class="toggleFields" style="display: <?= $entry['type'] === 'holiday' ? 'block' : 'none' ?>;">
                                                         <div class="mb-3">
                                                             <label for="date<?= $entry['id'] ?>" class="form-label">Date</label>
                                                             <input type="date" class="form-control" id="date<?= $entry['id'] ?>" name="date" value="<?= htmlspecialchars($entry['date']) ?>">
@@ -289,6 +202,7 @@ $events_json = json_encode($events);
                 <?php endif; ?>
             </div>
         </div>
+        <!-- Add Entry Modal -->
         <div class="modal fade" id="addEntryModal" tabindex="-1" aria-labelledby="addEntryModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
@@ -355,96 +269,43 @@ $events_json = json_encode($events);
                 </div>
             </div>
         </div>
-        <div id="calendar"></div>
     </div>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <?php include 'includes/footer.php'; ?>
     <script>
         function toggleAddFormFields(select) {
             const type = select.value;
-            const regularFields = document.getElementById('addRegularFields');
-            const holidayFields = document.getElementById('addHolidayFields');
-            if (type === 'regular') {
-                regularFields.style.display = 'block';
-                holidayFields.style.display = 'none';
-            } else if (type === 'holiday') {
-                regularFields.style.display = 'none';
-                holidayFields.style.display = 'block';
-            } else {
-                regularFields.style.display = 'none';
-                holidayFields.style.display = 'none';
-            }
+            document.getElementById('addRegularFields').style.display = type === 'regular' ? 'block' : 'none';
+            document.getElementById('addHolidayFields').style.display = type === 'holiday' ? 'block' : 'none';
         }
 
         function toggleAddEntryTimeFields(checkbox) {
             const openTime = document.getElementById('open_time');
             const closeTime = document.getElementById('close_time');
+            openTime.disabled = checkbox.checked;
+            closeTime.disabled = checkbox.checked;
             if (checkbox.checked) {
-                openTime.disabled = true;
-                closeTime.disabled = true;
                 openTime.value = '';
                 closeTime.value = '';
-            } else {
-                openTime.disabled = false;
-                closeTime.disabled = false;
             }
         }
 
         function toggleEntryTimeFields(checkbox, id) {
             const openTime = document.getElementById('open_time' + id);
             const closeTime = document.getElementById('close_time' + id);
+            openTime.disabled = checkbox.checked;
+            closeTime.disabled = checkbox.checked;
             if (checkbox.checked) {
-                openTime.disabled = true;
-                closeTime.disabled = true;
                 openTime.value = '';
                 closeTime.value = '';
-            } else {
-                openTime.disabled = false;
-                closeTime.disabled = false;
             }
         }
 
         function toggleFormFields(select, id) {
             const type = select.value;
-            const regularFields = document.getElementById('regularFields' + id);
-            const holidayFields = document.getElementById('holidayFields' + id);
-            if (type === 'regular') {
-                regularFields.style.display = 'block';
-                holidayFields.style.display = 'none';
-            } else if (type === 'holiday') {
-                regularFields.style.display = 'none';
-                holidayFields.style.display = 'block';
-            } else {
-                regularFields.style.display = 'none';
-                holidayFields.style.display = 'none';
-            }
+            document.getElementById('regularFields' + id).style.display = type === 'regular' ? 'block' : 'none';
+            document.getElementById('holidayFields' + id).style.display = type === 'holiday' ? 'block' : 'none';
         }
         document.addEventListener('DOMContentLoaded', function() {
-            var calendarEl = document.getElementById('calendar');
-            var events = <?= $events_json ?>;
-            var calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'dayGridMonth',
-                events: events,
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-                },
-                eventDidMount: function(info) {
-                    if (info.event.extendedProps.description) {
-                        var tooltip = new bootstrap.Tooltip(info.el, {
-                            title: info.event.extendedProps.description,
-                            placement: 'top',
-                            trigger: 'hover',
-                            container: 'body'
-                        });
-                    }
-                }
-            });
-            calendar.render();
-
             const deleteButtons = document.querySelectorAll('.btn-delete');
             deleteButtons.forEach(function(button) {
                 button.addEventListener('click', function(e) {

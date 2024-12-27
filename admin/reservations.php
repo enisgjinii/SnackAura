@@ -4,29 +4,23 @@
 // Include the database connection
 include 'includes/db_connect.php';
 
-// Handle AJAX requests before including header.php to prevent output interference
+// Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     header('Content-Type: application/json');
     $response = ['status' => 'error', 'message' => 'Unknown error'];
 
     if ($_POST['ajax_action'] === 'update_status') {
-        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $id = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? '';
         $valid_statuses = ['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'];
 
         if ($id > 0 && in_array($status, $valid_statuses)) {
             try {
                 $pdo->beginTransaction();
-
-                // Update the status
-                $stmt = $pdo->prepare('UPDATE reservations SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-                $stmt->execute([$status, $id]);
-
-                // Update the notes, handling NULL values
-                $note = "Status updated to '$status'. ";
-                $stmt = $pdo->prepare('UPDATE reservations SET notes = IFNULL(CONCAT(notes, ?), ?) WHERE id = ?');
-                $stmt->execute([$note, $note, $id]);
-
+                $current_time = date('Y-m-d H:i:s');
+                $stmt = $pdo->prepare('UPDATE reservations SET status = ?, updated_at = NOW(), notes = CONCAT(IFNULL(notes, ""), ?, ". ") WHERE id = ?');
+                $note = "[$current_time] Status updated to '$status'";
+                $stmt->execute([$status, $note, $id]);
                 $pdo->commit();
                 $response = ['status' => 'success', 'message' => 'Status updated successfully'];
             } catch (PDOException $e) {
@@ -37,41 +31,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $response = ['status' => 'error', 'message' => 'Invalid ID or status'];
         }
     } elseif ($_POST['ajax_action'] === 'assign_staff') {
-        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-        $assigned_to = (isset($_POST['assigned_to']) && $_POST['assigned_to'] !== '') ? (int)$_POST['assigned_to'] : NULL;
+        $id = (int)($_POST['id'] ?? 0);
+        $assigned_to = ($_POST['assigned_to'] !== '') ? (int)$_POST['assigned_to'] : NULL;
 
         if ($id > 0) {
             try {
                 $pdo->beginTransaction();
-
+                $current_time = date('Y-m-d H:i:s');
                 if ($assigned_to !== NULL) {
-                    // Verify that the assigned user exists and is active
                     $stmt = $pdo->prepare('SELECT username FROM users WHERE id = ? AND is_active = 1');
                     $stmt->execute([$assigned_to]);
                     $user = $stmt->fetch();
-
-                    if (!$user) {
-                        throw new Exception('Employee not found or inactive');
-                    }
-
-                    $assignment = "Assigned to '{$user['username']}'. ";
+                    if (!$user) throw new Exception('Employee not found or inactive');
+                    $assignment = "[$current_time] Assigned to '{$user['username']}'";
                 } else {
-                    $assignment = "Assignment removed. ";
+                    $assignment = "[$current_time] Assignment removed";
                 }
 
-                // Update the assigned_to field
-                $stmt = $pdo->prepare('UPDATE reservations SET assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-                $stmt->execute([$assigned_to, $id]);
-
-                // Update the notes, handling NULL values
-                $stmt = $pdo->prepare('UPDATE reservations SET notes = IFNULL(CONCAT(notes, ?), ?) WHERE id = ?');
-                $stmt->execute([$assignment, $assignment, $id]);
-
+                $stmt = $pdo->prepare('UPDATE reservations SET assigned_to = ?, updated_at = NOW(), notes = CONCAT(IFNULL(notes, ""), ?, ". ") WHERE id = ?');
+                $stmt->execute([$assigned_to, $assignment, $id]);
                 $pdo->commit();
                 $response = ['status' => 'success', 'message' => 'Assignment updated successfully'];
             } catch (Exception $e) {
                 $pdo->rollBack();
                 $response = ['status' => 'error', 'message' => 'Error: ' . $e->getMessage()];
+            }
+        } else {
+            $response = ['status' => 'error', 'message' => 'Invalid reservation ID'];
+        }
+    } elseif ($_POST['ajax_action'] === 'get_notes') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            try {
+                $stmt = $pdo->prepare('SELECT notes FROM reservations WHERE id = ?');
+                $stmt->execute([$id]);
+                $reservation = $stmt->fetch();
+                if ($reservation) {
+                    $response = ['status' => 'success', 'notes' => $reservation['notes']];
+                } else {
+                    $response = ['status' => 'error', 'message' => 'Reservation not found'];
+                }
+            } catch (PDOException $e) {
+                $response = ['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()];
             }
         } else {
             $response = ['status' => 'error', 'message' => 'Invalid reservation ID'];
@@ -82,12 +83,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     exit;
 }
 
-// Include the header after handling AJAX to prevent any output before AJAX response
+// Include the header after handling AJAX
 include 'includes/header.php';
 
 // Determine the current action
 $action = $_GET['action'] ?? 'view';
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$id = (int)($_GET['id'] ?? 0);
 $message = '';
 
 // Handle Add/Edit forms submission
@@ -102,12 +103,12 @@ if (($action === 'add' || $action === 'edit') && $_SERVER['REQUEST_METHOD'] === 
     $reservation_source = $_POST['reservation_source'] ?? '';
     $confirmation_number = trim($_POST['confirmation_number'] ?? '');
     $status = $_POST['status'] ?? '';
-    $assigned_to = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : NULL;
+    $assigned_to = ($_POST['assigned_to'] !== '') ? (int)$_POST['assigned_to'] : NULL;
     $notes = trim($_POST['notes'] ?? '');
     $message_field = trim($_POST['message'] ?? '');
 
     // Validate required fields
-    if ($client_name === '' || $client_email === '' || $phone_number === '' || $reservation_date === '' || $reservation_time === '' || $number_of_people <= 0 || $reservation_source === '' || $status === '') {
+    if (empty($client_name) || empty($client_email) || empty($phone_number) || empty($reservation_date) || empty($reservation_time) || $number_of_people <= 0 || empty($reservation_source) || empty($status)) {
         $message = '<div class="alert alert-danger">All required fields must be filled.</div>';
     } elseif (!filter_var($client_email, FILTER_VALIDATE_EMAIL)) {
         $message = '<div class="alert alert-danger">Invalid email address.</div>';
@@ -124,7 +125,7 @@ if (($action === 'add' || $action === 'edit') && $_SERVER['REQUEST_METHOD'] === 
             $sql = 'INSERT INTO reservations (client_name, client_email, phone_number, reservation_date, reservation_time, number_of_people, reservation_source, confirmation_number, status, assigned_to, notes, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
             $params = [$client_name, $client_email, $phone_number, $reservation_date, $reservation_time, $number_of_people, $reservation_source, $confirmation_number, $status, $assigned_to, $notes, $message_field];
         } else { // Edit
-            $sql = 'UPDATE reservations SET client_name = ?, client_email = ?, phone_number = ?, reservation_date = ?, reservation_time = ?, number_of_people = ?, reservation_source = ?, confirmation_number = ?, status = ?, assigned_to = ?, notes = ?, message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+            $sql = 'UPDATE reservations SET client_name = ?, client_email = ?, phone_number = ?, reservation_date = ?, reservation_time = ?, number_of_people = ?, reservation_source = ?, confirmation_number = ?, status = ?, assigned_to = ?, notes = ?, message = ?, updated_at = NOW() WHERE id = ?';
             $params = [$client_name, $client_email, $phone_number, $reservation_date, $reservation_time, $number_of_people, $reservation_source, $confirmation_number, $status, $assigned_to, $notes, $message_field, $id];
         }
 
@@ -151,18 +152,14 @@ if ($action === 'edit') {
 }
 
 // Handle reservation deletion
-if ($action === 'delete') {
-    if ($id > 0) {
-        try {
-            $stmt = $pdo->prepare('DELETE FROM reservations WHERE id = ?');
-            $stmt->execute([$id]);
-            header('Location: reservations.php?action=view&message=deleted');
-            exit();
-        } catch (PDOException $e) {
-            $message = '<div class="alert alert-danger">Error deleting reservation: ' . htmlspecialchars($e->getMessage()) . '</div>';
-        }
-    } else {
-        $message = '<div class="alert alert-danger">Invalid reservation ID.</div>';
+if ($action === 'delete' && $id > 0) {
+    try {
+        $stmt = $pdo->prepare('DELETE FROM reservations WHERE id = ?');
+        $stmt->execute([$id]);
+        header('Location: reservations.php?action=view&message=deleted');
+        exit();
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-danger">Error deleting reservation: ' . htmlspecialchars($e->getMessage()) . '</div>';
     }
 }
 
@@ -175,16 +172,16 @@ function getReservations($pdo, $filters = [])
         $params = [];
 
         if (!empty($filters['status'])) {
-            $conditions[] = 'r.status = :status';
-            $params[':status'] = $filters['status'];
+            $conditions[] = 'r.status = ?';
+            $params[] = $filters['status'];
         }
 
         if (!empty($filters['source'])) {
-            $conditions[] = 'r.reservation_source = :source';
-            $params[':source'] = $filters['source'];
+            $conditions[] = 'r.reservation_source = ?';
+            $params[] = $filters['source'];
         }
 
-        if (!empty($conditions)) {
+        if ($conditions) {
             $query .= ' WHERE ' . implode(' AND ', $conditions);
         }
 
@@ -207,238 +204,235 @@ $staff = $stmt->fetchAll();
     <div class="container mt-4">
         <?php if ($action === 'add' || $action === 'edit'): ?>
             <h2 class="mb-4"><?= $action === 'add' ? 'Add Reservation' : 'Edit Reservation' ?></h2>
-            <?php if ($message): ?>
-                <?= $message ?>
-            <?php endif; ?>
-            <form method="POST" action="reservations.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>" class="row g-3">
-                <!-- Client Name -->
+            <?= $message ?>
+            <form method="POST" action="reservations.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>" class="row g-2">
+                <!-- Row 1: Name and Email -->
                 <div class="col-md-6">
-                    <label for="client_name" class="form-label">Name <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-user"></i></span>
-                        <input type="text" class="form-control" id="client_name" name="client_name" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['client_name'] : ($_POST['client_name'] ?? '')) ?>">
+                        <input type="text" class="form-control" name="client_name" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['client_name'] : ($_POST['client_name'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Client Email -->
                 <div class="col-md-6">
-                    <label for="client_email" class="form-label">Email <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                        <input type="email" class="form-control" id="client_email" name="client_email" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['client_email'] : ($_POST['client_email'] ?? '')) ?>">
+                        <input type="email" class="form-control" name="client_email" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['client_email'] : ($_POST['client_email'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Phone Number -->
+                <!-- Row 2: Phone and Source -->
                 <div class="col-md-6">
-                    <label for="phone_number" class="form-label">Phone Number <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">Phone <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-phone"></i></span>
-                        <input type="tel" class="form-control" id="phone_number" name="phone_number" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['phone_number'] : ($_POST['phone_number'] ?? '')) ?>">
+                        <input type="tel" class="form-control" name="phone_number" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['phone_number'] : ($_POST['phone_number'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Reservation Source -->
                 <div class="col-md-6">
-                    <label for="reservation_source" class="form-label">Reservation Source <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">Source <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-map-marker-alt"></i></span>
-                        <select class="form-select" id="reservation_source" name="reservation_source" required>
+                        <select class="form-select" name="reservation_source" required>
                             <option value="">Select Source</option>
-                            <option value="Online" <?= ($action === 'edit' && $reservation['reservation_source'] === 'Online') ? 'selected' : (($_POST['reservation_source'] ?? '') === 'Online' ? 'selected' : '') ?>>Online</option>
-                            <option value="Phone" <?= ($action === 'edit' && $reservation['reservation_source'] === 'Phone') ? 'selected' : (($_POST['reservation_source'] ?? '') === 'Phone' ? 'selected' : '') ?>>Phone</option>
-                            <option value="In-person" <?= ($action === 'edit' && $reservation['reservation_source'] === 'In-person') ? 'selected' : (($_POST['reservation_source'] ?? '') === 'In-person' ? 'selected' : '') ?>>In-person</option>
+                            <?php foreach (['Online', 'Phone', 'In-person'] as $source): ?>
+                                <option value="<?= $source ?>" <?= ($action === 'edit' && $reservation['reservation_source'] === $source) || (($_POST['reservation_source'] ?? '') === $source) ? 'selected' : '' ?>><?= $source ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
-                <!-- Reservation Date -->
-                <div class="col-md-6">
-                    <label for="reservation_date" class="form-label">Reservation Date <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                <!-- Row 3: Date, Time, People, Confirmation Number -->
+                <div class="col-md-3">
+                    <label class="form-label">Date <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
-                        <input type="date" class="form-control" id="reservation_date" name="reservation_date" required min="<?= date('Y-m-d') ?>" value="<?= htmlspecialchars($action === 'edit' ? $reservation['reservation_date'] : ($_POST['reservation_date'] ?? '')) ?>">
+                        <input type="date" class="form-control" name="reservation_date" required min="<?= date('Y-m-d') ?>" value="<?= htmlspecialchars($action === 'edit' ? $reservation['reservation_date'] : ($_POST['reservation_date'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Reservation Time -->
-                <div class="col-md-6">
-                    <label for="reservation_time" class="form-label">Reservation Time <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                <div class="col-md-3">
+                    <label class="form-label">Time <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-clock"></i></span>
-                        <input type="time" class="form-control" id="reservation_time" name="reservation_time" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['reservation_time'] : ($_POST['reservation_time'] ?? '')) ?>">
+                        <input type="time" class="form-control" name="reservation_time" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['reservation_time'] : ($_POST['reservation_time'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Number of People -->
                 <div class="col-md-3">
-                    <label for="number_of_people" class="form-label">Number of People <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">People <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-users"></i></span>
-                        <input type="number" class="form-control" id="number_of_people" name="number_of_people" min="1" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['number_of_people'] : ($_POST['number_of_people'] ?? '1')) ?>">
+                        <input type="number" class="form-control" name="number_of_people" min="1" required value="<?= htmlspecialchars($action === 'edit' ? $reservation['number_of_people'] : ($_POST['number_of_people'] ?? '1')) ?>">
                     </div>
                 </div>
-                <!-- Confirmation Number -->
                 <div class="col-md-3">
-                    <label for="confirmation_number" class="form-label">Confirmation Number</label>
-                    <div class="input-group">
+                    <label class="form-label">Confirmation No.</label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-hashtag"></i></span>
-                        <input type="text" class="form-control" id="confirmation_number" name="confirmation_number" value="<?= htmlspecialchars($action === 'edit' ? $reservation['confirmation_number'] : ($_POST['confirmation_number'] ?? '')) ?>">
+                        <input type="text" class="form-control" name="confirmation_number" value="<?= htmlspecialchars($action === 'edit' ? $reservation['confirmation_number'] : ($_POST['confirmation_number'] ?? '')) ?>">
                     </div>
                 </div>
-                <!-- Status -->
+                <!-- Row 4: Status and Assign To -->
                 <div class="col-md-6">
-                    <label for="status" class="form-label">Status <span class="text-danger">*</span></label>
-                    <div class="input-group">
+                    <label class="form-label">Status <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-info-circle"></i></span>
-                        <select class="form-select" id="status" name="status" required>
+                        <select class="form-select" name="status" required>
                             <option value="">Select Status</option>
                             <?php foreach (['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'] as $stat): ?>
-                                <option value="<?= htmlspecialchars($stat) ?>" <?= ($action === 'edit' && $reservation['status'] === $stat) ? 'selected' : (($_POST['status'] ?? '') === $stat ? 'selected' : '') ?>><?= htmlspecialchars($stat) ?></option>
+                                <option value="<?= $stat ?>" <?= ($action === 'edit' && $reservation['status'] === $stat) || (($_POST['status'] ?? '') === $stat) ? 'selected' : '' ?>><?= $stat ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
-                <!-- Assign To -->
                 <div class="col-md-6">
-                    <label for="assigned_to" class="form-label">Assign to</label>
-                    <div class="input-group">
+                    <label class="form-label">Assign To</label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-user-tag"></i></span>
-                        <select class="form-select" id="assigned_to" name="assigned_to">
+                        <select class="form-select" name="assigned_to">
                             <option value="">Assign Employee</option>
                             <?php foreach ($staff as $employee): ?>
-                                <option value="<?= htmlspecialchars($employee['id']) ?>" <?= ($action === 'edit' && $reservation['assigned_to'] == $employee['id']) ? 'selected' : (($_POST['assigned_to'] ?? '') == $employee['id'] ? 'selected' : '') ?>><?= htmlspecialchars($employee['username']) ?></option>
+                                <option value="<?= $employee['id'] ?>" <?= ($action === 'edit' && $reservation['assigned_to'] == $employee['id']) || (($_POST['assigned_to'] ?? '') == $employee['id']) ? 'selected' : '' ?>><?= htmlspecialchars($employee['username']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
-                <!-- Notes -->
+                <!-- Row 5: Notes and Message -->
                 <div class="col-md-6">
-                    <label for="notes" class="form-label">Notes</label>
-                    <textarea class="form-control" id="notes" name="notes" rows="2" placeholder="Add any special notes..."><?= htmlspecialchars($action === 'edit' ? $reservation['notes'] : ($_POST['notes'] ?? '')) ?></textarea>
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control form-control-sm" name="notes" rows="2" placeholder="Add any special notes..."><?= htmlspecialchars($action === 'edit' ? $reservation['notes'] : ($_POST['notes'] ?? '')) ?></textarea>
                 </div>
-                <!-- Message -->
                 <div class="col-md-6">
-                    <label for="message" class="form-label">Message</label>
-                    <input type="text" class="form-control" id="message" name="message" placeholder="Enter a message..." value="<?= htmlspecialchars($action === 'edit' ? $reservation['message'] : ($_POST['message'] ?? '')) ?>">
+                    <label class="form-label">Message</label>
+                    <input type="text" class="form-control form-control-sm" name="message" placeholder="Enter a message..." value="<?= htmlspecialchars($action === 'edit' ? $reservation['message'] : ($_POST['message'] ?? '')) ?>">
                 </div>
                 <!-- Form Buttons -->
                 <div class="col-12 d-flex justify-content-end">
-                    <button type="submit" class="btn btn-success me-2"><i class="fas fa-save"></i> <?= $action === 'add' ? 'Add' : 'Update' ?> Reservation</button>
-                    <a href="reservations.php" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+                    <button type="submit" class="btn btn-success btn-sm me-2"><i class="fas fa-save"></i> <?= $action === 'add' ? 'Add' : 'Update' ?> Reservation</button>
+                    <a href="reservations.php" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Cancel</a>
                 </div>
             </form>
-        <?php elseif ($action === 'view'): ?>
+        <?php else: ?>
             <h2 class="mb-4">Manage Reservations</h2>
-            <?php if ($message): ?>
-                <?= $message ?>
-            <?php endif; ?>
+            <?= $message ?>
             <!-- Filter Form -->
-            <form method="GET" action="reservations.php" class="row g-3 mb-4">
+            <form method="GET" action="reservations.php" class="row g-2 mb-3">
                 <input type="hidden" name="action" value="view">
-                <!-- Filter by Status -->
                 <div class="col-md-3">
-                    <label for="filter_status" class="form-label">Status</label>
-                    <select class="form-select" id="filter_status" name="filter_status">
+                    <label class="form-label">Status</label>
+                    <select class="form-select form-select-sm" name="filter_status">
                         <option value="">All Statuses</option>
                         <?php foreach (['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'] as $stat): ?>
-                            <option value="<?= htmlspecialchars($stat) ?>" <?= (isset($_GET['filter_status']) && $_GET['filter_status'] === $stat) ? 'selected' : '' ?>><?= htmlspecialchars($stat) ?></option>
+                            <option value="<?= $stat ?>" <?= (($_GET['filter_status'] ?? '') === $stat) ? 'selected' : '' ?>><?= $stat ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <!-- Filter by Source -->
                 <div class="col-md-3">
-                    <label for="filter_source" class="form-label">Reservation Source</label>
-                    <select class="form-select" id="filter_source" name="filter_source">
+                    <label class="form-label">Source</label>
+                    <select class="form-select form-select-sm" name="filter_source">
                         <option value="">All Sources</option>
-                        <option value="Online" <?= (isset($_GET['filter_source']) && $_GET['filter_source'] === 'Online') ? 'selected' : '' ?>>Online</option>
-                        <option value="Phone" <?= (isset($_GET['filter_source']) && $_GET['filter_source'] === 'Phone') ? 'selected' : '' ?>>Phone</option>
-                        <option value="In-person" <?= (isset($_GET['filter_source']) && $_GET['filter_source'] === 'In-person') ? 'selected' : '' ?>>In-person</option>
+                        <?php foreach (['Online', 'Phone', 'In-person'] as $source): ?>
+                            <option value="<?= $source ?>" <?= (($_GET['filter_source'] ?? '') === $source) ? 'selected' : '' ?>><?= $source ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
-                <!-- Filter Buttons -->
                 <div class="col-md-3 align-self-end">
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
-                    <a href="reservations.php?action=view" class="btn btn-secondary">Clear Filters</a>
+                    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    <a href="reservations.php?action=view" class="btn btn-secondary btn-sm">Clear</a>
                 </div>
             </form>
             <!-- Add Reservation Button -->
             <div class="mb-3">
-                <a href="reservations.php?action=add" class="btn btn-success"><i class="fas fa-plus"></i> Add Reservation</a>
+                <a href="reservations.php?action=add" class="btn btn-success btn-sm"><i class="fas fa-plus"></i> Add Reservation</a>
             </div>
             <!-- Reservations Table -->
             <div class="table-responsive">
-                <table id="reservationsTable" class="table table-striped table-hover align-middle">
+                <table id="reservationsTable" class="table table-striped table-hover table-sm">
                     <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Client Name</th>
-                            <th>Email</th>
-                            <th>Phone</th>
+                            <th>Client</th>
                             <th>Date</th>
                             <th>Time</th>
                             <th>People</th>
-                            <th>Source</th>
-                            <th>Confirmation No.</th>
                             <th>Status</th>
                             <th>Assigned To</th>
-                            <th>Notes</th>
-                            <th>Message</th>
-                            <th>Created At</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php
-                        // Apply filters if any
                         $filters = [];
-                        if (isset($_GET['filter_status']) && in_array($_GET['filter_status'], ['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'])) {
+                        if (!empty($_GET['filter_status']) && in_array($_GET['filter_status'], ['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'])) {
                             $filters['status'] = $_GET['filter_status'];
                         }
-                        if (isset($_GET['filter_source']) && in_array($_GET['filter_source'], ['Online', 'Phone', 'In-person'])) {
+                        if (!empty($_GET['filter_source']) && in_array($_GET['filter_source'], ['Online', 'Phone', 'In-person'])) {
                             $filters['source'] = $_GET['filter_source'];
                         }
                         $reservations = getReservations($pdo, $filters);
-                        if (!empty($reservations)):
-                            foreach ($reservations as $reservation): ?>
+                        if ($reservations):
+                            foreach ($reservations as $res): ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($reservation['id']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['client_name']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['client_email']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['phone_number']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['reservation_date']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['reservation_time']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['number_of_people']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['reservation_source']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['confirmation_number']) ?></td>
+                                    <td><?= $res['id'] ?></td>
+                                    <td><?= htmlspecialchars($res['client_name']) ?></td>
+                                    <td><?= htmlspecialchars($res['reservation_date']) ?></td>
+                                    <td><?= htmlspecialchars($res['reservation_time']) ?></td>
+                                    <td><?= $res['number_of_people'] ?></td>
                                     <td>
-                                        <select class="form-select form-select-sm status-dropdown" data-id="<?= $reservation['id'] ?>">
-                                            <option value="">Select Status</option>
+                                        <select class="form-select form-select-sm status-dropdown" data-id="<?= $res['id'] ?>">
+                                            <option value="">Select</option>
                                             <?php foreach (['Pending', 'Confirmed', 'Cancelled', 'Completed', 'No-show'] as $stat): ?>
-                                                <option value="<?= htmlspecialchars($stat) ?>" <?= ($reservation['status'] === $stat) ? 'selected' : '' ?>><?= htmlspecialchars($stat) ?></option>
+                                                <option value="<?= $stat ?>" <?= ($res['status'] === $stat) ? 'selected' : '' ?>><?= $stat ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     </td>
                                     <td>
-                                        <select class="form-select form-select-sm assign-dropdown" data-id="<?= $reservation['id'] ?>">
+                                        <select class="form-select form-select-sm assign-dropdown" data-id="<?= $res['id'] ?>">
                                             <option value="">Assign</option>
-                                            <?php foreach ($staff as $employee): ?>
-                                                <option value="<?= htmlspecialchars($employee['id']) ?>" <?= ($reservation['assigned_to'] == $employee['id']) ? 'selected' : '' ?>><?= htmlspecialchars($employee['username']) ?></option>
+                                            <?php foreach ($staff as $emp): ?>
+                                                <option value="<?= $emp['id'] ?>" <?= ($res['assigned_to'] == $emp['id']) ? 'selected' : '' ?>><?= htmlspecialchars($emp['username']) ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     </td>
-                                    <td><?= htmlspecialchars($reservation['notes']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['message']) ?></td>
-                                    <td><?= htmlspecialchars($reservation['created_at']) ?></td>
                                     <td>
-                                        <a href="reservations.php?action=edit&id=<?= $reservation['id'] ?>" class="btn btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></a>
-                                        <a href="reservations.php?action=delete&id=<?= $reservation['id'] ?>" class="btn btn-sm btn-danger" title="Delete" onclick="return confirm('Are you sure you want to delete this reservation?')"><i class="fas fa-trash-alt"></i></a>
+                                        <a href="reservations.php?action=edit&id=<?= $res['id'] ?>" class="btn btn-warning btn-sm me-1" title="Edit"><i class="fas fa-edit"></i></a>
+                                        <button type="button" class="btn btn-info btn-sm me-1 view-notes-btn" data-id="<?= $res['id'] ?>" title="View Notes"><i class="fas fa-sticky-note"></i></button>
+                                        <a href="reservations.php?action=delete&id=<?= $res['id'] ?>" class="btn btn-danger btn-sm" title="Delete" onclick="return confirm('Delete this reservation?')"><i class="fas fa-trash-alt"></i></a>
                                     </td>
                                 </tr>
                             <?php endforeach;
                         else: ?>
                             <tr>
-                                <td colspan="15" class="text-center">No reservations found.</td>
+                                <td colspan="8" class="text-center">No reservations found.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         <?php endif; ?>
+    </div>
+
+    <!-- Off-Canvas for Viewing Notes -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="notesOffcanvas">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title">Reservation Notes</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body">
+            <ul class="list-group" id="notesList">
+                <li class="list-group-item">Loading notes...</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastBody">
+                    Hello, world! This is a toast message.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -451,10 +445,6 @@ $staff = $stmt->fetchAll();
     <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <!-- Select2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <!-- SweetAlert2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         $(document).ready(function() {
             // Initialize DataTable
@@ -465,113 +455,94 @@ $staff = $stmt->fetchAll();
                 ],
                 columnDefs: [{
                     orderable: false,
-                    targets: [9, 10, 11, 12, 14] // Adjust based on your table columns
+                    targets: [5, 6, 7]
                 }],
                 language: {
                     "emptyTable": "No reservations found",
                     "info": "Showing _START_ to _END_ of _TOTAL_ reservations",
-                    "infoEmpty": "Showing 0 to 0 of 0 reservations",
                     "lengthMenu": "Show _MENU_ reservations",
                     "paginate": {
-                        "first": "First",
-                        "last": "Last",
                         "next": "Next",
                         "previous": "Previous"
-                    },
-                    "search": "Search:"
+                    }
                 }
             });
 
-            // Initialize Select2 for Status dropdowns
-            $('.status-dropdown').select2({
-                theme: 'bootstrap5',
-                minimumResultsForSearch: -1, // Hide the search box
-                width: '100%'
-            });
+            // Initialize Toast
+            var toastEl = document.getElementById('liveToast');
+            var toast = new bootstrap.Toast(toastEl);
 
-            // Initialize Select2 for Assign dropdowns
-            $('.assign-dropdown').select2({
-                theme: 'bootstrap5',
-                placeholder: 'Assign Employee',
-                allowClear: true,
-                width: '100%'
-            });
+            // Function to show toast
+            function showToast(message, type = 'primary') {
+                $('#liveToast').removeClass('text-bg-primary text-bg-danger text-bg-success');
+                $('#toastBody').text(message);
+                $('#liveToast').addClass(`text-bg-${type}`);
+                toast.show();
+            }
 
-            // Handle Status change using event delegation
+            // Handle Status Change
             $(document).on('change', '.status-dropdown', function() {
-                var id = $(this).data('id');
-                var status = $(this).val();
-                $.ajax({
-                    url: 'reservations.php',
-                    type: 'POST',
-                    data: {
+                let id = $(this).data('id');
+                let status = $(this).val();
+                if (status) {
+                    $.post('reservations.php', {
                         ajax_action: 'update_status',
                         id: id,
                         status: status
-                    },
-                    dataType: 'json',
-                    success: function(response) {
+                    }, function(response) {
                         if (response.status === 'success') {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Status updated',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+                            showToast(response.message, 'success');
                         } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error',
-                                text: response.message
-                            });
+                            showToast(response.message, 'danger');
                         }
-                    },
-                    error: function() {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: 'An error occurred while updating status.'
-                        });
+                    }, 'json').fail(() => {
+                        showToast('Failed to update status.', 'danger');
+                    });
+                }
+            });
+
+            // Handle Assign Change
+            $(document).on('change', '.assign-dropdown', function() {
+                let id = $(this).data('id');
+                let assigned_to = $(this).val();
+                $.post('reservations.php', {
+                    ajax_action: 'assign_staff',
+                    id: id,
+                    assigned_to: assigned_to
+                }, function(response) {
+                    if (response.status === 'success') {
+                        showToast(response.message, 'success');
+                    } else {
+                        showToast(response.message, 'danger');
                     }
+                }, 'json').fail(() => {
+                    showToast('Failed to assign staff.', 'danger');
                 });
             });
 
-            // Handle Assign dropdown change using event delegation
-            $(document).on('change', '.assign-dropdown', function() {
-                var id = $(this).data('id');
-                var assigned_to = $(this).val();
-                $.ajax({
-                    url: 'reservations.php',
-                    type: 'POST',
-                    data: {
-                        ajax_action: 'assign_staff',
-                        id: id,
-                        assigned_to: assigned_to
-                    },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Assignment updated',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
+            // Handle View Notes
+            $(document).on('click', '.view-notes-btn', function() {
+                let id = $(this).data('id');
+                $('#notesList').html('<li class="list-group-item">Loading notes...</li>');
+                let notesOffcanvas = new bootstrap.Offcanvas(document.getElementById('notesOffcanvas'));
+                notesOffcanvas.show();
+                $.post('reservations.php', {
+                    ajax_action: 'get_notes',
+                    id: id
+                }, function(response) {
+                    if (response.status === 'success') {
+                        let notes = response.notes.split('. ').filter(note => note.trim() !== '');
+                        if (notes.length) {
+                            let listItems = notes.map(note => `<li class="list-group-item">${note}.</li>`).join('');
+                            $('#notesList').html(listItems);
                         } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error',
-                                text: response.message
-                            });
+                            $('#notesList').html('<li class="list-group-item">No notes available.</li>');
                         }
-                    },
-                    error: function() {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error',
-                            text: 'An error occurred while assigning staff.'
-                        });
+                    } else {
+                        $('#notesList').html(`<li class="list-group-item text-danger">${response.message}</li>`);
                     }
+                }, 'json').fail(() => {
+                    $('#notesList').html('<li class="list-group-item text-danger">Failed to load notes.</li>');
                 });
             });
         });

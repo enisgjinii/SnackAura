@@ -6,7 +6,7 @@ try {
     // Define all required keys
     $legal_keys = ['agb', 'impressum', 'datenschutzerklaerung'];
     $social_keys = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
-    $cart_keys = ['cart_logo', 'cart_description']; // New Cart Settings
+    $cart_keys = ['cart_logo', 'cart_description','minimum_order']; // New Cart Settings
 
     // Merge all keys into a single array for a combined query
     $all_keys = array_merge($legal_keys, $social_keys, $cart_keys); // Include cart_keys
@@ -40,7 +40,9 @@ try {
     // Assign cart settings with default fallbacks
     $cart_logo = $settings['cart_logo'] ?? ''; // Default empty string
     $cart_description = $settings['cart_description'] ?? ''; // Default empty string
+    $minimum_order = $settings['minimum_order'] ?? ''; // Default empty string
 
+    
     // Adjust cart_logo path if necessary (remove '../' if present)
     if (!empty($cart_logo)) {
         $cart_logo = str_replace('../', '', $cart_logo);
