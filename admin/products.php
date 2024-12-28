@@ -3,14 +3,13 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 ob_start();
+// session_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 define('UPLOAD_DIR', 'uploads/');
 define('MAX_FILE_SIZE', 2 * 1024 * 1024);
 define('ALLOWED_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif']);
 define('ALLOWED_MIME_TYPES', ['image/jpeg', 'image/png', 'image/gif']);
-
 function fetchAll($pdo, $query, $params = [])
 {
     try {
@@ -21,12 +20,10 @@ function fetchAll($pdo, $query, $params = [])
         return [];
     }
 }
-
 function s($d)
 {
     return htmlspecialchars(trim((string)$d), ENT_QUOTES, 'UTF-8');
 }
-
 function handleImageUpload($file, $edit = false, $curr = '')
 {
     $r = ['success' => false, 'url' => '', 'error' => ''];
@@ -60,7 +57,6 @@ function handleImageUpload($file, $edit = false, $curr = '')
     }
     return $r;
 }
-
 function validateImageUrl($url)
 {
     $url = filter_var(trim((string)$url), FILTER_SANITIZE_URL);
@@ -74,7 +70,22 @@ function validateImageUrl($url)
     }
     return ['valid' => false, 'error' => 'Cannot verify image URL.'];
 }
-
+function getUniqueProperties($pdo, $type)
+{
+    $unique = [];
+    $stmt = $pdo->query("SELECT properties FROM products WHERE properties IS NOT NULL");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $props = json_decode($row['properties'], true);
+        if (isset($props[$type]) && is_array($props[$type])) {
+            foreach ($props[$type] as $item) {
+                if (isset($item['name']) && !in_array($item['name'], array_column($unique, 'name'))) {
+                    $unique[] = $item;
+                }
+            }
+        }
+    }
+    return $unique;
+}
 $db_categories = fetchAll($pdo, "SELECT id,name FROM categories");
 $action = $_GET['action'] ?? 'view';
 $id = (int)($_GET['id'] ?? 0);
@@ -83,10 +94,15 @@ $editing = ($action === 'edit');
 $adding = ($action === 'add');
 $viewing = ($action === 'view');
 $deleting = ($action === 'delete');
-
 $product = $editing ? fetchAll($pdo, 'SELECT * FROM products WHERE id=?', [$id]) : [];
 $product = $editing && !empty($product) ? $product[0] : [];
-
+if ($adding) {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $unique_extras = getUniqueProperties($pdo, 'extras');
+        $unique_sauces = getUniqueProperties($pdo, 'sauces');
+        $unique_dresses = getUniqueProperties($pdo, 'dresses');
+    }
+}
 if ($adding || $editing) {
     $post_image_source = $_POST['image_source'] ?? '';
     $image_source = $editing ? $post_image_source : ($post_image_source ?: 'upload');
@@ -102,11 +118,8 @@ if ($adding || $editing) {
         $has_extras_sauces = isset($_POST['has_extras_sauces']) ? 1 : 0;
         $has_sizes = isset($_POST['has_sizes']) ? 1 : 0;
         $has_dresses = isset($_POST['has_dresses']) ? 1 : 0;
-
         $message = (empty($product_code) || empty($name) || $category_id === 0) ? '<div class="alert alert-danger">Code, name, and category are required.</div>' : '';
-
         if (!$message) {
-            // Check unique product code
             $sql_check = 'SELECT COUNT(*) FROM products WHERE product_code=?' . ($editing ? ' AND id!=?' : '');
             $params_check = $editing ? [$product_code, $id] : [$product_code];
             $stmt_check = $pdo->prepare($sql_check);
@@ -115,9 +128,7 @@ if ($adding || $editing) {
                 $message = '<div class="alert alert-danger">Product code already exists.</div>';
             }
         }
-
         if (!$message) {
-            // Handle image
             $image_url = '';
             if ($image_source === 'upload') {
                 if (isset($_FILES['image_file']) && $_FILES['image_file']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -139,15 +150,12 @@ if ($adding || $editing) {
                     $message = '<div class="alert alert-danger">' . $validate['error'] . '</div>';
                 }
             }
-
             if (!$message) {
                 $properties = [];
-                // Base price if no sizes
                 if (!$has_sizes) {
                     $base_price = (float)($_POST['base_price'] ?? 0);
                     $properties['base_price'] = $base_price;
                 }
-
                 if ($has_extras_sauces) {
                     $properties['extras'] = [];
                     if (!empty($_POST['global_extras'])) {
@@ -157,7 +165,6 @@ if ($adding || $editing) {
                             if ($en !== '') $properties['extras'][] = ['name' => $en, 'price' => $ep];
                         }
                     }
-
                     $properties['sauces'] = [];
                     if (!empty($_POST['global_sauces'])) {
                         foreach ($_POST['global_sauces'] as $gs) {
@@ -167,7 +174,6 @@ if ($adding || $editing) {
                         }
                     }
                 }
-
                 if ($has_sizes) {
                     $properties['sizes'] = [];
                     if (!empty($_POST['sizes_block'])) {
@@ -176,7 +182,6 @@ if ($adding || $editing) {
                             $price = (float)($block['price'] ?? 0);
                             $exs = [];
                             $sas = [];
-
                             if ($has_extras_sauces && !empty($block['extras_selected'])) {
                                 foreach ($block['extras_selected'] as $ex_i) {
                                     $ex_i = (int)$ex_i;
@@ -185,7 +190,6 @@ if ($adding || $editing) {
                                     if ($gex) $exs[] = ['name' => $gex['name'], 'price' => $ex_pr];
                                 }
                             }
-
                             if ($has_extras_sauces && !empty($block['sauces_selected'])) {
                                 foreach ($block['sauces_selected'] as $sa_i) {
                                     $sa_i = (int)$sa_i;
@@ -194,12 +198,10 @@ if ($adding || $editing) {
                                     if ($gsa) $sas[] = ['name' => $gsa['name'], 'price' => $sa_pr];
                                 }
                             }
-
                             if ($size) $properties['sizes'][] = ['size' => $size, 'price' => $price, 'extras' => $exs, 'sauces' => $sas];
                         }
                     }
                 }
-
                 if ($has_dresses) {
                     $properties['dresses'] = [];
                     if (!empty($_POST['dresses'])) {
@@ -210,7 +212,6 @@ if ($adding || $editing) {
                         }
                     }
                 }
-
                 $props_json = json_encode($properties);
                 try {
                     if ($editing) {
@@ -232,8 +233,6 @@ if ($adding || $editing) {
         }
     }
 }
-
-// Pre-fill form fields
 $pc = $editing ? $product['product_code'] : ($_POST['product_code'] ?? '');
 $pn = $editing ? $product['name'] : ($_POST['name'] ?? '');
 $category_id = $editing ? $product['category_id'] : ($_POST['category_id'] ?? 0);
@@ -258,7 +257,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
     if ($adding) echo '<h2>Add Product</h2>';
     elseif ($editing) echo '<h2>Edit Product</h2>';
     echo $message;
-
     if ($adding || $editing) {
     ?>
         <form method="POST" enctype="multipart/form-data" action="products.php?action=<?= $editing ? 'edit&id=' . $id : 'add' ?>">
@@ -304,8 +302,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         <input class="form-check-input" type="checkbox" name="has_dresses" <?= $has_dresses ? 'checked' : '' ?>>
                         <label class="form-check-label">Has Dresses</label>
                     </div>
-
-                    <!-- Base Price if no sizes -->
                     <div id="basePriceField" style="display:<?= $has_sizes ? 'none' : 'block' ?>;" class="mt-3">
                         <label><strong>Base Price</strong></label>
                         <div class="input-group">
@@ -313,8 +309,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             <input type="number" step="0.01" class="form-control" name="base_price" value="<?= s($base_price) ?>" placeholder="e.g., 9.99">
                         </div>
                     </div>
-
-                    <!-- Extras & Sauces -->
                     <div id="extrasSaucesFields" style="display:<?= $has_extras_sauces ? 'block' : 'none' ?>;" class="mt-3">
                         <label>Global Extras & Sauces</label>
                         <small class="text-muted d-block">Define global extras and sauces for all sizes or base product.</small>
@@ -323,7 +317,7 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                 <label><strong>Extras (name/price)</strong></label>
                                 <div id="globalExtrasContainer">
                                     <?php
-                                    if ($editing && isset($props['extras'])) {
+                                    if (($editing || $adding) && isset($props['extras'])) {
                                         foreach ($props['extras'] as $ei => $ev) {
                                             echo '<div class="row g-2 mb-2 global-extra">
                                                 <div class="col"><input type="text" class="form-control" name="global_extras[' . $ei . '][name]" value="' . s($ev['name']) . '" placeholder="Extra name"></div>
@@ -331,6 +325,17 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                                 <div class="col-auto"><button type="button" class="btn btn-danger remove-global-extra">&times;</button></div>
                                             </div>';
                                         }
+                                    }
+                                    if ($adding && !empty($unique_extras)) {
+                                        echo '<div class="mb-2">
+                                            <label>Select from existing Extras:</label>
+                                            <select class="form-select existing-extras-select" multiple>
+                                                ';
+                                        foreach ($unique_extras as $ue) {
+                                            echo '<option value="' . s($ue['name']) . '">' . s($ue['name']) . ' ($' . s($ue['price']) . ')</option>';
+                                        }
+                                        echo '</select>
+                                        </div>';
                                     }
                                     ?>
                                 </div>
@@ -340,7 +345,7 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                 <label><strong>Sauces (name/price)</strong></label>
                                 <div id="globalSaucesContainer">
                                     <?php
-                                    if ($editing && isset($props['sauces'])) {
+                                    if (($editing || $adding) && isset($props['sauces'])) {
                                         foreach ($props['sauces'] as $si => $sv) {
                                             echo '<div class="row g-2 mb-2 global-sauce">
                                                 <div class="col"><input type="text" class="form-control" name="global_sauces[' . $si . '][name]" value="' . s($sv['name']) . '" placeholder="Sauce name"></div>
@@ -349,14 +354,23 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                             </div>';
                                         }
                                     }
+                                    if ($adding && !empty($unique_sauces)) {
+                                        echo '<div class="mb-2">
+                                            <label>Select from existing Sauces:</label>
+                                            <select class="form-select existing-sauces-select" multiple>
+                                                ';
+                                        foreach ($unique_sauces as $us) {
+                                            echo '<option value="' . s($us['name']) . '">' . s($us['name']) . ' ($' . s($us['price']) . ')</option>';
+                                        }
+                                        echo '</select>
+                                        </div>';
+                                    }
                                     ?>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-primary mt-2" id="addGlobalSauce">Add Sauce</button>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Sizes -->
                     <div id="sizesFields" style="display:<?= $has_sizes ? 'block' : 'none' ?>;" class="mt-3">
                         <label><strong>Sizes</strong></label>
                         <small class="text-muted d-block">Define sizes and set their prices and extras/sauces.</small>
@@ -385,8 +399,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         </div>
                         <button type="button" class="btn btn-primary btn-sm mt-2" id="addSizeBlock"><i class="fas fa-plus-circle"></i> Add Size</button>
                     </div>
-
-                    <!-- Dresses -->
                     <div id="dressesFields" class="mt-3" style="display:<?= $has_dresses ? 'block' : 'none' ?>;">
                         <label><strong>Dresses</strong></label>
                         <small class="text-muted d-block">Additional dress options.</small>
@@ -405,13 +417,23 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                     </div>';
                                 }
                             }
+                            if ($adding && !empty($unique_dresses)) {
+                                echo '<div class="mb-2">
+                                    <label>Select from existing Dresses:</label>
+                                    <select class="form-select existing-dresses-select" multiple>
+                                        ';
+                                foreach ($unique_dresses as $ud) {
+                                    echo '<option value="' . s($ud['name']) . '">' . s($ud['name']) . ' ($' . s($ud['price']) . ')</option>';
+                                }
+                                echo '</select>
+                                </div>';
+                            }
                             ?>
                         </div>
                         <button type="button" class="btn btn-primary btn-sm mt-2" id="addDressBlock"><i class="fas fa-plus-circle"></i> Add Dress</button>
                     </div>
                 </div>
             </div>
-            <!-- Image source -->
             <div class="row g-3 mt-3">
                 <div class="col-md-6">
                     <label>Image Source *</label><br>
@@ -425,7 +447,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     </div>
                 </div>
             </div>
-            <!-- Upload image -->
             <div class="row g-3 mt-3" id="image_upload_field" style="display:<?= $img_u ?>;">
                 <div class="col-md-6">
                     <label>Upload Image</label>
@@ -436,7 +457,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     } ?>
                 </div>
             </div>
-            <!-- Image URL -->
             <div class="row g-3 mt-3" id="image_url_field" style="display:<?= $img_ul ?>;">
                 <div class="col-md-6">
                     <label>Image URL</label>
@@ -449,7 +469,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     } ?>
                 </div>
             </div>
-            <!-- Allergies & Description -->
             <div class="row g-3 mt-3">
                 <div class="col-md-6">
                     <label>Allergies</label>
@@ -460,7 +479,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     <div class="input-group"><span class="input-group-text"><i class="fas fa-align-left"></i></span><textarea class="form-control" name="description"><?= s($desc) ?></textarea></div>
                 </div>
             </div>
-            <!-- Flags -->
             <div class="row g-3 mt-3">
                 <div class="col-md-4">
                     <div class="form-check"><input type="checkbox" class="form-check-input" name="is_new" <?= $i_new ? 'checked' : '' ?>><label class="form-check-label">New</label></div>
@@ -487,7 +505,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
         foreach ($products as $p) {
             $pr = json_decode($p['properties'], true);
             echo '<tr><td>' . s($p['id']) . '</td><td>' . s($p['product_code']) . '</td><td>' . s($p['name']) . '</td><td>' . s($p['category_name']) . '</td><td>';
-            // Details
             if (!empty($pr['sizes'])) {
                 foreach ($pr['sizes'] as $sz) {
                     echo '<strong>Size:</strong> ' . s($sz['size']) . ' - $' . number_format($sz['price'], 2) . '<br>';
@@ -511,7 +528,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             } elseif (isset($pr['base_price'])) {
                 echo '<strong>Base Price:</strong> $' . number_format($pr['base_price'], 2) . '<br>';
             }
-
             if (isset($pr['extras']) && empty($pr['sizes'])) {
                 echo '<strong>Extras:</strong> ';
                 $exarr = [];
@@ -568,7 +584,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
     }
     ?>
 </div>
-
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
@@ -577,7 +592,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
 <script>
     $(document).ready(function() {
         var sizeBlockCounter = 1000;
-
         function toggleFields() {
             $('#extrasSaucesFields').toggle($('input[name="has_extras_sauces"]').is(':checked'));
             $('#sizesFields').toggle($('input[name="has_sizes"]').is(':checked'));
@@ -585,14 +599,12 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             $('#basePriceField').toggle(!$('input[name="has_sizes"]').is(':checked'));
             updatePreview();
         }
-
         $('input[name="has_extras_sauces"],input[name="has_sizes"],input[name="has_dresses"]').change(function() {
             toggleFields();
             populateExtrasSaucesSelects();
             refreshAllPrices();
         });
-
-        function getGlobalExtras() {
+        function getUniqueExtras() {
             var globalExtras = [];
             $('#globalExtrasContainer .global-extra').each(function() {
                 var en = $(this).find('input[name*="name"]').val() || '';
@@ -604,8 +616,7 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             });
             return globalExtras;
         }
-
-        function getGlobalSauces() {
+        function getUniqueSauces() {
             var globalSauces = [];
             $('#globalSaucesContainer .global-sauce').each(function() {
                 var sn = $(this).find('input[name*="name"]').val() || '';
@@ -617,10 +628,22 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             });
             return globalSauces;
         }
-
+        function getUniqueDresses() {
+            var globalDresses = [];
+            $('#dressBlocks .dress-block').each(function() {
+                var dn = $(this).find('input[name*="dress"]').val() || '';
+                var dp = $(this).find('input[name*="price"]').val() || 0;
+                if (dn.trim() !== '') globalDresses.push({
+                    name: dn,
+                    price: dp
+                });
+            });
+            return globalDresses;
+        }
         function populateExtrasSaucesSelects() {
-            var globalExtras = getGlobalExtras();
-            var globalSauces = getGlobalSauces();
+            var globalExtras = getUniqueExtras();
+            var globalSauces = getUniqueSauces();
+            var globalDresses = getUniqueDresses();
             $('#sizeBlocks .size-block').each(function() {
                 var $block = $(this);
                 var $extrasSelect = $block.find('.extras-select');
@@ -629,37 +652,30 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 var saucesVal = $saucesSelect.val() || [];
                 $extrasSelect.empty();
                 $saucesSelect.empty();
-
                 $.each(globalExtras, function(i, ex) {
                     $extrasSelect.append('<option value="' + i + '">' + ex.name + '</option>');
                 });
                 $.each(globalSauces, function(i, sa) {
                     $saucesSelect.append('<option value="' + i + '">' + sa.name + '</option>');
                 });
-
                 $extrasSelect.val(extrasVal).trigger('change');
                 $saucesSelect.val(saucesVal).trigger('change');
             });
         }
-
         $(document).on('change', '.extras-select', function() {
             updateSizeExtrasPrices($(this).closest('.size-block'));
         });
-
         $(document).on('change', '.sauces-select', function() {
             updateSizeSaucesPrices($(this).closest('.size-block'));
         });
-
         function getSizeBlockName($block) {
             var firstInput = $block.find('input[name^="sizes_block["]').first();
             return firstInput.attr('name').replace(/\[size\]$/, '');
         }
-
         function updateSizeExtrasPrices($block) {
-            var globalExtras = getGlobalExtras();
+            var globalExtras = getUniqueExtras();
             var selectedExtras = $block.find('.extras-select').val() || [];
             var $extrasPrices = $block.find('.extras-prices').empty();
-
             $.each(selectedExtras, function(_, exIndex) {
                 exIndex = parseInt(exIndex, 10);
                 if (globalExtras[exIndex]) {
@@ -669,12 +685,10 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             });
             updatePreview();
         }
-
         function updateSizeSaucesPrices($block) {
-            var globalSauces = getGlobalSauces();
+            var globalSauces = getUniqueSauces();
             var selectedSauces = $block.find('.sauces-select').val() || [];
             var $saucesPrices = $block.find('.sauces-prices').empty();
-
             $.each(selectedSauces, function(_, saIndex) {
                 saIndex = parseInt(saIndex, 10);
                 if (globalSauces[saIndex]) {
@@ -684,7 +698,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             });
             updatePreview();
         }
-
         $('#addSizeBlock').click(function() {
             var index = sizeBlockCounter++;
             $('#sizeBlocks').append(renderSizeBlock(index));
@@ -694,36 +707,34 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             populateExtrasSaucesSelects();
             updatePreview();
         });
-
         $(document).on('click', '.remove-size-block', function() {
             $(this).closest('.size-block').remove();
             updatePreview();
         });
-
         $(document).on('click', '.remove-dress-block', function() {
             $(this).closest('.dress-block').remove();
             updatePreview();
         });
-
         $(document).on('click', '.remove-global-extra', function() {
             $(this).closest('.global-extra').remove();
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
         });
-
         $(document).on('click', '.remove-global-sauce', function() {
             $(this).closest('.global-sauce').remove();
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
         });
-
         $('#addDressBlock').click(function() {
             $('#dressBlocks').append(renderDressBlock());
+            $('.extras-select,.sauces-select').select2({
+                width: '100%'
+            });
+            populateExtrasSaucesSelects();
             updatePreview();
         });
-
         $('#addGlobalExtra').click(function() {
             var c = $('#globalExtrasContainer .global-extra').length;
             $('#globalExtrasContainer').append('<div class="row g-2 mb-2 global-extra"><div class="col"><input type="text" class="form-control" name="global_extras[' + c + '][name]" placeholder="Extra name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_extras[' + c + '][price]" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-extra">&times;</button></div></div>');
@@ -731,7 +742,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             refreshAllPrices();
             updatePreview();
         });
-
         $('#addGlobalSauce').click(function() {
             var c = $('#globalSaucesContainer .global-sauce').length;
             $('#globalSaucesContainer').append('<div class="row g-2 mb-2 global-sauce"><div class="col"><input type="text" class="form-control" name="global_sauces[' + c + '][name]" placeholder="Sauce name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_sauces[' + c + '][price]" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-sauce">&times;</button></div></div>');
@@ -739,14 +749,87 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             refreshAllPrices();
             updatePreview();
         });
-
+        $('.existing-extras-select').change(function() {
+            var selectedExtras = $(this).val();
+            if (selectedExtras) {
+                selectedExtras.forEach(function(extraName) {
+                    var exists = false;
+                    $('#globalExtrasContainer .global-extra').each(function() {
+                        if ($(this).find('input[name*="[name]"]').val() === extraName) {
+                            exists = true;
+                            return false;
+                        }
+                    });
+                    if (!exists) {
+                        var index = $('#globalExtrasContainer .global-extra').length;
+                        var optionText = $('.existing-extras-select option[value="' + extraName + '"]').text();
+                        var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
+                        var price = priceMatch ? priceMatch[0].replace('$', '') : '';
+                        $('#globalExtrasContainer').append('<div class="row g-2 mb-2 global-extra"><div class="col"><input type="text" class="form-control" name="global_extras[' + index + '][name]" value="' + extraName + '" placeholder="Extra name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_extras[' + index + '][price]" value="' + price + '" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-extra">&times;</button></div></div>');
+                    }
+                });
+                $(this).val(null).trigger('change');
+            }
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+        $('.existing-sauces-select').change(function() {
+            var selectedSauces = $(this).val();
+            if (selectedSauces) {
+                selectedSauces.forEach(function(sauceName) {
+                    var exists = false;
+                    $('#globalSaucesContainer .global-sauce').each(function() {
+                        if ($(this).find('input[name*="[name]"]').val() === sauceName) {
+                            exists = true;
+                            return false;
+                        }
+                    });
+                    if (!exists) {
+                        var index = $('#globalSaucesContainer .global-sauce').length;
+                        var optionText = $('.existing-sauces-select option[value="' + sauceName + '"]').text();
+                        var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
+                        var price = priceMatch ? priceMatch[0].replace('$', '') : '';
+                        $('#globalSaucesContainer').append('<div class="row g-2 mb-2 global-sauce"><div class="col"><input type="text" class="form-control" name="global_sauces[' + index + '][name]" value="' + sauceName + '" placeholder="Sauce name"></div><div class="col"><input type="number" step="0.01" class="form-control" name="global_sauces[' + index + '][price]" value="' + price + '" placeholder="Price"></div><div class="col-auto"><button type="button" class="btn btn-danger remove-global-sauce">&times;</button></div></div>');
+                    }
+                });
+                $(this).val(null).trigger('change');
+            }
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
+        $('.existing-dresses-select').change(function() {
+            var selectedDresses = $(this).val();
+            if (selectedDresses) {
+                selectedDresses.forEach(function(dressName) {
+                    var exists = false;
+                    $('#dressBlocks .dress-block').each(function() {
+                        if ($(this).find('input[name*="[dress]"]').val() === dressName) {
+                            exists = true;
+                            return false;
+                        }
+                    });
+                    if (!exists) {
+                        var index = $('#dressBlocks .dress-block').length;
+                        var optionText = $('.existing-dresses-select option[value="' + dressName + '"]').text();
+                        var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
+                        var price = priceMatch ? priceMatch[0].replace('$', '') : '';
+                        $('#dressBlocks').append('<div class="dress-block border p-3 mb-3"><div class="row g-2 align-items-end"><div class="col-md-6"><label>Dress</label><input type="text" class="form-control" name="dresses[' + index + '][dress]" required value="' + dressName + '" placeholder="Italian Dressing"></div><div class="col-md-4"><label>Price($)</label><input type="number" step="0.01" class="form-control" name="dresses[' + index + '][price]" required value="' + price + '" placeholder="1.50"></div><div class="col-md-2 text-end"><button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button></div></div></div>');
+                    }
+                });
+                $(this).val(null).trigger('change');
+            }
+            populateExtrasSaucesSelects();
+            refreshAllPrices();
+            updatePreview();
+        });
         function refreshAllPrices() {
             $('#sizeBlocks .size-block').each(function() {
                 updateSizeExtrasPrices($(this));
                 updateSizeSaucesPrices($(this));
             });
         }
-
         $('input[name="image_source"]').change(function() {
             var v = $(this).val();
             $('#image_upload_field').toggle(v === 'upload');
@@ -759,17 +842,18 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $('input[name="image_url"]').prop('required', true).prop('disabled', false);
             }
         }).trigger('change');
-
         $('.extras-select,.sauces-select').select2({
             placeholder: "Select options",
             width: '100%'
         });
-
+        $('.existing-extras-select,.existing-sauces-select,.existing-dresses-select').select2({
+            placeholder: "Select options",
+            width: '100%'
+        });
         $('body').append('<div id="previewBox" class="card mt-5"><div class="card-header">Real-Time Preview</div><div class="card-body" id="previewContent">No data yet...</div></div>');
         $(document).on('input change', 'input, textarea, select', function() {
             updatePreview();
         });
-
         $(document).on('change', 'input[name="image_file"]', function() {
             var input = this;
             if (input.files && input.files[0]) {
@@ -782,7 +866,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $('#image_file_preview').empty();
             }
         });
-
         $(document).on('input', 'input[name="image_url"]', function() {
             var url = $(this).val();
             if (url.trim() !== '') {
@@ -791,12 +874,10 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $('#image_url_preview').empty();
             }
         });
-
         function updatePreview() {
             var extrasSauces = $('input[name="has_extras_sauces"]').is(':checked');
             var sizes = $('input[name="has_sizes"]').is(':checked');
             var dresses = $('input[name="has_dresses"]').is(':checked');
-
             var productCode = $('input[name="product_code"]').val() || '';
             var productName = $('input[name="name"]').val() || '';
             var categoryName = $('select[name="category_id"] option:selected').text() || '';
@@ -805,9 +886,9 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             var isNew = $('input[name="is_new"]').is(':checked');
             var isOffer = $('input[name="is_offer"]').is(':checked');
             var isActive = $('input[name="is_active"]').is(':checked');
-            var globalExtras = getGlobalExtras();
-            var globalSauces = getGlobalSauces();
-
+            var globalExtras = getUniqueExtras();
+            var globalSauces = getUniqueSauces();
+            var globalDresses = getUniqueDresses();
             var preview = '<strong>Product:</strong> ' + productName + ' (Code: ' + productCode + ')<br>';
             preview += '<strong>Category:</strong> ' + categoryName + '<br>';
             if (allergies.trim() !== '') preview += '<strong>Allergies:</strong> ' + allergies + '<br>';
@@ -815,7 +896,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             if (isNew) preview += '<span class="badge bg-success">New</span> ';
             if (isOffer) preview += '<span class="badge bg-warning text-dark">Offer</span> ';
             if (isActive) preview += '<span class="badge bg-primary">Active</span><br>';
-
             if (extrasSauces) {
                 preview += '<strong>Global Extras:</strong><br>';
                 if (globalExtras.length > 0) {
@@ -823,7 +903,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         preview += '- ' + ex.name + ' ($' + ex.price + ')<br>';
                     });
                 } else preview += '(None)<br>';
-
                 preview += '<strong>Global Sauces:</strong><br>';
                 if (globalSauces.length > 0) {
                     $.each(globalSauces, function(i, sa) {
@@ -831,7 +910,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     });
                 } else preview += '(None)<br>';
             }
-
             if (sizes) {
                 preview += '<strong>Sizes:</strong><br>';
                 $('#sizeBlocks .size-block').each(function() {
@@ -842,7 +920,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         preview += sz + ' ($' + szp + ')<br>';
                         var extrasSelected = $thisBlock.find('.extras-select').val() || [];
                         var saucesSelected = $thisBlock.find('.sauces-select').val() || [];
-
                         if (extrasSelected.length > 0) {
                             preview += '&nbsp;&nbsp;Extras:<br>';
                             $.each(extrasSelected, function(_, exIndex) {
@@ -853,7 +930,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                 }
                             });
                         }
-
                         if (saucesSelected.length > 0) {
                             preview += '&nbsp;&nbsp;Sauces:<br>';
                             $.each(saucesSelected, function(_, saIndex) {
@@ -867,11 +943,9 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     }
                 });
             } else {
-                // Show base price if no sizes
                 var basePrice = $('input[name="base_price"]').val() || 0;
                 preview += '<strong>Base Price:</strong> $' + basePrice + '<br>';
             }
-
             if (dresses) {
                 preview += '<strong>Dresses:</strong><br>';
                 $('#dressBlocks .dress-block').each(function() {
@@ -880,10 +954,8 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     if (dn.trim() !== '') preview += '- ' + dn + ' ($' + dp + ')<br>';
                 });
             }
-
             $('#previewContent').html(preview);
         }
-
         function renderSizeBlock(index) {
             return '<div class="size-block border p-3 mb-3" data-block-index="' + index + '">\
                 <div class="row g-2 align-items-end">\
@@ -899,7 +971,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 <div class="sauces-prices mt-3"></div>\
             </div>';
         }
-
         function renderDressBlock() {
             var c = $('#dressBlocks .dress-block').length;
             return '<div class="dress-block border p-3 mb-3">\
@@ -910,11 +981,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 </div>\
             </div>';
         }
-
-        // Initial setup
-        toggleFields();
-        populateExtrasSaucesSelects();
-        refreshAllPrices();
     });
 </script>
 <?php require_once 'includes/footer.php'; ?>

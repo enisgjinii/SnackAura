@@ -1,34 +1,26 @@
 <?php
 ob_start();
 require 'vendor/autoload.php';
-
 use Stripe\Stripe;
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\{Amount, Payer, Payment, RedirectUrls, Transaction, PaymentExecution};
-
 // Initialize Stripe
 Stripe::setApiKey("sk_test_XXX"); // Replace with your Stripe secret key
-
 // Initialize PayPal
 $paypal = new ApiContext(
     new OAuthTokenCredential(
-        'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-NDgpng0NLAiWr',     // Replace with your PayPal Client ID
-        'EKbX-h3EwnMlRoAyyGBCFi2370doQi06hO6iOiQJsQ1gDnpvTrwYQIyTG2MxG6H1vVuWpz_Or76JTThi'  // Replace with your PayPal Client Secret
+        'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-NDgpng0NLAiWr', // Client ID
+        'EKbX-h3EwnMlRoAyyGBCFi2370doQi06hO6iOiQJsQ1gDnpvTrwYQIyTG2MxG6H1vVuWpz_Or76JTThi'  // Client Secret
     )
 );
-$paypal->setConfig([
-    'mode' => 'sandbox', // Change to 'live' for production
-]);
-
+$paypal->setConfig(['mode' => 'sandbox']); // Change to 'live' for production
 session_start();
 require 'includes/db_connect.php';
-
 // CSRF Token Initialization
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-
 // Error Logging Function
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
 function log_error_markdown($msg, $ctx = '')
@@ -41,7 +33,6 @@ function log_error_markdown($msg, $ctx = '')
     $m .= "---\n\n";
     file_put_contents(ERROR_LOG_FILE, $m, FILE_APPEND | LOCK_EX);
 }
-
 // Exception and Error Handlers
 set_exception_handler(function ($e) {
     log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: " . $e->getFile() . " Line: " . $e->getLine());
@@ -52,16 +43,13 @@ set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-
 // Include Settings and Initialize Cart
 include 'settings_fetch.php';
 $_SESSION['cart'] = $_SESSION['cart'] ?? [];
-
 // Fetch Active Stores if Not Selected
 if (!isset($_SESSION['selected_store'])) {
     $stores = $pdo->query("SELECT id, name FROM stores WHERE is_active=1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
-
 // Fetch Operational Hours and Check Store Status
 $is_closed = false;
 $notification = [];
@@ -69,7 +57,6 @@ $cdt = new DateTime();
 $curD = $cdt->format('Y-m-d');
 $curDay = $cdt->format('l');
 $curT = $cdt->format('H:i:s');
-
 $q = "SELECT type, is_closed, title, description, date, open_time, close_time, day_of_week 
       FROM operational_hours 
       WHERE (type='holiday' AND date=:d) OR (type='regular' AND day_of_week=:dw) 
@@ -77,7 +64,6 @@ $q = "SELECT type, is_closed, title, description, date, open_time, close_time, d
 $stmt = $pdo->prepare($q);
 $stmt->execute(['d' => $curD, 'dw' => $curDay]);
 $op = $stmt->fetch(PDO::FETCH_ASSOC);
-
 if ($op) {
     if ($op['type'] === 'holiday' && $op['is_closed']) {
         $is_closed = true;
@@ -102,7 +88,6 @@ if ($op) {
         }
     }
 }
-
 // Fetch Tip Options
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -110,7 +95,6 @@ try {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
-
 // Handle Tip Selection
 if (isset($_GET['select_tip'])) {
     $tid = (int)$_GET['select_tip'];
@@ -123,20 +107,34 @@ if (isset($_GET['select_tip'])) {
     header("Location: index.php?error=invalid_tip");
     exit;
 }
-
 // Helper Functions
 function fetchProduct($pdo, $pid)
 {
     $stmt = $pdo->prepare("SELECT * FROM products WHERE id=:p AND is_active=1");
     $stmt->execute(['p' => $pid]);
-    return $stmt->fetch(PDO::FETCH_ASSOC);
+    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$product) {
+        return null;
+    }
+    // Decode the 'properties' JSON safely
+    $props = json_decode($product['properties'] ?? '{}', true) ?: [];
+    // Ensure all necessary keys are defined as arrays
+    $product['sizes']   = $props['sizes']   ?? [];
+    $product['extras']  = $props['extras']  ?? [];
+    $product['sauces']  = $props['sauces']  ?? [];
+    $product['dresses'] = $props['dresses'] ?? [];
+    // Handle base_price
+    if (!empty($props['base_price'])) {
+        $product['base_price'] = (float)$props['base_price'];
+    } else {
+        $product['base_price'] = (float)$product['base_price'];
+    }
+    return $product;
 }
-
 function calculateCartTotal($cart)
 {
     return array_reduce($cart, fn($c, $i) => $c + ($i['total_price'] ?? 0.0), 0.0);
 }
-
 function applyTip($cart_total, $tip_options, $tip_id)
 {
     if (!$tip_id) return 0.0;
@@ -147,7 +145,6 @@ function applyTip($cart_total, $tip_options, $tip_id)
     }
     return 0.0;
 }
-
 // Handle Form Submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Store Selection
@@ -177,130 +174,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_message = "Selected store is not available.";
         }
     }
-
     // Add to Cart
     if (isset($_POST['add_to_cart'])) {
         $pid = (int)$_POST['product_id'];
         $qty = max(1, (int)$_POST['quantity']);
         $sz = $_POST['size'] ?? null;
-        $ex = $_POST['extras'] ?? [];
-        $sa = $_POST['sauces'] ?? [];
-        $dr = $_POST['dresses'] ?? [];
+        $posted_extras = $_POST['extras'] ?? [];
+        $posted_sauces = $_POST['sauces'] ?? [];
+        $posted_dresses = $_POST['dresses'] ?? [];
         $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
         $spec = trim($_POST['special_instructions'] ?? '');
-
-        $pr = fetchProduct($pdo, $pid);
-        if ($pr) {
-            $props = json_decode($pr['properties'], true) ?? [];
-            $base = isset($props['base_price']) && (float)$props['base_price'] ? (float)$props['base_price'] : (float)$pr['base_price'];
-            $xopt = $props['extras'] ?? [];
-            $sopt = $props['sauces'] ?? [];
-            $zopt = $props['sizes'] ?? [];
-            $dopt = $props['dresses'] ?? [];
-            $sel_size = null;
-            $szprice = 0.0;
-
-            if ($sz) {
-                foreach ($zopt as $z) {
-                    if (!empty($z['size']) && $z['size'] === $sz) {
-                        $sel_size = $z;
-                        $szprice = (float)($z['price'] ?? 0.0);
-                        break;
-                    }
-                }
-                if (!$sel_size) {
-                    log_error_markdown("Invalid size: $sz for Product $pid", "Add to Cart");
-                    header("Location: index.php?error=invalid_size");
-                    exit;
-                }
-                if (!empty($sel_size['extras'])) $xopt = $sel_size['extras'];
-                if (!empty($sel_size['sauces'])) $sopt = $sel_size['sauces'];
-                if (!empty($sel_size['dresses'])) $dopt = $sel_size['dresses'];
-            }
-
-            // Select Extras
-            $sel_ex = array_filter($xopt, fn($xo) => in_array($xo['name'], $ex));
-            $exTot = array_sum(array_column($sel_ex, 'price'));
-
-            // Select Sauces
-            $sel_sa = array_filter($sopt, fn($sx) => in_array($sx['name'], $sa));
-            $saTot = array_sum(array_column($sel_sa, 'price'));
-
-            // Select Dresses
-            $sel_dr = array_filter($dopt, fn($dx) => in_array($dx['name'], $dr));
-            $drTot = array_sum(array_column($sel_dr, 'price'));
-
-            // Select Drink
-            $drink_details = null;
-            $drinkTot = 0.0;
-            if ($drink_id) {
-                $st = $pdo->prepare("SELECT * FROM drinks WHERE id=?");
-                $st->execute([$drink_id]);
-                $dk = $st->fetch(PDO::FETCH_ASSOC);
-                if ($dk) {
-                    $drink_details = $dk;
-                    $drinkTot = (float)($dk['price'] ?? 0.0);
-                }
-            }
-
-            // Calculate Prices
-            $unit_price = $base + $szprice + $exTot + $saTot + $drTot + $drinkTot;
-            $total_price = $unit_price * $qty;
-
-            // Prepare Cart Item
-            $cart_item = [
-                'product_id' => $pr['id'],
-                'name' => $pr['name'],
-                'description' => $pr['description'],
-                'image_url' => $pr['image_url'],
-                'size' => $sel_size['size'] ?? null,
-                'size_price' => $szprice,
-                'extras' => array_values($sel_ex),
-                'sauces' => array_values($sel_sa),
-                'dresses' => array_values($sel_dr),
-                'drink' => $drink_details,
-                'special_instructions' => $spec,
-                'quantity' => $qty,
-                'unit_price' => $unit_price,
-                'total_price' => $total_price
-            ];
-
-            // Check for Duplicate Items
-            $dup_idx = false;
-            foreach ($_SESSION['cart'] as $index => $item) {
-                if (
-                    $item['product_id'] === $cart_item['product_id'] &&
-                    $item['size'] === $cart_item['size'] &&
-                    (($item['drink']['id'] ?? null) === ($cart_item['drink']['id'] ?? null)) &&
-                    $item['special_instructions'] === $cart_item['special_instructions'] &&
-                    count(array_intersect(array_column($item['extras'], 'name'), array_column($cart_item['extras'], 'name'))) === count($cart_item['extras']) &&
-                    count(array_intersect(array_column($item['sauces'], 'name'), array_column($cart_item['sauces'], 'name'))) === count($cart_item['sauces']) &&
-                    count(array_intersect(array_column($item['dresses'], 'name'), array_column($cart_item['dresses'], 'name'))) === count($cart_item['dresses'])
-                ) {
-                    $dup_idx = $index;
-                    break;
-                }
-            }
-
-            if ($dup_idx !== false) {
-                $_SESSION['cart'][$dup_idx]['quantity'] += $qty;
-                $_SESSION['cart'][$dup_idx]['total_price'] += $total_price;
-            } else {
-                $_SESSION['cart'][] = $cart_item;
-            }
-
-            header("Location: index.php?added=1");
-            exit;
-        } else {
-            log_error_markdown("Product not found or inactive. ID:$pid", "Adding to Cart");
+        // Fetch product details
+        $product = fetchProduct($pdo, $pid);
+        if (!$product) {
             header("Location: index.php?error=invalid_product");
             exit;
         }
+        // Determine selected size
+        if ($sz) {
+            $selected_size = null;
+            foreach ($product['sizes'] as $size) {
+                if ($size['size'] === $sz) {
+                    $selected_size = $size;
+                    break;
+                }
+            }
+            if (!$selected_size) {
+                header("Location: index.php?error=invalid_size");
+                exit;
+            }
+        } else {
+            $selected_size = null;
+        }
+        // Calculate base price
+        $base_price = $product['base_price'];
+        if ($selected_size) {
+            $base_price += $selected_size['price'];
+        }
+        // Initialize totals and selections
+        $extras_total = $sauces_total = $dresses_total = $drink_total = 0.0;
+        $selected_extras = $selected_sauces = $selected_dresses = [];
+        $selected_drink = null;
+        // Process Extras
+        $available_extras = $selected_size ? ($selected_size['extras'] ?? []) : $product['extras'];
+        foreach ($available_extras as $extra) {
+            $name = $extra['name'];
+            $price = (float)$extra['price'];
+            $quantity = isset($posted_extras[$name]) ? (int)$posted_extras[$name] : 0;
+            if ($quantity > 0) {
+                $extras_total += $price * $quantity;
+                $selected_extras[] = ['name' => $name, 'price' => $price, 'quantity' => $quantity];
+            }
+        }
+        // Process Sauces
+        $available_sauces = $selected_size ? ($selected_size['sauces'] ?? []) : $product['sauces'];
+        foreach ($available_sauces as $sauce) {
+            $name = $sauce['name'];
+            $price = (float)$sauce['price'];
+            $quantity = isset($posted_sauces[$name]) ? (int)$posted_sauces[$name] : 0;
+            if ($quantity > 0) {
+                $sauces_total += $price * $quantity;
+                $selected_sauces[] = ['name' => $name, 'price' => $price, 'quantity' => $quantity];
+            }
+        }
+        // Process Dresses
+        foreach ($product['dresses'] as $dress) {
+            $name = $dress['name'];
+            $price = (float)$dress['price'];
+            $quantity = isset($posted_dresses[$name]) ? (int)$posted_dresses[$name] : 0;
+            if ($quantity > 0) {
+                $dresses_total += $price * $quantity;
+                $selected_dresses[] = ['name' => $name, 'price' => $price, 'quantity' => $quantity];
+            }
+        }
+        // Process Drink
+        if ($drink_id) {
+            $stmt = $pdo->prepare("SELECT * FROM drinks WHERE id = ?");
+            $stmt->execute([$drink_id]);
+            $drink = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($drink) {
+                $drink_total = (float)$drink['price'];
+                $selected_drink = $drink;
+            }
+        }
+        // Calculate total price
+        $unit_price = $base_price + $extras_total + $sauces_total + $dresses_total + $drink_total;
+        $total_price = $unit_price * $qty;
+        // Prepare cart item
+        $cart_item = [
+            'product_id' => $pid,
+            'name' => $product['name'],
+            'description' => $product['description'],
+            'image_url' => $product['image_url'],
+            'size' => $sz,
+            'size_price' => $selected_size['price'] ?? 0.0,
+            'extras' => $selected_extras,
+            'sauces' => $selected_sauces,
+            'dresses' => $selected_dresses,
+            'drink' => $selected_drink,
+            'special_instructions' => $spec,
+            'quantity' => $qty,
+            'unit_price' => $unit_price,
+            'total_price' => $total_price
+        ];
+        // Add to cart logic (merge if duplicate)
+        $dup_idx = false;
+        foreach ($_SESSION['cart'] as $index => $item) {
+            if (
+                $item['product_id'] === $cart_item['product_id'] &&
+                $item['size'] === $cart_item['size'] &&
+                (($item['drink']['id'] ?? null) === ($cart_item['drink']['id'] ?? null)) &&
+                $item['special_instructions'] === $cart_item['special_instructions'] &&
+                $item['extras'] == $cart_item['extras'] &&
+                $item['sauces'] == $cart_item['sauces'] &&
+                $item['dresses'] == $cart_item['dresses']
+            ) {
+                $dup_idx = $index;
+                break;
+            }
+        }
+        if ($dup_idx !== false) {
+            $_SESSION['cart'][$dup_idx]['quantity'] += $qty;
+            $_SESSION['cart'][$dup_idx]['total_price'] += $total_price;
+        } else {
+            $_SESSION['cart'][] = $cart_item;
+        }
+        header("Location: index.php?added=1");
+        exit;
     }
-
     // Remove from Cart
-    if (isset($_GET['remove'])) {
-        $ri = (int)$_GET['remove'];
+    if (isset($_POST['remove'])) {
+        $ri = (int)$_POST['remove'];
         if (isset($_SESSION['cart'][$ri])) {
             unset($_SESSION['cart'][$ri]);
             $_SESSION['cart'] = array_values($_SESSION['cart']);
@@ -311,110 +315,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: index.php?error=invalid_remove");
         exit;
     }
-
     // Update Cart
     if (isset($_POST['update_cart'])) {
         $ii = (int)$_POST['item_index'];
         if (isset($_SESSION['cart'][$ii])) {
             $qty = max(1, (int)$_POST['quantity']);
             $sz = $_POST['size'] ?? null;
-            $ex = $_POST['extras'] ?? [];
-            $sa = $_POST['sauces'] ?? [];
-            $dr = $_POST['dresses'] ?? [];
+            $posted_extras = $_POST['extras'] ?? [];
+            $posted_sauces = $_POST['sauces'] ?? [];
+            $posted_dresses = $_POST['dresses'] ?? [];
             $drink_id = isset($_POST['drink']) ? (int)$_POST['drink'] : null;
             $spec = trim($_POST['special_instructions'] ?? '');
+            // Fetch the actual product from DB
             $pid = $_SESSION['cart'][$ii]['product_id'];
-
             $pr = fetchProduct($pdo, $pid);
-            if ($pr) {
-                $props = json_decode($pr['properties'], true) ?? [];
-                $base = isset($props['base_price']) && (float)$props['base_price'] ? (float)$props['base_price'] : (float)$pr['base_price'];
-                $xopt = $props['extras'] ?? [];
-                $sopt = $props['sauces'] ?? [];
-                $zopt = $props['sizes'] ?? [];
-                $dopt = $props['dresses'] ?? [];
-                $sel_size = null;
-                $szprice = 0.0;
-
-                if ($sz) {
-                    foreach ($zopt as $z) {
-                        if (!empty($z['size']) && $z['size'] === $sz) {
-                            $sel_size = $z;
-                            $szprice = (float)($z['price'] ?? 0.0);
-                            break;
-                        }
-                    }
-                    if (!$sel_size) {
-                        log_error_markdown("Invalid size: $sz for Product $pid", "Updating Cart");
-                        header("Location: index.php?error=invalid_size");
-                        exit;
-                    }
-                    if (!empty($sel_size['extras'])) $xopt = $sel_size['extras'];
-                    if (!empty($sel_size['sauces'])) $sopt = $sel_size['sauces'];
-                    if (!empty($sel_size['dresses'])) $dopt = $sel_size['dresses'];
-                }
-
-                // Select Extras
-                $sel_ex = array_filter($xopt, fn($xo) => in_array($xo['name'], $ex));
-                $exTot = array_sum(array_column($sel_ex, 'price'));
-
-                // Select Sauces
-                $sel_sa = array_filter($sopt, fn($sx) => in_array($sx['name'], $sa));
-                $saTot = array_sum(array_column($sel_sa, 'price'));
-
-                // Select Dresses
-                $sel_dr = array_filter($dopt, fn($dx) => in_array($dx['name'], $dr));
-                $drTot = array_sum(array_column($sel_dr, 'price'));
-
-                // Select Drink
-                $drink_details = null;
-                $drinkTot = 0.0;
-                if ($drink_id) {
-                    $st = $pdo->prepare("SELECT * FROM drinks WHERE id=?");
-                    $st->execute([$drink_id]);
-                    $dk = $st->fetch(PDO::FETCH_ASSOC);
-                    if ($dk) {
-                        $drink_details = $dk;
-                        $drinkTot = (float)($dk['price'] ?? 0.0);
-                    }
-                }
-
-                // Calculate Prices
-                $unit_price = $base + $szprice + $exTot + $saTot + $drTot + $drinkTot;
-                $total_price = $unit_price * $qty;
-
-                // Update Cart Item
-                $_SESSION['cart'][$ii] = [
-                    'product_id' => $pr['id'],
-                    'name' => $pr['name'],
-                    'description' => $pr['description'],
-                    'image_url' => $pr['image_url'],
-                    'size' => $sel_size['size'] ?? null,
-                    'size_price' => $szprice,
-                    'extras' => array_values($sel_ex),
-                    'sauces' => array_values($sel_sa),
-                    'dresses' => array_values($sel_dr),
-                    'drink' => $drink_details,
-                    'special_instructions' => $spec,
-                    'quantity' => $qty,
-                    'unit_price' => $unit_price,
-                    'total_price' => $total_price
-                ];
-
-                header("Location: index.php?updated=1");
-                exit;
-            } else {
+            if (!$pr) {
                 log_error_markdown("Product not found or inactive ID:$pid", "Updating Cart");
                 header("Location: index.php?error=invalid_update");
                 exit;
             }
+            // Decode properties
+            $props = json_decode($pr['properties'], true) ?? [];
+            $base  = isset($props['base_price']) && (float)$props['base_price']
+                ? (float)$props['base_price']
+                : (float)$pr['base_price'];
+            // Use size-specific options if size is selected
+            $xopt = $props['extras']   ?? $pr['extras'];
+            $sopt = $props['sauces']   ?? $pr['sauces'];
+            $dopt = $props['dresses']  ?? $pr['dresses'];
+            $zopt = $props['sizes']    ?? $pr['sizes'];
+            $sel_size = null;
+            $szprice = 0.0;
+            if ($sz) {
+                foreach ($zopt as $z) {
+                    if (!empty($z['size']) && $z['size'] === $sz) {
+                        $sel_size = $z;
+                        $szprice  = (float)($z['price'] ?? 0.0);
+                        if (!empty($z['extras']))   $xopt = $z['extras'];
+                        if (!empty($z['sauces']))   $sopt = $z['sauces'];
+                        if (!empty($z['dresses']))  $dopt = $z['dresses'];
+                        break;
+                    }
+                }
+                if (!$sel_size) {
+                    log_error_markdown("Invalid size: $sz for Product $pid", "Updating Cart");
+                    header("Location: index.php?error=invalid_size");
+                    exit;
+                }
+            }
+            // Process Extras
+            $sel_ex = [];
+            $exTot  = 0.0;
+            foreach ($xopt as $xo) {
+                $nm    = $xo['name'];
+                $price = (float)$xo['price'];
+                if (isset($posted_extras[$nm])) {
+                    $qtyEx = (int)$posted_extras[$nm];
+                    if ($qtyEx > 0) {
+                        $exTot += $price * $qtyEx;
+                        $sel_ex[] = ['name' => $nm, 'price' => $price, 'quantity' => $qtyEx];
+                    }
+                }
+            }
+            // Process Sauces
+            $sel_sa = [];
+            $saTot  = 0.0;
+            foreach ($sopt as $sx) {
+                $nm    = $sx['name'];
+                $price = (float)$sx['price'];
+                if (isset($posted_sauces[$nm])) {
+                    $qtySa = (int)$posted_sauces[$nm];
+                    if ($qtySa > 0) {
+                        $saTot += ($price * $qtySa);
+                        $sel_sa[] = ['name' => $nm, 'price' => $price, 'quantity' => $qtySa];
+                    }
+                }
+            }
+            // Process Dresses
+            $sel_dr = [];
+            $drTot  = 0.0;
+            foreach ($dopt as $dx) {
+                $nm    = $dx['name'];
+                $price = (float)$dx['price'];
+                if (isset($posted_dresses[$nm])) {
+                    $qtyDr = (int)$posted_dresses[$nm];
+                    if ($qtyDr > 0) {
+                        $drTot += ($price * $qtyDr);
+                        $sel_dr[] = ['name' => $nm, 'price' => $price, 'quantity' => $qtyDr];
+                    }
+                }
+            }
+            // Process Drink
+            $drink_details = null;
+            $drinkTot = 0.0;
+            if ($drink_id) {
+                $st = $pdo->prepare("SELECT * FROM drinks WHERE id=?");
+                $st->execute([$drink_id]);
+                $dk = $st->fetch(PDO::FETCH_ASSOC);
+                if ($dk) {
+                    $drinkTot      = (float)($dk['price'] ?? 0.0);
+                    $drink_details = $dk;
+                }
+            }
+            // Compute final unit price and total
+            $unit_price  = $base + $szprice + $exTot + $saTot + $drTot + $drinkTot;
+            $total_price = $unit_price * $qty;
+            // Update cart item
+            $_SESSION['cart'][$ii] = [
+                'product_id' => $pr['id'],
+                'name' => $pr['name'],
+                'description' => $pr['description'],
+                'image_url' => $pr['image_url'],
+                'size' => $sel_size['size'] ?? null,
+                'size_price' => $szprice,
+                'extras' => $sel_ex,
+                'sauces' => $sel_sa,
+                'dresses' => $sel_dr,
+                'drink' => $drink_details,
+                'special_instructions' => $spec,
+                'quantity' => $qty,
+                'unit_price' => $unit_price,
+                'total_price' => $total_price
+            ];
+            header("Location: index.php?updated=1");
+            exit;
         } else {
             log_error_markdown("Invalid cart update request: $ii", "Updating Cart");
             header("Location: index.php?error=invalid_update");
             exit;
         }
     }
-
     // Checkout
     if (isset($_POST['checkout'])) {
         // Validate Cart and CSRF Token
@@ -426,7 +456,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: index.php?error=invalid_csrf_token");
             exit;
         }
-
         // Extract Order Details
         $store_id = $_SESSION['selected_store'] ?? null;
         $cn = trim($_POST['customer_name'] ?? '');
@@ -437,7 +466,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ev = isset($_POST['is_event']) && $_POST['is_event'] == '1';
         $sd = $_POST['scheduled_date'] ?? null;
         $st_time = $_POST['scheduled_time'] ?? null;
-
         // Validate Event Scheduling
         if ($ev) {
             if (empty($sd) || empty($st_time)) {
@@ -450,25 +478,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         }
-
         // Payment Method Validation
         $pm = $_POST['payment_method'] ?? '';
         if (!in_array($pm, ['stripe', 'paypal', 'pickup', 'cash'])) {
             header("Location: index.php?error=invalid_payment_method");
             exit;
         }
-
         // Validate Customer Details
         if (empty($cn) || empty($ce) || empty($cp) || empty($da)) {
             header("Location: index.php?error=invalid_order_details");
             exit;
         }
-
         // Calculate Totals
         $cart_total = calculateCartTotal($_SESSION['cart']);
         $tip_amount = applyTip($cart_total, $tip_options, $stid);
         $total = $cart_total + $tip_amount;
-
         // Prepare Order Details
         $order_details = json_encode([
             'items' => $_SESSION['cart'],
@@ -481,17 +505,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'scheduled_date' => $sd,
             'scheduled_time' => $st_time
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-
         try {
             // Begin Transaction
             $pdo->beginTransaction();
-
             // Insert Order
             $stmt = $pdo->prepare("INSERT INTO orders(user_id, customer_name, customer_email, customer_phone, delivery_address, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method, store_id, order_details)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details]);
             $oid = $pdo->lastInsertId();
-
             if (in_array($pm, ['stripe', 'paypal'])) {
                 if ($pm === 'stripe') {
                     // Handle Stripe Payment
@@ -509,7 +530,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'metadata' => ['order_id' => $oid],
                         'return_url' => $ret
                     ]);
-
                     if ($pi->status === 'requires_action' && $pi->next_action->type === 'use_stripe_sdk') {
                         header('Content-Type: application/json');
                         echo json_encode(['requires_action' => true, 'payment_intent_client_secret' => $pi->client_secret]);
@@ -528,30 +548,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Create PayPal Payment
                     $payer = new Payer();
                     $payer->setPaymentMethod('paypal');
-
                     $amount = new Amount();
-                    $amount->setTotal(number_format($total, 2, '.', ''))
-                        ->setCurrency('EUR');
-
+                    $amount->setTotal(number_format($total, 2, '.', ''))->setCurrency('EUR');
                     $transaction = new Transaction();
-                    $transaction->setAmount($amount)
-                        ->setDescription("Order ID: $oid");
-
+                    $transaction->setAmount($amount)->setDescription("Order ID: $oid");
                     $redirectUrls = new RedirectUrls();
                     $redirectUrls->setReturnUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=true&order_id=$oid")
                         ->setCancelUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=false&order_id=$oid");
-
                     $payment = new Payment();
                     $payment->setIntent('sale')
                         ->setPayer($payer)
                         ->setTransactions([$transaction])
                         ->setRedirectUrls($redirectUrls);
-
                     $payment->create($paypal);
-
                     // Save Payment ID to Session
                     $_SESSION['paypal_payment_id'] = $payment->getId();
-
                     // Redirect to PayPal for Approval
                     foreach ($payment->getLinks() as $link) {
                         if ($link->getRel() === 'approval_url') {
@@ -579,7 +590,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
 // Handle PayPal Payment Approval
 if (isset($_GET['payment']) && $_GET['payment'] === 'paypal') {
     $success = $_GET['success'] === 'true';
@@ -589,23 +599,19 @@ if (isset($_GET['payment']) && $_GET['payment'] === 'paypal') {
         header("Location: index.php?error=invalid_order");
         exit;
     }
-
     if ($success) {
         $paymentId = $_SESSION['paypal_payment_id'] ?? '';
         $payerId = $_GET['PayerID'] ?? '';
-
         if (empty($paymentId) || empty($payerId)) {
             log_error_markdown("Missing PayPal payment details.", "PayPal Callback");
             header("Location: index.php?error=paypal_failed");
             exit;
         }
-
         try {
             $payment = Payment::get($paymentId, $paypal);
             $execution = new PaymentExecution();
             $execution->setPayerId($payerId);
             $result = $payment->execute($execution, $paypal);
-
             if ($result->getState() === 'approved') {
                 $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([5, $order_id]);
                 $pdo->commit();
@@ -627,7 +633,6 @@ if (isset($_GET['payment']) && $_GET['payment'] === 'paypal') {
         exit;
     }
 }
-
 // Fetch Categories, Products, Drinks, Banners, Offers
 try {
     $categories = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC, name ASC");
@@ -637,7 +642,6 @@ try {
     log_error_markdown("Failed to fetch categories: " . $e->getMessage(), "Categories");
     $categories = [];
 }
-
 $selC = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
 $q = "SELECT p.id as product_id, p.product_code, p.name as product_name, p.category, p.description, 
              p.allergies, p.image_url, p.is_new, p.is_offer, p.is_active, p.properties, 
@@ -649,11 +653,12 @@ $stmt = $pdo->prepare($q);
 if ($selC > 0) $stmt->bindParam(':c', $selC, PDO::PARAM_INT);
 $stmt->execute();
 $raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 $products = array_map(function ($r) {
     $pp = json_decode($r['properties'], true) ?? [];
     $sz = $pp['sizes'] ?? [];
-    $dbp = isset($pp['base_price']) && (float)$pp['base_price'] ? (float)$pp['base_price'] : (float)$r['base_price'];
+    $dbp = isset($pp['base_price']) && (float)$pp['base_price']
+        ? (float)$pp['base_price']
+        : (float)$r['base_price'];
     $dp = $dbp + (!empty($sz) ? min(array_map(fn($s) => (float)($s['price'] ?? 0.0), $sz)) : 0.0);
     return [
         'id' => $r['product_id'],
@@ -677,19 +682,16 @@ $products = array_map(function ($r) {
         'display_price' => $dp
     ];
 }, $raw);
-
 try {
     $drinks = $pdo->query("SELECT * FROM drinks ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch drinks: " . $e->getMessage(), "Drinks");
     $drinks = [];
 }
-
 $cart_total = calculateCartTotal($_SESSION['cart']);
 $selT = $_SESSION['selected_tip'] ?? null;
 $tip_amount = applyTip($cart_total, $tip_options, $selT);
 $cart_total_with_tip = $cart_total + $tip_amount;
-
 try {
     $banners = $pdo->prepare("SELECT * FROM banners WHERE is_active=1 ORDER BY created_at DESC");
     $banners->execute();
@@ -698,7 +700,6 @@ try {
     log_error_markdown("Failed to fetch banners: " . $e->getMessage(), "Banners");
     $banners = [];
 }
-
 try {
     $d0 = date('Y-m-d');
     $active_offers = $pdo->prepare("SELECT * FROM offers WHERE is_active=1 AND (start_date IS NULL OR start_date<=?) AND (end_date IS NULL OR end_date>=?) ORDER BY created_at DESC");
@@ -710,14 +711,12 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="de">
 <head>
     <!-- Meta and Title -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Restaurant Delivery</title>
-
     <!-- Fonts and CSS -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -728,7 +727,6 @@ try {
     <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
         <link rel="icon" type="image/png" href="<?= htmlspecialchars($cart_logo); ?>">
     <?php endif; ?>
-
     <!-- Inline Styles -->
     <style>
         .loading-overlay {
@@ -741,80 +739,66 @@ try {
             z-index: 9999;
             display: flex;
             justify-content: center;
-            align-items: center
+            align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
-            object-fit: cover
+            object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
-            object-fit: cover
+            object-fit: cover;
         }
-
         .offers-section .card-title {
             font-size: 1.25rem;
-            font-weight: 600
+            font-weight: 600;
         }
-
         .offers-section .card-text {
             font-size: .95rem;
-            color: #555
+            color: #555;
         }
-
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
-                height: 250px
+                height: 250px;
             }
-
             .offers-section .card-img-top {
-                height: 150px
+                height: 150px;
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
-            cursor: not-allowed
+            cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
-            right: 10px
+            right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
             border-radius: 5px;
             position: sticky;
-            top: 20px
+            top: 20px;
         }
-
         .order-title {
-            margin-bottom: 15px
+            margin-bottom: 15px;
         }
     </style>
-
     <!-- Stripe JS -->
     <script src="https://js.stripe.com/v3/"></script>
-
     <!-- Map Libraries -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css" type="text/css">
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
-
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay">
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
-
     <!-- Store Selection Modal -->
     <?php if (!isset($_SESSION['selected_store'])): ?>
         <div class="modal fade" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true">
@@ -856,11 +840,9 @@ try {
                 </div>
             </div>
         </div>
-
         <!-- Include jQuery and Bootstrap JS -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
         <!-- Store Modal Script -->
         <script>
             $(function() {
@@ -907,7 +889,6 @@ try {
             });
         </script>
     <?php endif; ?>
-
     <!-- Include Other Components -->
     <?php
     $inc = [
@@ -928,9 +909,8 @@ try {
     ];
     foreach ($inc as $f) include $f;
     ?>
-
     <!-- Checkout Modal -->
-    <div class="modal fade" id="checkoutModal" tabindex="-1">
+    <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <form method="POST" action="index.php" id="checkoutForm">
@@ -941,29 +921,30 @@ try {
                             <input type="text" class="form-control" id="customer_name" name="customer_name" required>
                         </div>
                         <div class="mb-3">
-                            <label for="customer_email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <label for="customer_email" class="form-label">E-Mail <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" id="customer_email" name="customer_email" required>
                         </div>
                         <div class="mb-3">
-                            <label for="customer_phone" class="form-label">Phone <span class="text-danger">*</span></label>
+                            <label for="customer_phone" class="form-label">Telefon <span class="text-danger">*</span></label>
                             <input type="tel" class="form-control" id="customer_phone" name="customer_phone" required>
                         </div>
                         <div class="mb-3">
-                            <label for="delivery_address" class="form-label">Delivery Address <span class="text-danger">*</span></label>
+                            <label for="delivery_address" class="form-label">Lieferadresse <span class="text-danger">*</span></label>
                             <textarea class="form-control" id="delivery_address" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea>
                         </div>
-
                         <!-- Event Scheduling -->
                         <div class="mb-3">
-                            <label><input class="form-check-input" type="checkbox" id="event_checkbox" name="is_event" value="1"> Event</label>
+                            <label>
+                                <input class="form-check-input" type="checkbox" id="event_checkbox" name="is_event" value="1"> Veranstaltung
+                            </label>
                         </div>
                         <div id="event_details" style="display:none">
                             <div class="mb-3">
-                                <label for="scheduled_date" class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
+                                <label for="scheduled_date" class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label>
                                 <input type="date" class="form-control" id="scheduled_date" name="scheduled_date" min="<?= date('Y-m-d') ?>">
                             </div>
                             <div class="mb-3">
-                                <label for="scheduled_time" class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
+                                <label for="scheduled_time" class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label>
                                 <input type="time" class="form-control" id="scheduled_time" name="scheduled_time">
                             </div>
                         </div>
@@ -983,10 +964,9 @@ try {
                                 }
                             });
                         </script>
-
                         <!-- Payment Method Selection -->
                         <div class="mb-3">
-                            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+                            <label class="form-label">Zahlungsmethode <span class="text-danger">*</span></label>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="payment_method" id="paymentStripe" value="stripe" required>
                                 <label class="form-check-label" for="paymentStripe">Stripe</label>
@@ -997,26 +977,24 @@ try {
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="payment_method" id="paymentPickup" value="pickup" required>
-                                <label class="form-check-label" for="paymentPickup">Pick-Up</label>
+                                <label class="form-check-label" for="paymentPickup">Abholung</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="payment_method" id="paymentCash" value="cash" required>
-                                <label class="form-check-label" for="paymentCash">Cash on Delivery</label>
+                                <label class="form-check-label" for="paymentCash">Nachnahme</label>
                             </div>
                         </div>
-
                         <!-- Stripe Payment Section -->
                         <div id="stripe-payment-section" class="mb-3" style="display:none">
-                            <label class="form-label">Card</label>
+                            <label class="form-label">Karte</label>
                             <div id="card-element"></div>
                             <div id="card-errors" class="text-danger mt-2"></div>
                         </div>
-
                         <!-- Tip Selection -->
                         <div class="mb-3">
-                            <label for="tip_selection" class="form-label">Select Tip</label>
+                            <label for="tip_selection" class="form-label">Trinkgeld auswählen</label>
                             <select class="form-select" id="tip_selection" name="selected_tip">
-                                <option value="">No Tip</option>
+                                <option value="">Kein Trinkgeld</option>
                                 <?php foreach ($tip_options as $t): ?>
                                     <option value="<?= htmlspecialchars($t['id']) ?>" <?= ($selT == $t['id']) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($t['name']) ?>
@@ -1025,36 +1003,74 @@ try {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-
                         <!-- Order Summary -->
-                        <h5>Order Summary</h5>
+                        <h5>Bestellübersicht</h5>
                         <ul class="list-group mb-3">
                             <?php foreach ($_SESSION['cart'] as $it): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?= isset($it['size']) ? " ({$it['size']})" : '' ?></div>
-                                    <div><?= number_format($it['total_price'], 2) ?>€</div>
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="ms-2 me-auto">
+                                            <div class="fw-bold"><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?= isset($it['size']) ? " (Größe: {$it['size']})" : '' ?></div>
+                                            <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
+                                                <ul class="mb-1">
+                                                    <?php if (!empty($it['extras'])): ?>
+                                                        <li><strong>Extras:</strong>
+                                                            <ul>
+                                                                <?php foreach ($it['extras'] as $extra): ?>
+                                                                    <li><?= htmlspecialchars($extra['name']) ?> x<?= htmlspecialchars($extra['quantity']) ?>
+                                                                        (<?= number_format($extra['price'], 2) ?>€ pro Stück)
+                                                                        = <?= number_format($extra['price'] * $extra['quantity'], 2) ?>€
+                                                                    </li>
+                                                                <?php endforeach; ?>
+                                                            </ul>
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['sauces'])): ?>
+                                                        <li><strong>Saucen:</strong>
+                                                            <ul>
+                                                                <?php foreach ($it['sauces'] as $sauce): ?>
+                                                                    <li><?= htmlspecialchars($sauce['name']) ?> x<?= htmlspecialchars($sauce['quantity']) ?>
+                                                                        (<?= number_format($sauce['price'], 2) ?>€ pro Stück)
+                                                                        = <?= number_format($sauce['price'] * $sauce['quantity'], 2) ?>€
+                                                                    </li>
+                                                                <?php endforeach; ?>
+                                                            </ul>
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['drink'])): ?>
+                                                        <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?>
+                                                            (<?= number_format($it['drink']['price'], 2) ?>€)
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['special_instructions'])): ?>
+                                                        <li><strong>Besondere Anweisungen:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
+                                                    <?php endif; ?>
+                                                </ul>
+                                            <?php endif; ?>
+                                        </div>
+                                        <span class="badge bg-primary rounded-pill"><?= number_format($it['total_price'], 2) ?>€</span>
+                                    </div>
                                 </li>
                             <?php endforeach; ?>
                             <?php if ($tip_amount > 0): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>Tip</div>
-                                    <div><?= number_format($tip_amount, 2) ?>€</div>
+                                    <strong>Trinkgeld</strong>
+                                    <span><?= number_format($tip_amount, 2) ?>€</span>
                                 </li>
                             <?php endif; ?>
                         </ul>
-                        <h4>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h4>
+                        <h4>Gesamtsumme: <?= number_format($cart_total_with_tip, 2) ?>€</h4>
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     </div>
                     <div class="modal-footer">
                         <input type="hidden" name="checkout" value="1">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Place Order</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                        <button type="submit" class="btn btn-primary">Bestellung aufgeben</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
-
     <!-- Navigation Tabs for Categories -->
     <ul class="nav nav-tabs justify-content-center my-4">
         <li class="nav-item"><a class="nav-link <?= ($selC === 0) ? 'active' : '' ?>" href="index.php">All</a></li>
@@ -1062,7 +1078,6 @@ try {
             <li class="nav-item"><a class="nav-link <?= ($selC === $c['id']) ? 'active' : '' ?>" href="index.php?category_id=<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
-
     <!-- Main Content -->
     <main class="container my-5">
         <div class="row">
@@ -1094,79 +1109,147 @@ try {
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Add to Cart Modal -->
                             <div class="modal fade" id="addToCartModal<?= $pd['id'] ?>" tabindex="-1">
                                 <div class="modal-dialog modal-xl modal-dialog-centered">
                                     <div class="modal-content">
-                                        <form method="POST" action="index.php">
+                                        <form method="POST" action="index.php"
+                                            class="add-to-cart-form"
+                                            data-baseprice="<?= number_format($pd['base_price'], 2, '.', '') ?>"
+                                            data-productid="<?= $pd['id'] ?>">
                                             <div class="modal-body">
                                                 <div class="row">
                                                     <div class="col-4">
-                                                        <img src="<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                                        <img src="<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow"
+                                                            alt="<?= htmlspecialchars($pd['name']) ?>"
+                                                            onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
                                                     </div>
                                                     <div class="col-8">
                                                         <h2 class="text-uppercase"><b><?= htmlspecialchars($pd['name']) ?></b></h2>
                                                         <hr style="width:10%;border:2px solid black;border-radius:5px;">
                                                         <?php if (empty($pd['sizes'])): ?>
-                                                            <h3 style="color:#d3b213"><b><?= number_format($pd['base_price'], 2) ?>€</b></h3>
+                                                            <h5>Base Price: <span id="base-price-<?= $pd['id'] ?>">
+                                                                    <?= number_format($pd['base_price'], 2) ?>€</span>
+                                                            </h5>
+                                                            <input type="hidden" name="size" value="">
                                                         <?php else: ?>
-                                                            <h5>Select a size to see final price</h5>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Select Size:</label>
-                                                                <select class="form-select" name="size" required>
+                                                                <select class="form-select size-selector"
+                                                                    name="size"
+                                                                    data-productid="<?= $pd['id'] ?>">
                                                                     <option value="">Choose a size</option>
                                                                     <?php foreach ($pd['sizes'] as $sz): ?>
-                                                                        <option value="<?= htmlspecialchars($sz['size']) ?>">
-                                                                            <?= htmlspecialchars($sz['size']) ?> (<?= number_format($pd['base_price'] + (float)$sz['price'], 2) ?>€)
+                                                                        <?php
+                                                                        $szExtraPrice = (float) $sz['price'];
+                                                                        $szLabelPrice = $pd['base_price'] + $szExtraPrice;
+                                                                        $szExtras = isset($sz['extras']) ? json_encode($sz['extras']) : '[]';
+                                                                        $szSauces = isset($sz['sauces']) ? json_encode($sz['sauces']) : '[]';
+                                                                        ?>
+                                                                        <option value="<?= htmlspecialchars($sz['size']) ?>"
+                                                                            data-sizeprice="<?= number_format($szExtraPrice, 2, '.', '') ?>"
+                                                                            data-sizes-extras='<?= $szExtras ?>'
+                                                                            data-sizes-sauces='<?= $szSauces ?>'>
+                                                                            <?= htmlspecialchars($sz['size']) ?> (<?= number_format($szLabelPrice, 2) ?>€)
                                                                         </option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
                                                         <?php endif; ?>
-
-                                                        <!-- Extras, Sauces, Dresses -->
-                                                        <?php foreach (['extras', 'sauces', 'dresses'] as $option): ?>
-                                                            <?php if (!empty($pd[$option])): ?>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label"><?= ucfirst($option) ?></label>
-                                                                    <div>
-                                                                        <?php foreach ($pd[$option] as $item): ?>
-                                                                            <div class="form-check">
-                                                                                <input class="form-check-input" type="checkbox" name="<?= $option ?>[]" value="<?= htmlspecialchars($item['name']) ?>" id="<?= $option . $pd['id'] . '_' . htmlspecialchars($item['name']) ?>">
-                                                                                <label class="form-check-label" for="<?= $option . $pd['id'] . '_' . htmlspecialchars($item['name']) ?>">
-                                                                                    <?= htmlspecialchars($item['name']) ?> (+<?= number_format((float)$item['price'], 2) ?>€)
-                                                                                </label>
-                                                                            </div>
-                                                                        <?php endforeach; ?>
+                                                        <!-- Extras Container -->
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Extras</label>
+                                                            <div class="extras-container">
+                                                                <?php foreach ($pd['extras'] as $extra): ?>
+                                                                    <div class="mb-2 d-flex align-items-center">
+                                                                        <input type="number"
+                                                                            class="form-control me-2 item-quantity"
+                                                                            style="width:80px"
+                                                                            name="extras[<?= htmlspecialchars($extra['name']) ?>]"
+                                                                            data-price="<?= number_format($extra['price'], 2, '.', '') ?>"
+                                                                            data-productid="<?= $pd['id'] ?>"
+                                                                            value="0"
+                                                                            min="0"
+                                                                            step="1">
+                                                                        <span><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</span>
                                                                     </div>
-                                                                </div>
-                                                            <?php endif; ?>
-                                                        <?php endforeach; ?>
-
-                                                        <!-- Drinks Selection -->
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Sauces Container -->
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Sauces</label>
+                                                            <div class="sauces-container">
+                                                                <?php foreach ($pd['sauces'] as $sauce): ?>
+                                                                    <div class="mb-2 d-flex align-items-center">
+                                                                        <input type="number"
+                                                                            class="form-control me-2 item-quantity"
+                                                                            style="width:80px"
+                                                                            name="sauces[<?= htmlspecialchars($sauce['name']) ?>]"
+                                                                            data-price="<?= number_format($sauce['price'], 2, '.', '') ?>"
+                                                                            data-productid="<?= $pd['id'] ?>"
+                                                                            value="0"
+                                                                            min="0"
+                                                                            step="1">
+                                                                        <span><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</span>
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Dresses Container -->
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Dresses</label>
+                                                            <div class="dresses-container">
+                                                                <?php foreach ($pd['dresses'] as $dress): ?>
+                                                                    <div class="mb-2 d-flex align-items-center">
+                                                                        <input type="number"
+                                                                            class="form-control me-2 item-quantity"
+                                                                            style="width:80px"
+                                                                            name="dresses[<?= htmlspecialchars($dress['name']) ?>]"
+                                                                            data-price="<?= number_format($dress['price'], 2, '.', '') ?>"
+                                                                            data-productid="<?= $pd['id'] ?>"
+                                                                            value="0"
+                                                                            min="0"
+                                                                            step="1">
+                                                                        <span><?= htmlspecialchars($dress['name']) ?> (+<?= number_format($dress['price'], 2) ?>€)</span>
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        </div>
                                                         <?php if (!empty($drinks)): ?>
                                                             <div class="mb-3">
                                                                 <label class="form-label">Drinks</label>
-                                                                <select class="form-select" name="drink">
+                                                                <select class="form-select drink-selector"
+                                                                    name="drink"
+                                                                    data-productid="<?= $pd['id'] ?>">
                                                                     <option value="">Choose a drink</option>
                                                                     <?php foreach ($drinks as $dk): ?>
-                                                                        <option value="<?= htmlspecialchars($dk['id']) ?>">
-                                                                            <?= htmlspecialchars($dk['name']) ?> (+<?= number_format((float)$dk['price'], 2) ?>€)
+                                                                        <option value="<?= htmlspecialchars($dk['id']) ?>"
+                                                                            data-drinkprice="<?= number_format($dk['price'], 2, '.', '') ?>">
+                                                                            <?= htmlspecialchars($dk['name']) ?> (+<?= number_format($dk['price'], 2) ?>€)
                                                                         </option>
                                                                     <?php endforeach; ?>
                                                                 </select>
                                                             </div>
                                                         <?php endif; ?>
-
-                                                        <!-- Quantity and Instructions -->
                                                         <div class="mb-3">
                                                             <label class="form-label">Quantity</label>
-                                                            <input type="number" class="form-control" name="quantity" value="1" min="1" max="99" required>
+                                                            <input type="number"
+                                                                class="form-control quantity-selector"
+                                                                name="quantity"
+                                                                data-productid="<?= $pd['id'] ?>"
+                                                                value="1" min="1" max="99" required>
                                                         </div>
                                                         <div class="mb-3">
                                                             <label class="form-label">Special Instructions</label>
                                                             <textarea class="form-control" name="special_instructions" rows="2"></textarea>
+                                                        </div>
+                                                        <!-- Real-Time Price Display -->
+                                                        <div class="bg-light p-2 mb-2 rounded">
+                                                            <strong>Estimated Price: </strong>
+                                                            <span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1.25rem;color:#d3b213">
+                                                                <?= number_format($pd['base_price'], 2) ?>€
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1181,7 +1264,6 @@ try {
                                     </div>
                                 </div>
                             </div>
-
                             <!-- Allergies Modal -->
                             <?php if ($pd['allergies']): ?>
                                 <div class="modal fade" id="allergiesModal<?= $pd['id'] ?>" tabindex="-1">
@@ -1211,7 +1293,6 @@ try {
                     <?php endif; ?>
                 </div>
             </div>
-
             <!-- Order Summary Sidebar -->
             <div class="col-lg-3">
                 <div class="order-summary">
@@ -1238,7 +1319,6 @@ try {
                             <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>" target="_blank" class="btn btn-sm btn-outline-primary">View on Map</a>
                         </div>
                     <?php endif; ?>
-
                     <!-- Cart Items -->
                     <div id="cart-items">
                         <?php if (!empty($_SESSION['cart'])): ?>
@@ -1247,29 +1327,51 @@ try {
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         <div>
                                             <h6><?= htmlspecialchars($it['name']) ?><?= isset($it['size']) ? " ({$it['size']})" : '' ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
-                                            <?php if (!empty($it['extras'])): ?>
+                                            <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
                                                 <ul>
-                                                    <?php foreach ($it['extras'] as $ex): ?>
-                                                        <li><?= htmlspecialchars($ex['name'] ?? '') ?> (+<?= number_format((float)($ex['price'] ?? 0.0), 2) ?>€)</li>
-                                                    <?php endforeach; ?>
+                                                    <?php if (!empty($it['extras'])): ?>
+                                                        <li><strong>Extras:</strong>
+                                                            <ul>
+                                                                <?php foreach ($it['extras'] as $ex): ?>
+                                                                    <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?>
+                                                                        @ <?= number_format($ex['price'], 2) ?>€ each
+                                                                        = <?= number_format($ex['quantity'] * $ex['price'], 2) ?>€
+                                                                    </li>
+                                                                <?php endforeach; ?>
+                                                            </ul>
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['sauces'])): ?>
+                                                        <li><strong>Saucen:</strong>
+                                                            <ul>
+                                                                <?php foreach ($it['sauces'] as $sx): ?>
+                                                                    <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?>
+                                                                        @ <?= number_format($sx['price'], 2) ?>€ each
+                                                                        = <?= number_format($sx['quantity'] * $sx['price'], 2) ?>€
+                                                                    </li>
+                                                                <?php endforeach; ?>
+                                                            </ul>
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['drink'])): ?>
+                                                        <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?>
+                                                            (+<?= number_format($it['drink']['price'], 2) ?>€)
+                                                        </li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['special_instructions'])): ?>
+                                                        <li><strong>Besondere Anweisungen:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
+                                                    <?php endif; ?>
                                                 </ul>
-                                            <?php endif; ?>
-                                            <?php if (!empty($it['drink'])): ?>
-                                                <p>Drink: <?= htmlspecialchars($it['drink']['name'] ?? '') ?> (+<?= number_format((float)($it['drink']['price'] ?? 0.0), 2) ?>€)</p>
-                                            <?php endif; ?>
-                                            <?php if (!empty($it['sauces'])): ?>
-                                                <p>Sauces: <?= htmlspecialchars(implode(', ', array_column($it['sauces'], 'name'))) ?> (+<?= number_format(array_reduce($it['sauces'], fn($c, $sx) => $c + (float)($sx['price'] ?? 0.0), 0.0), 2) ?>€)</p>
-                                            <?php endif; ?>
-                                            <?php if (!empty($it['dresses'])): ?>
-                                                <p>Dresses: <?= htmlspecialchars(implode(', ', array_column($it['dresses'], 'name'))) ?> (+<?= number_format(array_reduce($it['dresses'], fn($c, $dx) => $c + (float)($dx['price'] ?? 0.0), 0.0), 2) ?>€)</p>
-                                            <?php endif; ?>
-                                            <?php if (!empty($it['special_instructions'])): ?>
-                                                <p><em>Instructions:</em> <?= htmlspecialchars($it['special_instructions']) ?></p>
                                             <?php endif; ?>
                                         </div>
                                         <div>
                                             <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                            <a href="index.php?remove=<?= $i ?>" class="btn btn-sm btn-danger mt-2"><i class="bi bi-trash"></i> Remove</a>
+                                            <form action="index.php" method="POST" style="display:inline;">
+                                                <input type="hidden" name="remove" value="<?= $i ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger mt-2">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </form>
                                             <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>"><i class="bi bi-pencil-square"></i> Edit</button>
                                         </div>
                                     </li>
@@ -1293,7 +1395,6 @@ try {
             </div>
         </div>
     </main>
-
     <!-- Footer -->
     <footer class="bg-light text-muted pt-5 pb-4">
         <div class="container">
@@ -1350,21 +1451,17 @@ try {
             </div>
         </div>
     </footer>
-
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
     <!-- Main JS -->
     <script>
         $(function() {
             // Hide Loading Overlay
             $('#loading-overlay').fadeOut('slow');
-
             // Toast Notifications
             $('.toast').toast('show');
-
             // Reservation Form Submission
             $('#reservationForm').submit(function(e) {
                 e.preventDefault();
@@ -1388,7 +1485,6 @@ try {
                     $b.prop('disabled', false);
                 });
             });
-
             // Order Success Redirect
             <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
                 setTimeout(() => {
@@ -1396,7 +1492,6 @@ try {
                     window.location.href = 'index.php';
                 }, 5000);
             <?php endif; ?>
-
             // Store Status Check
             const updateStoreStatus = () => {
                 $.getJSON('check_store_status.php', d => {
@@ -1419,16 +1514,13 @@ try {
             };
             updateStoreStatus();
             setInterval(updateStoreStatus, 60000);
-
             // Stripe Integration
             const stripe = Stripe('pk_test_51QByfJE4KNNCb6nuSnWLZP9JXlW84zG9DnOrQDTHQJvus9D8A8vOA85S4DfRlyWgN0rxa2hHzjppchnrmhyZGflx00B2kKlxym'); // Replace with your Stripe Publishable Key
             const card = stripe.elements().create('card');
             card.mount('#card-element');
-
             $('input[name="payment_method"]').change(() => {
                 $('#stripe-payment-section').toggle($('#paymentStripe').is(':checked'));
             });
-
             $('#checkoutForm').submit(async function(e) {
                 if ($('#paymentStripe').is(':checked')) {
                     e.preventDefault();
@@ -1490,7 +1582,270 @@ try {
             });
         });
     </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Function to update the estimated price
+            function updateEstimatedPrice(form) {
+                let base = parseFloat(form.dataset.baseprice || "0");
+                let productId = form.dataset.productid;
+                let estSpan = document.getElementById("estimated-price-" + productId);
+                let quantity = 1;
+                // Quantity
+                let qtySelector = form.querySelector('.quantity-selector');
+                if (qtySelector) {
+                    quantity = parseFloat(qtySelector.value || "1");
+                    if (quantity < 1) quantity = 1;
+                }
+                // Size
+                let sizeSelector = form.querySelector('.size-selector');
+                let sizeExtraPrice = 0;
+                if (sizeSelector && sizeSelector.value) {
+                    let opt = sizeSelector.options[sizeSelector.selectedIndex];
+                    if (opt && opt.dataset.sizeprice) {
+                        sizeExtraPrice = parseFloat(opt.dataset.sizeprice || "0");
+                    }
+                }
+                // Extras / Sauces / Dresses
+                let itemQuantities = form.querySelectorAll('.item-quantity');
+                let itemsTotal = 0;
+                itemQuantities.forEach(function(iq) {
+                    let itemPrice = parseFloat(iq.dataset.price || "0");
+                    let itemQty = parseFloat(iq.value || "0");
+                    if (itemQty > 0) {
+                        itemsTotal += (itemQty * itemPrice);
+                    }
+                });
+                // Drink
+                let drinkSelector = form.querySelector('.drink-selector');
+                let drinkPrice = 0;
+                if (drinkSelector && drinkSelector.value) {
+                    let sel = drinkSelector.options[drinkSelector.selectedIndex];
+                    drinkPrice = parseFloat(sel.dataset.drinkprice || "0");
+                }
+                // Compute final
+                let singleUnit = base + sizeExtraPrice + itemsTotal + drinkPrice;
+                let finalPrice = singleUnit * quantity;
+                if (estSpan) {
+                    estSpan.textContent = finalPrice.toFixed(2) + "€";
+                }
+            }
+            // Function to update size-specific extras and sauces
+            function updateSizeSpecificOptions(form, sizeData) {
+                // Parse size-specific extras and sauces
+                let sizeExtras = [];
+                let sizeSauces = [];
+                if (sizeData.sizesExtras) {
+                    try {
+                        sizeExtras = JSON.parse(sizeData.sizesExtras);
+                    } catch (e) {
+                        console.error('Invalid JSON for size extras:', e);
+                    }
+                }
+                if (sizeData.sizesSauces) {
+                    try {
+                        sizeSauces = JSON.parse(sizeData.sizesSauces);
+                    } catch (e) {
+                        console.error('Invalid JSON for size sauces:', e);
+                    }
+                }
+                // Update Extras Container
+                let extrasContainer = form.querySelector('.extras-container');
+                if (extrasContainer) {
+                    extrasContainer.innerHTML = ''; // Clear existing extras
+                    if (sizeExtras.length > 0) {
+                        sizeExtras.forEach(function(extra) {
+                            extrasContainer.innerHTML += `
+                        <div class="mb-2 d-flex align-items-center">
+                            <input type="number"
+                                   class="form-control me-2 item-quantity"
+                                   style="width:80px"
+                                   name="extras[${extra.name}]"
+                                   data-price="${parseFloat(extra.price).toFixed(2)}"
+                                   data-productid="${form.dataset.productid}"
+                                   value="0"
+                                   min="0"
+                                   step="1">
+                            <span>${extra.name} (+${parseFloat(extra.price).toFixed(2)}€)</span>
+                        </div>
+                    `;
+                        });
+                    } else {
+                        // Load global extras
+                        <?php
+                        // Assuming $pd['extras'] contains the global extras
+                        // Fetching global extras from PHP to JavaScript
+                        $global_extras_js = json_encode($pd['extras']);
+                        ?>
+                        let globalExtras = <?= $global_extras_js ?>;
+                        globalExtras.forEach(function(extra) {
+                            extrasContainer.innerHTML += `
+                        <div class="mb-2 d-flex align-items-center">
+                            <input type="number"
+                                   class="form-control me-2 item-quantity"
+                                   style="width:80px"
+                                   name="extras[${extra.name}]"
+                                   data-price="${parseFloat(extra.price).toFixed(2)}"
+                                   data-productid="${form.dataset.productid}"
+                                   value="0"
+                                   min="0"
+                                   step="1">
+                            <span>${extra.name} (+${parseFloat(extra.price).toFixed(2)}€)</span>
+                        </div>
+                    `;
+                        });
+                    }
+                }
+                // Update Sauces Container
+                let saucesContainer = form.querySelector('.sauces-container');
+                if (saucesContainer) {
+                    saucesContainer.innerHTML = ''; // Clear existing sauces
+                    if (sizeSauces.length > 0) {
+                        sizeSauces.forEach(function(sauce) {
+                            saucesContainer.innerHTML += `
+                        <div class="mb-2 d-flex align-items-center">
+                            <input type="number"
+                                   class="form-control me-2 item-quantity"
+                                   style="width:80px"
+                                   name="sauces[${sauce.name}]"
+                                   data-price="${parseFloat(sauce.price).toFixed(2)}"
+                                   data-productid="${form.dataset.productid}"
+                                   value="0"
+                                   min="0"
+                                   step="1">
+                            <span>${sauce.name} (+${parseFloat(sauce.price).toFixed(2)}€)</span>
+                        </div>
+                    `;
+                        });
+                    } else {
+                        // Load global sauces
+                        <?php
+                        // Assuming $pd['sauces'] contains the global sauces
+                        $global_sauces_js = json_encode($pd['sauces']);
+                        ?>
+                        let globalSauces = <?= $global_sauces_js ?>;
+                        globalSauces.forEach(function(sauce) {
+                            saucesContainer.innerHTML += `
+                        <div class="mb-2 d-flex align-items-center">
+                            <input type="number"
+                                   class="form-control me-2 item-quantity"
+                                   style="width:80px"
+                                   name="sauces[${sauce.name}]"
+                                   data-price="${parseFloat(sauce.price).toFixed(2)}"
+                                   data-productid="${form.dataset.productid}"
+                                   value="0"
+                                   min="0"
+                                   step="1">
+                            <span>${sauce.name} (+${parseFloat(sauce.price).toFixed(2)}€)</span>
+                        </div>
+                    `;
+                        });
+                    }
+                }
+                // Dresses are assumed to be global; if size-specific, handle similarly
+                let dressesContainer = form.querySelector('.dresses-container');
+                if (dressesContainer) {
+                    dressesContainer.innerHTML = ''; // Clear existing dresses
+                    <?php
+                    // Assuming $pd['dresses'] contains the global dresses
+                    $global_dresses_js = json_encode($pd['dresses']);
+                    ?>
+                    let globalDresses = <?= $global_dresses_js ?>;
+                    globalDresses.forEach(function(dress) {
+                        dressesContainer.innerHTML += `
+                    <div class="mb-2 d-flex align-items-center">
+                        <input type="number"
+                               class="form-control me-2 item-quantity"
+                               style="width:80px"
+                               name="dresses[${dress.name}]"
+                               data-price="${parseFloat(dress.price).toFixed(2)}"
+                               data-productid="${form.dataset.productid}"
+                               value="0"
+                               min="0"
+                               step="1">
+                        <span>${dress.name} (+${parseFloat(dress.price).toFixed(2)}€)</span>
+                    </div>
+                `;
+                    });
+                }
+                // Reinitialize event listeners for newly added inputs
+                initializeEventListeners(form);
+            }
+            // Function to initialize event listeners on new inputs
+            function initializeEventListeners(form) {
+                // Reattach change listeners to new item-quantity inputs
+                form.querySelectorAll('.item-quantity').forEach(function(iq) {
+                    iq.removeEventListener('change', handleChange);
+                    iq.addEventListener('change', function() {
+                        updateEstimatedPrice(form);
+                    });
+                });
+            }
+            // Function to handle size selection change
+            function handleSizeChange(event) {
+                let form = event.target.closest('.add-to-cart-form');
+                let selectedOption = event.target.options[event.target.selectedIndex];
+                let sizeData = {
+                    sizesExtras: selectedOption.dataset.sizesExtras || '[]',
+                    sizesSauces: selectedOption.dataset.sizesSauces || '[]'
+                };
+                updateSizeSpecificOptions(form, sizeData);
+                updateEstimatedPrice(form);
+            }
+            // Function to handle initial event listeners
+            function initializeForm(form) {
+                // Size Selector
+                let sizeSelector = form.querySelector('.size-selector');
+                if (sizeSelector) {
+                    sizeSelector.addEventListener('change', handleSizeChange);
+                }
+                // Drink Selector
+                let drinkSelector = form.querySelector('.drink-selector');
+                if (drinkSelector) {
+                    drinkSelector.addEventListener('change', function() {
+                        updateEstimatedPrice(form);
+                    });
+                }
+                // Quantity Selector
+                let qtySelector = form.querySelector('.quantity-selector');
+                if (qtySelector) {
+                    qtySelector.addEventListener('change', function() {
+                        updateEstimatedPrice(form);
+                    });
+                }
+                // Initial Price Calculation
+                updateEstimatedPrice(form);
+            }
+            // Attach event listeners to all existing forms
+            document.querySelectorAll('.add-to-cart-form').forEach(function(form) {
+                initializeForm(form);
+            });
+            // Observe changes to dynamically added forms (if any)
+            let observer = new MutationObserver(function(mutationsList) {
+                for (let mutation of mutationsList) {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                let forms = node.querySelectorAll('.add-to-cart-form');
+                                forms.forEach(function(form) {
+                                    initializeForm(form);
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        });
+    </script>
+    <script>
+        // Main JS
+        document.addEventListener('DOMContentLoaded', function() {
+            // Additional JS can be placed here if needed
+        });
+    </script>
 </body>
-
 </html>
 <?php ob_end_flush(); ?>
