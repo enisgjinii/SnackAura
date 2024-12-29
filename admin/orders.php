@@ -1036,7 +1036,7 @@ switch ($action) {
                 return $('<div>').text(txt).html();
             }
 
-            setInterval(fetchNewOrders, 5000);
+            setInterval(fetchNewOrders, 1000);
         });
     </script>
     <?php ob_end_flush(); ?>
