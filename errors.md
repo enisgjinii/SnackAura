@@ -350,3 +350,683 @@
 
 ---
 
+### [2024-12-29 17:52:49] Error
+
+**Message:** Uncaught Exception: Undefined variable $current_settings
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 386
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:34] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:35] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:35] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:35] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:35] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:36] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:37] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:38] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:42] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+
+### [2024-12-29 18:14:43] Error
+
+**Message:** Uncaught Exception: SQLSTATE[42S02]: Base table or view not found: 1146 Table &#039;yumiis_e.operational_hours&#039; doesn&#039;t exist
+
+**Context:** File: C:\xampp\htdocs\arber-dobruna\index.php Line: 45
+
+---
+

@@ -2,7 +2,7 @@
 ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-require 'vendor/autoload.php';
+require '../vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;

@@ -16,7 +16,7 @@ $adminMenuItems = [
     ['orders.php', 'fas fa-receipt', 'Orders'],
     ['drinks.php', 'fas fa-coffee', 'Drinks'],
     // ['sauces.php', 'fas fa-bottle-water', 'Sauces'],
-    ['informations.php', 'fas fa-info', 'Informations'],
+    // ['informations.php', 'fas fa-info', 'Informations'],
     ['users.php', 'fas fa-user-friends', 'Users'],
     ['products_mixes.php', 'fas fa-blender', 'Products Mixes'],
     ['reservations.php', 'fas fa-calendar-check', 'Reservations'],

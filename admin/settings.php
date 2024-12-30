@@ -1,17 +1,11 @@
 <?php
-// admin/settings.php
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
-// Start the session if not already started
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
-
-// Initialize message variable
 $message = '';
-
-// Define allowed setting keys to prevent unauthorized updates
+// All allowed setting keys
 $allowed_keys = [
     'minimum_order',
     'agb',
@@ -22,45 +16,50 @@ $allowed_keys = [
     'instagram_link',
     'linkedin_link',
     'youtube_link',
-    'cart_logo',           // New Key
-    'cart_description'     // New Key
+    'cart_logo',
+    'cart_description',
+    // Store & Shipping
+    'store_lat',
+    'store_lng',
+    'shipping_calculation_mode',
+    'shipping_distance_radius',
+    'shipping_fee_base',
+    'shipping_fee_per_km',
+    'shipping_free_threshold',
+    'google_maps_api_key',
+    'postal_code_zones',
+    'shipping_enable_google_distance_matrix',
+    'shipping_matrix_region',
+    'shipping_matrix_units',
+    // Additional advanced shipping
+    'shipping_weekend_surcharge',
+    'shipping_holiday_surcharge',
+    'shipping_vat_percentage',
+    'shipping_handling_fee'
 ];
-
-/**
- * Fetch settings as key-value pairs.
- */
+// Fetch settings
 function getSettings($pdo, $allowed_keys)
 {
-    // Prepare placeholders for the IN clause
-    $placeholders = rtrim(str_repeat('?,', count($allowed_keys)), ',');
-    $stmt = $pdo->prepare("SELECT `key`, `value` FROM `settings` WHERE `key` IN ($placeholders)");
+    $in_placeholders = rtrim(str_repeat('?,', count($allowed_keys)), ',');
+    $stmt = $pdo->prepare("SELECT `key`, `value` FROM `settings` WHERE `key` IN ($in_placeholders)");
     $stmt->execute($allowed_keys);
     return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
-
-/**
- * Update settings in the database.
- */
+// Update settings
 function updateSettings($pdo, $settings, $allowed_keys)
 {
-    // Start a transaction for atomicity
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('UPDATE `settings` SET `value` = ? WHERE `key` = ?');
+        $update = $pdo->prepare('UPDATE `settings` SET `value` = ? WHERE `key` = ?');
         foreach ($settings as $key => $value) {
-            if (in_array($key, $allowed_keys)) {
-                // Check if the key exists
-                $check_stmt = $pdo->prepare('SELECT COUNT(*) FROM `settings` WHERE `key` = ?');
-                $check_stmt->execute([$key]);
-                $exists = $check_stmt->fetchColumn();
-                if ($exists) {
-                    // Update existing key
-                    $stmt->execute([trim($value), $key]);
-                } else {
-                    // Insert new key
-                    $insert_stmt = $pdo->prepare('INSERT INTO `settings` (`key`, `value`) VALUES (?, ?)');
-                    $insert_stmt->execute([$key, trim($value)]);
-                }
+            if (!in_array($key, $allowed_keys)) continue;
+            $check = $pdo->prepare('SELECT COUNT(*) FROM `settings` WHERE `key` = ?');
+            $check->execute([$key]);
+            if ($check->fetchColumn()) {
+                $update->execute([trim($value), $key]);
+            } else {
+                $insert = $pdo->prepare('INSERT INTO `settings`(`key`, `value`) VALUES (?,?)');
+                $insert->execute([$key, trim($value)]);
             }
         }
         $pdo->commit();
@@ -70,98 +69,88 @@ function updateSettings($pdo, $settings, $allowed_keys)
         return $e->getMessage();
     }
 }
-
 // Generate CSRF token if not set
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-
 // Fetch current settings
 $current_settings = getSettings($pdo, $allowed_keys);
-
-// Handle form submission
+// Handle post
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Check CSRF token
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         $message = '<div class="alert alert-danger">Invalid CSRF token.</div>';
     } else {
-        // Collect and sanitize POST data
         $submitted_settings = [];
         foreach ($allowed_keys as $key) {
             if (isset($_POST[$key])) {
-                // Trim whitespace
                 $value = trim($_POST[$key]);
-                // Additional validation based on key
+                // Validation examples
                 if ($key === 'minimum_order') {
-                    // Validate minimum_order as a positive decimal number
                     if (!is_numeric($value) || $value < 0) {
-                        $message = '<div class="alert alert-danger">Minimum Order must be a positive number.</div>';
+                        $message = '<div class="alert alert-danger">Minimum Order must be a non-negative number.</div>';
                         break;
                     }
-                    // Format to two decimal places
                     $value = number_format((float)$value, 2, '.', '');
                 }
-                // Validate URLs for social media links
                 if (in_array($key, ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'])) {
                     if ($value !== '' && !filter_var($value, FILTER_VALIDATE_URL)) {
-                        $message = '<div class="alert alert-danger">Invalid URL format for ' . htmlspecialchars(ucfirst(str_replace('_', ' ', $key))) . '.</div>';
+                        $message = '<div class="alert alert-danger">Invalid URL for ' . htmlspecialchars($key) . '</div>';
                         break;
                     }
                 }
-                // Handle Cart Description
                 if ($key === 'cart_description') {
-                    // Optional: Sanitize or limit the description length
                     $value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+                }
+                // Additional advanced shipping numeric validations
+                if (in_array($key, [
+                    'shipping_fee_base',
+                    'shipping_fee_per_km',
+                    'shipping_free_threshold',
+                    'shipping_weekend_surcharge',
+                    'shipping_holiday_surcharge',
+                    'shipping_handling_fee',
+                    'shipping_vat_percentage'
+                ])) {
+                    if (!is_numeric($value)) $value = 0; // fallback
                 }
                 $submitted_settings[$key] = $value;
             }
         }
-
-        // Handle File Upload for Cart Logo
+        // Handle logo upload
         if (isset($_FILES['cart_logo']) && $_FILES['cart_logo']['error'] !== UPLOAD_ERR_NO_FILE) {
             if ($_FILES['cart_logo']['error'] === UPLOAD_ERR_OK) {
-                $allowed_mime_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $mime_type = finfo_file($finfo, $_FILES['cart_logo']['tmp_name']);
                 finfo_close($finfo);
-
-                if (!in_array($mime_type, $allowed_mime_types)) {
-                    $message = '<div class="alert alert-danger">Invalid file type for Cart Logo. Allowed types: JPEG, PNG, GIF, WEBP.</div>';
+                if (!in_array($mime_type, $allowed_types)) {
+                    $message = '<div class="alert alert-danger">Invalid file type for Cart Logo.</div>';
                 } else {
-                    // Define the upload directory
                     $upload_dir = '../uploads/logos/';
                     if (!is_dir($upload_dir)) {
                         mkdir($upload_dir, 0755, true);
                     }
-
-                    // Generate a unique filename
-                    $file_extension = pathinfo($_FILES['cart_logo']['name'], PATHINFO_EXTENSION);
-                    $new_filename = 'cart_logo_' . time() . '.' . $file_extension;
-                    $destination = $upload_dir . $new_filename;
-
-                    // Move the uploaded file
-                    if (move_uploaded_file($_FILES['cart_logo']['tmp_name'], $destination)) {
-                        // Optionally, delete the old logo if it exists
+                    $ext = pathinfo($_FILES['cart_logo']['name'], PATHINFO_EXTENSION);
+                    $new_file = 'cart_logo_' . time() . '.' . $ext;
+                    $dest = $upload_dir . $new_file;
+                    if (move_uploaded_file($_FILES['cart_logo']['tmp_name'], $dest)) {
                         if (!empty($current_settings['cart_logo']) && file_exists($current_settings['cart_logo'])) {
                             unlink($current_settings['cart_logo']);
                         }
-                        // Assign the new logo path to the settings
-                        $submitted_settings['cart_logo'] = $destination;
+                        $submitted_settings['cart_logo'] = $dest;
                     } else {
-                        $message = '<div class="alert alert-danger">Failed to upload Cart Logo. Please try again.</div>';
+                        $message = '<div class="alert alert-danger">Failed to upload Cart Logo.</div>';
                     }
                 }
             } else {
-                $message = '<div class="alert alert-danger">Error uploading Cart Logo. Please try again.</div>';
+                $message = '<div class="alert alert-danger">Error uploading Cart Logo.</div>';
             }
         }
-
+        // If no validation errors yet
         if (empty($message)) {
-            // Update settings
             $result = updateSettings($pdo, $submitted_settings, $allowed_keys);
             if ($result === true) {
                 $message = '<div class="alert alert-success">Settings updated successfully.</div>';
-                // Refresh current settings
                 $current_settings = getSettings($pdo, $allowed_keys);
             } else {
                 $message = '<div class="alert alert-danger">Error updating settings: ' . htmlspecialchars($result) . '</div>';
@@ -169,276 +158,217 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-// Fetch current settings again after possible updates
 $current_settings = getSettings($pdo, $allowed_keys);
 ?>
-
 <div class="container-fluid mt-4">
-    <h2 class="mb-4">Settings</h2>
     <?php if ($message): ?>
         <?= $message ?>
     <?php endif; ?>
-    <!-- Tabbed Interface -->
     <form method="POST" action="settings.php" enctype="multipart/form-data" novalidate>
-        <ul class="nav nav-tabs" id="settingsTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab" aria-controls="general" aria-selected="true">
+        <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
                     <i class="fas fa-sliders-h"></i> General
                 </button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="social-media-tab" data-bs-toggle="tab" data-bs-target="#social-media" type="button" role="tab" aria-controls="social-media" aria-selected="false">
-                    <i class="fas fa-share-alt"></i> Social Media
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#social" type="button" role="tab">
+                    <i class="fas fa-share-alt"></i> Social
                 </button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="legal-tab" data-bs-toggle="tab" data-bs-target="#legal" type="button" role="tab" aria-controls="legal" aria-selected="false">
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#legal" type="button" role="tab">
                     <i class="fas fa-balance-scale"></i> Legal
                 </button>
             </li>
-            <!-- New Cart Settings Tab -->
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="cart-settings-tab" data-bs-toggle="tab" data-bs-target="#cart-settings" type="button" role="tab" aria-controls="cart-settings" aria-selected="false">
-                    <i class="fas fa-shopping-cart"></i> Cart Settings
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#cart" type="button" role="tab">
+                    <i class="fas fa-shopping-cart"></i> Cart
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#shipping" type="button" role="tab">
+                    <i class="fas fa-truck"></i> Shipping
                 </button>
             </li>
         </ul>
-        <div class="tab-content border border-top-0 p-4" id="settingsTabContent">
-            <!-- General Settings Tab -->
-            <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+        <div class="tab-content p-4 border border-top-0">
+            <!-- GENERAL -->
+            <div class="tab-pane fade show active" id="general" role="tabpanel">
+                <div class="mb-3">
+                    <label class="form-label">Minimum Order (€)</label>
+                    <input type="number" step="0.01" class="form-control" name="minimum_order" required
+                        value="<?= htmlspecialchars($current_settings['minimum_order'] ?? '5.00') ?>">
+                </div>
+            </div>
+            <!-- SOCIAL -->
+            <div class="tab-pane fade" id="social" role="tabpanel">
                 <div class="row">
-                    <!-- Minimum Order Price -->
-                    <div class="col-md-6 mb-4">
-                        <label for="minimum_order" class="form-label">
-                            <i class="fas fa-euro-sign"></i> <strong>Minimum Order (€)</strong>
-                        </label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-euro-sign"></i></span>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                class="form-control"
-                                id="minimum_order"
-                                name="minimum_order"
-                                required
-                                value="<?= htmlspecialchars($current_settings['minimum_order'] ?? '5.00') ?>"
-                                aria-describedby="minimumOrderHelp">
-                            <div class="invalid-feedback">
-                                Please enter a valid positive number.
-                            </div>
-                        </div>
-                        <div id="minimumOrderHelp" class="form-text">Set the minimum order price required for customers to place an order.</div>
+                    <div class="col-md-6 mb-3">
+                        <label>Facebook</label>
+                        <input type="url" class="form-control" name="facebook_link"
+                            value="<?= htmlspecialchars($current_settings['facebook_link'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Twitter</label>
+                        <input type="url" class="form-control" name="twitter_link"
+                            value="<?= htmlspecialchars($current_settings['twitter_link'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Instagram</label>
+                        <input type="url" class="form-control" name="instagram_link"
+                            value="<?= htmlspecialchars($current_settings['instagram_link'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>LinkedIn</label>
+                        <input type="url" class="form-control" name="linkedin_link"
+                            value="<?= htmlspecialchars($current_settings['linkedin_link'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>YouTube</label>
+                        <input type="url" class="form-control" name="youtube_link"
+                            value="<?= htmlspecialchars($current_settings['youtube_link'] ?? '') ?>">
                     </div>
                 </div>
             </div>
-
-            <!-- Social Media Settings Tab -->
-            <div class="tab-pane fade" id="social-media" role="tabpanel" aria-labelledby="social-media-tab">
-                <h5 class="mb-4"><i class="fas fa-share-alt"></i> Social Media Links</h5>
-                <div class="row">
-                    <!-- Facebook Link -->
-                    <div class="col-md-6 mb-3">
-                        <label for="facebook_link" class="form-label">
-                            <i class="fab fa-facebook-f me-2"></i> Facebook URL
-                        </label>
-                        <input
-                            type="url"
-                            class="form-control"
-                            id="facebook_link"
-                            name="facebook_link"
-                            placeholder="https://facebook.com/yourpage"
-                            value="<?= htmlspecialchars($current_settings['facebook_link'] ?? '') ?>"
-                            aria-describedby="facebookHelp">
-                        <div id="facebookHelp" class="form-text">Enter your Facebook page URL.</div>
-                        <div class="invalid-feedback">
-                            Please enter a valid URL.
-                        </div>
-                    </div>
-                    <!-- Twitter Link -->
-                    <div class="col-md-6 mb-3">
-                        <label for="twitter_link" class="form-label">
-                            <i class="fab fa-twitter me-2"></i> Twitter URL
-                        </label>
-                        <input
-                            type="url"
-                            class="form-control"
-                            id="twitter_link"
-                            name="twitter_link"
-                            placeholder="https://twitter.com/yourprofile"
-                            value="<?= htmlspecialchars($current_settings['twitter_link'] ?? '') ?>"
-                            aria-describedby="twitterHelp">
-                        <div id="twitterHelp" class="form-text">Enter your Twitter profile URL.</div>
-                        <div class="invalid-feedback">
-                            Please enter a valid URL.
-                        </div>
-                    </div>
-                    <!-- Instagram Link -->
-                    <div class="col-md-6 mb-3">
-                        <label for="instagram_link" class="form-label">
-                            <i class="fab fa-instagram me-2"></i> Instagram URL
-                        </label>
-                        <input
-                            type="url"
-                            class="form-control"
-                            id="instagram_link"
-                            name="instagram_link"
-                            placeholder="https://instagram.com/yourprofile"
-                            value="<?= htmlspecialchars($current_settings['instagram_link'] ?? '') ?>"
-                            aria-describedby="instagramHelp">
-                        <div id="instagramHelp" class="form-text">Enter your Instagram profile URL.</div>
-                        <div class="invalid-feedback">
-                            Please enter a valid URL.
-                        </div>
-                    </div>
-                    <!-- LinkedIn Link -->
-                    <div class="col-md-6 mb-3">
-                        <label for="linkedin_link" class="form-label">
-                            <i class="fab fa-linkedin-in me-2"></i> LinkedIn URL
-                        </label>
-                        <input
-                            type="url"
-                            class="form-control"
-                            id="linkedin_link"
-                            name="linkedin_link"
-                            placeholder="https://linkedin.com/in/yourprofile"
-                            value="<?= htmlspecialchars($current_settings['linkedin_link'] ?? '') ?>"
-                            aria-describedby="linkedinHelp">
-                        <div id="linkedinHelp" class="form-text">Enter your LinkedIn profile URL.</div>
-                        <div class="invalid-feedback">
-                            Please enter a valid URL.
-                        </div>
-                    </div>
-                    <!-- YouTube Link -->
-                    <div class="col-md-6 mb-3">
-                        <label for="youtube_link" class="form-label">
-                            <i class="fab fa-youtube me-2"></i> YouTube URL
-                        </label>
-                        <input
-                            type="url"
-                            class="form-control"
-                            id="youtube_link"
-                            name="youtube_link"
-                            placeholder="https://youtube.com/yourchannel"
-                            value="<?= htmlspecialchars($current_settings['youtube_link'] ?? '') ?>"
-                            aria-describedby="youtubeHelp">
-                        <div id="youtubeHelp" class="form-text">Enter your YouTube channel URL.</div>
-                        <div class="invalid-feedback">
-                            Please enter a valid URL.
-                        </div>
-                    </div>
+            <!-- LEGAL -->
+            <div class="tab-pane fade" id="legal" role="tabpanel">
+                <div class="mb-3">
+                    <label class="form-label">AGB</label>
+                    <textarea class="form-control wysiwyg" name="agb" rows="6"><?= htmlspecialchars($current_settings['agb'] ?? '') ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Impressum</label>
+                    <textarea class="form-control wysiwyg" name="impressum" rows="4"><?= htmlspecialchars($current_settings['impressum'] ?? '') ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Datenschutzerklärung</label>
+                    <textarea class="form-control wysiwyg" name="datenschutzerklaerung" rows="6"><?= htmlspecialchars($current_settings['datenschutzerklaerung'] ?? '') ?></textarea>
                 </div>
             </div>
-
-            <!-- Legal Settings Tab -->
-            <div class="tab-pane fade" id="legal" role="tabpanel" aria-labelledby="legal-tab">
+            <!-- CART -->
+            <div class="tab-pane fade" id="cart" role="tabpanel">
                 <div class="row">
-                    <!-- AGB (Terms and Conditions) -->
-                    <div class="col-12 mb-4">
-                        <label for="agb" class="form-label">
-                            <i class="fas fa-file-contract me-2"></i> <strong>AGB (Terms and Conditions)</strong>
-                        </label>
-                        <textarea
-                            class="form-control wysiwyg"
-                            id="agb"
-                            name="agb"
-                            rows="10"
-                            required><?= htmlspecialchars($current_settings['agb'] ?? '') ?></textarea>
-                        <div class="form-text">Enter the Terms and Conditions for your website.</div>
-                        <div class="invalid-feedback">
-                            This field is required.
-                        </div>
-                    </div>
-
-                    <!-- Impressum (Imprint) -->
-                    <div class="col-12 mb-4">
-                        <label for="impressum" class="form-label">
-                            <i class="fas fa-building me-2"></i> <strong>Impressum (Imprint)</strong>
-                        </label>
-                        <textarea
-                            class="form-control wysiwyg"
-                            id="impressum"
-                            name="impressum"
-                            rows="5"
-                            required><?= htmlspecialchars($current_settings['impressum'] ?? '') ?></textarea>
-                        <div class="form-text">Enter the Imprint information required by law.</div>
-                        <div class="invalid-feedback">
-                            This field is required.
-                        </div>
-                    </div>
-
-                    <!-- Datenschutzerklärung (Privacy Policy) -->
-                    <div class="col-12 mb-4">
-                        <label for="datenschutzerklaerung" class="form-label">
-                            <i class="fas fa-user-shield me-2"></i> <strong>Datenschutzerklärung (Privacy Policy)</strong>
-                        </label>
-                        <textarea
-                            class="form-control wysiwyg"
-                            id="datenschutzerklaerung"
-                            name="datenschutzerklaerung"
-                            rows="10"
-                            required><?= htmlspecialchars($current_settings['datenschutzerklaerung'] ?? '') ?></textarea>
-                        <div class="form-text">Enter the Privacy Policy for your website.</div>
-                        <div class="invalid-feedback">
-                            This field is required.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cart Settings Tab -->
-            <div class="tab-pane fade" id="cart-settings" role="tabpanel" aria-labelledby="cart-settings-tab">
-                <h5 class="mb-4"><i class="fas fa-shopping-cart me-2"></i> Cart Settings</h5>
-                <div class="row">
-                    <!-- Cart Logo Upload -->
-                    <div class="col-md-6 mb-4">
-                        <label for="cart_logo" class="form-label">
-                            <i class="fas fa-image me-2"></i> <strong>Cart Logo</strong>
-                        </label>
-                        <input
-                            class="form-control"
-                            type="file"
-                            id="cart_logo"
-                            name="cart_logo"
-                            accept="image/*"
-                            aria-describedby="cartLogoHelp">
-                        <div id="cartLogoHelp" class="form-text">Upload your company logo to display in the shopping cart.</div>
+                    <div class="col-md-6 mb-3">
+                        <label>Cart Logo</label>
+                        <input type="file" class="form-control" name="cart_logo" accept="image/*">
                         <?php if (!empty($current_settings['cart_logo']) && file_exists($current_settings['cart_logo'])): ?>
-                            <div class="mt-2">
-                                <img src="<?= htmlspecialchars($current_settings['cart_logo']) ?>" alt="Cart Logo" class="img-thumbnail" style="max-width: 200px;">
-                            </div>
+                            <img src="<?= htmlspecialchars($current_settings['cart_logo']) ?>" alt="Cart Logo"
+                                class="img-thumbnail mt-2" style="max-width:200px;">
                         <?php endif; ?>
-                        <div class="invalid-feedback">
-                            Please upload a valid image file (JPEG, PNG, GIF, WEBP).
-                        </div>
                     </div>
-
-                    <!-- Cart Description -->
-                    <div class="col-md-6 mb-4">
-                        <label for="cart_description" class="form-label">
-                            <i class="fas fa-align-left me-2"></i> <strong>Cart Description</strong>
-                        </label>
-                        <textarea
-                            class="form-control wysiwyg"
-                            id="cart_description"
-                            name="cart_description"
-                            rows="4"
-                            placeholder="Enter a description to display below the logo in the shopping cart."><?= htmlspecialchars($current_settings['cart_description'] ?? '') ?></textarea>
-                        <div class="form-text">Provide a brief description or message to accompany your logo in the cart.</div>
-                        <div class="invalid-feedback">
-                            This field is required.
-                        </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Cart Description</label>
+                        <textarea class="form-control wysiwyg" rows="4" name="cart_description"><?= htmlspecialchars($current_settings['cart_description'] ?? '') ?></textarea>
+                    </div>
+                </div>
+            </div>
+            <!-- SHIPPING -->
+            <div class="tab-pane fade" id="shipping" role="tabpanel">
+                <h5 class="mb-3">Advanced Shipping Options</h5>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label>Shipping Calculation Mode</label>
+                        <select class="form-select" name="shipping_calculation_mode">
+                            <option value="radius" <?= ($current_settings['shipping_calculation_mode'] ?? '') === 'radius' ? 'selected' : '' ?>>Radius (km)</option>
+                            <option value="postal" <?= ($current_settings['shipping_calculation_mode'] ?? '') === 'postal' ? 'selected' : '' ?>>Postal Code</option>
+                            <option value="both" <?= ($current_settings['shipping_calculation_mode'] ?? '') === 'both' ? 'selected' : '' ?>>Both</option>
+                        </select>
+                        <div class="form-text">Use “radius” for store-based distance, “postal” for zones, or “both”.</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Max Distance Radius (km)</label>
+                        <input type="number" class="form-control" name="shipping_distance_radius"
+                            value="<?= htmlspecialchars($current_settings['shipping_distance_radius'] ?? '10') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Base Shipping Fee (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_fee_base"
+                            value="<?= htmlspecialchars($current_settings['shipping_fee_base'] ?? '0.00') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Fee per Km (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_fee_per_km"
+                            value="<?= htmlspecialchars($current_settings['shipping_fee_per_km'] ?? '0.50') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Free Shipping Above (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_free_threshold"
+                            value="<?= htmlspecialchars($current_settings['shipping_free_threshold'] ?? '50.00') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Store Latitude</label>
+                        <input type="text" class="form-control" id="store_lat" name="store_lat"
+                            value="<?= htmlspecialchars($current_settings['store_lat'] ?? '41.3275') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Store Longitude</label>
+                        <input type="text" class="form-control" id="store_lng" name="store_lng"
+                            value="<?= htmlspecialchars($current_settings['store_lng'] ?? '19.8189') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Enable Google Distance Matrix?</label>
+                        <select class="form-select" name="shipping_enable_google_distance_matrix">
+                            <option value="0" <?= ($current_settings['shipping_enable_google_distance_matrix'] ?? '') == '0' ? 'selected' : '' ?>>No</option>
+                            <option value="1" <?= ($current_settings['shipping_enable_google_distance_matrix'] ?? '') == '1' ? 'selected' : '' ?>>Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Google Maps API Key</label>
+                        <input type="text" class="form-control" name="google_maps_api_key"
+                            value="<?= htmlspecialchars($current_settings['google_maps_api_key'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Distance Matrix Region (e.g. DE, US)</label>
+                        <input type="text" class="form-control" name="shipping_matrix_region"
+                            value="<?= htmlspecialchars($current_settings['shipping_matrix_region'] ?? '') ?>">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Distance Matrix Units</label>
+                        <select class="form-select" name="shipping_matrix_units">
+                            <option value="metric" <?= ($current_settings['shipping_matrix_units'] ?? '') === 'metric' ? 'selected' : '' ?>>Metric (km)</option>
+                            <option value="imperial" <?= ($current_settings['shipping_matrix_units'] ?? '') === 'imperial' ? 'selected' : '' ?>>Imperial (miles)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Weekend Surcharge (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_weekend_surcharge"
+                            value="<?= htmlspecialchars($current_settings['shipping_weekend_surcharge'] ?? '0.00') ?>">
+                        <div class="form-text">Extra charge for weekend deliveries.</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Holiday Surcharge (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_holiday_surcharge"
+                            value="<?= htmlspecialchars($current_settings['shipping_holiday_surcharge'] ?? '0.00') ?>">
+                        <div class="form-text">Extra charge on public holidays.</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>Handling Fee (€)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_handling_fee"
+                            value="<?= htmlspecialchars($current_settings['shipping_handling_fee'] ?? '0.00') ?>">
+                        <div class="form-text">For packaging, handling, etc.</div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>VAT on Shipping (%)</label>
+                        <input type="number" step="0.01" class="form-control" name="shipping_vat_percentage"
+                            value="<?= htmlspecialchars($current_settings['shipping_vat_percentage'] ?? '20.00') ?>">
+                        <div class="form-text">Add VAT on shipping cost. Use 0 for none.</div>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <label>Postal Code Zones (JSON)</label>
+                        <textarea class="form-control" name="postal_code_zones" rows="3" style="font-family:monospace" placeholder='{"1000":5,"1001":7,"1010":0}'><?= htmlspecialchars($current_settings['postal_code_zones'] ?? '') ?></textarea>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <label class="form-label d-block">Store Location</label>
+                        <div style="height:400px" id="shippingMap"></div>
                     </div>
                 </div>
             </div>
         </div>
-        <!-- CSRF Token -->
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-        <!-- Save All Changes Button -->
-        <div class="d-flex justify-content-end my-4">
+        <div class="mt-3 d-flex justify-content-end">
             <button type="submit" class="btn btn-success me-2">
-                <i class="fas fa-save"></i> Save All Changes
+                <i class="fas fa-save"></i> Save
             </button>
             <button type="reset" class="btn btn-secondary">
                 <i class="fas fa-undo"></i> Reset
@@ -446,103 +376,62 @@ $current_settings = getSettings($pdo, $allowed_keys);
         </div>
     </form>
 </div>
-
-<!-- Include Free Version of TinyMCE -->
-<!-- No API key is required for the free version; the following script uses the official TinyMCE CDN without an API key -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/7.5.1/tinymce.min.js" integrity="sha512-8+JNyduy8cg+AUuQiuxKD2W7277rkqjlmEE/Po60jKpCXzc+EYwyVB8o3CnlTGf98+ElVPaOBWyme/8jJqseMA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script><script>
-    // Initialize TinyMCE for all textareas with class 'wysiwyg'
-    tinymce.init({
-        selector: 'textarea.wysiwyg',
-        height: 300,
-        menubar: false,
-        plugins: [
-            'advlist autolink lists link charmap preview anchor',
-            'searchreplace visualblocks code fullscreen',
-            'insertdatetime media table paste code help wordcount'
-        ],
-        toolbar: 'undo redo | formatselect | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help',
-        branding: false,
-        // Ensure that only free plugins and functionalities are enabled
-    });
-
-    // Real-Time Validation
+<!-- TinyMCE -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/7.5.1/tinymce.min.js"
+    integrity="sha512-8+JNyduy8cg+AUuQiuxKD2W7277rkqjlmEE/Po60jKpCXzc+EYwyVB8o3CnlTGf98+ElVPaOBWyme/8jJqseMA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- Leaflet CSS / JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script defer src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script defer>
     document.addEventListener('DOMContentLoaded', function() {
-        // Bootstrap validation
-        const forms = document.querySelectorAll('form');
-
-        Array.prototype.slice.call(forms)
-            .forEach(function(form) {
-                form.addEventListener('submit', function(event) {
-                    if (!form.checkValidity()) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }
-                    form.classList.add('was-validated');
-                }, false);
+        // Initialize TinyMCE
+        tinymce.init({
+            selector: 'textarea.wysiwyg',
+            height: 200,
+            menubar: false,
+            plugins: [
+                'advlist autolink lists link charmap preview anchor',
+                'searchreplace visualblocks code fullscreen',
+                'insertdatetime media table paste code help wordcount'
+            ],
+            toolbar: 'undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist | removeformat | help',
+            branding: false
+        });
+        // Initialize Leaflet after short timeout, to improve user perception
+        setTimeout(function() {
+            let lat = parseFloat(document.getElementById('store_lat').value) || 41.3275;
+            let lng = parseFloat(document.getElementById('store_lng').value) || 19.8189;
+            let map = L.map('shippingMap', {
+                zoomControl: false
+            }).setView([lat, lng], 12);
+            // Use a relatively fast tile server
+            L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(map);
+            let marker = L.marker([lat, lng], {
+                draggable: true
+            }).addTo(map);
+            marker.on('dragend', function(e) {
+                let coords = e.target.getLatLng();
+                document.getElementById('store_lat').value = coords.lat.toFixed(6);
+                document.getElementById('store_lng').value = coords.lng.toFixed(6);
             });
-
-        // Minimum Order Validation
-        const minimumOrderInput = document.getElementById('minimum_order');
-        minimumOrderInput.addEventListener('input', function() {
-            const value = parseFloat(this.value);
-            if (!isNaN(value) && value >= 0) {
-                this.classList.remove('is-invalid');
-                this.classList.add('is-valid');
-            } else {
-                this.classList.remove('is-valid');
-                this.classList.add('is-invalid');
-            }
-        });
-
-        // Social Media URLs Validation
-        const socialLinks = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
-        socialLinks.forEach(function(linkId) {
-            const linkInput = document.getElementById(linkId);
-            if (linkInput) {
-                linkInput.addEventListener('input', function() {
-                    const value = this.value.trim();
-                    if (value === '' || isValidURL(value)) {
-                        this.classList.remove('is-invalid');
-                        this.classList.add('is-valid');
-                    } else {
-                        this.classList.remove('is-valid');
-                        this.classList.add('is-invalid');
-                    }
-                });
-            }
-        });
-
-        // Cart Logo Validation
-        const cartLogoInput = document.getElementById('cart_logo');
-        cartLogoInput.addEventListener('change', function() {
-            const file = this.files[0];
-            if (file) {
-                const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                if (validTypes.includes(file.type)) {
-                    this.classList.remove('is-invalid');
-                    this.classList.add('is-valid');
-                } else {
-                    this.classList.remove('is-valid');
-                    this.classList.add('is-invalid');
+        }, 200);
+        // Basic validation
+        const forms = document.querySelectorAll('form');
+        Array.prototype.slice.call(forms).forEach(function(form) {
+            form.addEventListener('submit', function(e) {
+                if (!form.checkValidity()) {
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
-            } else {
-                this.classList.remove('is-valid');
-                this.classList.remove('is-invalid');
-            }
+                form.classList.add('was-validated');
+            }, false);
         });
-
-        // Helper function to validate URLs
-        function isValidURL(string) {
-            try {
-                new URL(string);
-                return true;
-            } catch (_) {
-                return false;
-            }
-        }
     });
 </script>
-
-<?php
-require_once 'includes/footer.php';
-?>
+<?php require_once 'includes/footer.php'; ?>
