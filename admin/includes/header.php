@@ -17,12 +17,13 @@ $adminMenuItems = [
     ['drinks.php', 'fas fa-coffee', 'Drinks'],
     // ['sauces.php', 'fas fa-bottle-water', 'Sauces'],
     // ['informations.php', 'fas fa-info', 'Informations'],
+    ['cupons.php', 'fas fa-tags', 'Coupons'],
     ['users.php', 'fas fa-user-friends', 'Users'],
-    ['products_mixes.php', 'fas fa-blender', 'Products Mixes'],
+    // ['products_mixes.php', 'fas fa-blender', 'Products Mixes'],
     ['reservations.php', 'fas fa-calendar-check', 'Reservations'],
     ['stores.php', 'fas fa-shop', 'Stores'],
     ['banners.php', 'fas fa-photo-video', 'Banners'],
-    ['offers.php', 'fas fa-percentage', 'Offers'],
+    // ['offers.php', 'fas fa-percentage', 'Offers'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
 ];
 $deliveryMenuItems = [

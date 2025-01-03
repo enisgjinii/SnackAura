@@ -2,11 +2,9 @@
 ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
 $action = $_GET['action'] ?? 'list';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
-$perPage = 10;
 
 function validateStore($data, $pdo, $id = 0)
 {
@@ -16,7 +14,6 @@ function validateStore($data, $pdo, $id = 0)
     $phone = trim($data['phone'] ?? '');
     $email = trim($data['email'] ?? '');
     $manager_id = isset($data['manager_id']) ? (int)$data['manager_id'] : null;
-
     if (empty($name) || empty($address) || empty($phone) || empty($email)) {
         $errors[] = "All fields are required.";
     }
@@ -37,13 +34,6 @@ function validateStore($data, $pdo, $id = 0)
         $errors[] = "Store name or email already exists.";
     }
     return [$errors, compact('name', 'address', 'phone', 'email', 'manager_id')];
-}
-
-function displayMessage($message)
-{
-    if ($message) {
-        echo '<div class="alert alert-info">' . htmlspecialchars($message) . '</div>';
-    }
 }
 
 function handleFileUpload(&$errors, $fileKey = 'logo')
@@ -68,39 +58,17 @@ function handleFileUpload(&$errors, $fileKey = 'logo')
     return $fileName;
 }
 
-/**
- * Build a JSON schedule from user-friendly POST data (start/end times + holiday lines).
- * Returns a JSON string (or null if all fields empty).
- */
 function buildWorkScheduleJSON()
 {
-    // Days of the week
-    $days = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
-    ];
-    $schedule = [
-        'days' => [],
-        'holidays' => []
-    ];
-    // Gather each day’s data
+    $days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    $schedule = ['days' => [], 'holidays' => []];
     foreach ($days as $day) {
         $startKey = strtolower($day) . '_start';
-        $endKey   = strtolower($day) . '_end';
+        $endKey = strtolower($day) . '_end';
         $startVal = trim($_POST[$startKey] ?? '');
-        $endVal   = trim($_POST[$endKey] ?? '');
-        // If user leaves them blank, assume closed
-        $schedule['days'][$day] = [
-            'start' => $startVal,
-            'end'   => $endVal
-        ];
+        $endVal = trim($_POST[$endKey] ?? '');
+        $schedule['days'][$day] = ['start' => $startVal, 'end' => $endVal];
     }
-    // Holidays lines: each line "YYYY-MM-DD,Description"
     $holidaysRaw = trim($_POST['holidays'] ?? '');
     if (!empty($holidaysRaw)) {
         $lines = explode("\n", $holidaysRaw);
@@ -110,14 +78,9 @@ function buildWorkScheduleJSON()
             $parts = explode(',', $line, 2);
             $date = trim($parts[0]);
             $desc = isset($parts[1]) ? trim($parts[1]) : 'Holiday';
-            // Basic date validation if you like
-            $schedule['holidays'][] = [
-                'date' => $date,
-                'desc' => $desc
-            ];
+            $schedule['holidays'][] = ['date' => $date, 'desc' => $desc];
         }
     }
-    // Convert to JSON
     return json_encode($schedule, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 }
 
@@ -126,25 +89,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         list($errors, $data) = validateStore($_POST, $pdo);
         $uploadedLogo = handleFileUpload($errors, 'logo');
         $workScheduleJSON = buildWorkScheduleJSON();
-
         if (!empty($errors)) {
             $message = '<div class="alert alert-danger">' . implode('<br>', $errors) . '</div>';
         } else {
-            $stmt = $pdo->prepare('
-                INSERT INTO stores 
-                (name, address, phone, email, manager_id, is_active, logo, work_schedule, created_at)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?, NOW())
-            ');
+            $stmt = $pdo->prepare('INSERT INTO stores (name, address, phone, email, manager_id, is_active, logo, work_schedule, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, NOW())');
             try {
-                $stmt->execute([
-                    $data['name'],
-                    $data['address'],
-                    $data['phone'],
-                    $data['email'],
-                    $data['manager_id'],
-                    $uploadedLogo,
-                    $workScheduleJSON
-                ]);
+                $stmt->execute([$data['name'], $data['address'], $data['phone'], $data['email'], $data['manager_id'], $uploadedLogo, $workScheduleJSON]);
                 header('Location: stores.php?action=list&message=' . urlencode("Store created successfully."));
                 exit();
             } catch (PDOException $e) {
@@ -157,33 +107,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_active = isset($_POST['is_active']) ? 1 : 0;
         $uploadedLogo = handleFileUpload($errors, 'logo');
         $workScheduleJSON = buildWorkScheduleJSON();
-
         if (!empty($errors)) {
             $message = '<div class="alert alert-danger">' . implode('<br>', $errors) . '</div>';
         } else {
             $extraLogo = $uploadedLogo ? ', logo = ?' : '';
-            $stmt = $pdo->prepare("
-                UPDATE stores
-                SET name = ?,
-                    address = ?,
-                    phone = ?,
-                    email = ?,
-                    manager_id = ?,
-                    is_active = ?,
-                    work_schedule = ?
-                    $extraLogo,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $params = [
-                $data['name'],
-                $data['address'],
-                $data['phone'],
-                $data['email'],
-                $data['manager_id'],
-                $is_active,
-                $workScheduleJSON
-            ];
+            $stmt = $pdo->prepare("UPDATE stores SET name = ?, address = ?, phone = ?, email = ?, manager_id = ?, is_active = ?, work_schedule = ? $extraLogo, updated_at = NOW() WHERE id = ?");
+            $params = [$data['name'], $data['address'], $data['phone'], $data['email'], $data['manager_id'], $is_active, $workScheduleJSON];
             if ($uploadedLogo) {
                 $params[] = $uploadedLogo;
             }
@@ -279,52 +208,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'list') {
-    $search = trim($_GET['search'] ?? '');
-    $search_query = '';
-    $params = [];
-    if ($search) {
-        $search_query = ' WHERE s.name LIKE :search OR s.address LIKE :search ';
-        $params[':search'] = '%' . $search . '%';
-    }
-    $sort = $_GET['sort'] ?? 'created_at';
-    $allowed_sort = ['name', 'created_at', 'is_active', 'address'];
-    if (!in_array($sort, $allowed_sort)) {
-        $sort = 'created_at';
-    }
-    $order = $_GET['order'] ?? 'DESC';
-    $order = ($order === 'ASC') ? 'ASC' : 'DESC';
-    $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-    $offset = ($page - 1) * $perPage;
+    $message = $_GET['message'] ?? '';
+    $stores = [];
     try {
-        $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM stores s $search_query");
-        $count_stmt->execute($params);
-        $total = $count_stmt->fetchColumn();
-    } catch (PDOException $e) {
-        error_log("Error counting stores: " . $e->getMessage());
-        $total = 0;
-    }
-    try {
-        $stmt = $pdo->prepare("
-            SELECT s.id, s.name, s.address, s.phone, s.email, s.logo, u.username AS manager, s.is_active, s.created_at
-            FROM stores s
-            LEFT JOIN users u ON s.manager_id = u.id
-            $search_query
-            ORDER BY s.$sort $order
-            LIMIT :limit OFFSET :offset
-        ");
-        foreach ($params as $key => &$val) {
-            $stmt->bindParam($key, $val, PDO::PARAM_STR);
-        }
-        $stmt->bindValue(':limit', (int)$perPage, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+        $stmt = $pdo->prepare("SELECT s.id, s.name, s.address, s.phone, s.email, s.logo, u.username AS manager, s.is_active, s.created_at FROM stores s LEFT JOIN users u ON s.manager_id = u.id ORDER BY s.created_at DESC");
         $stmt->execute();
         $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         error_log("Error fetching stores: " . $e->getMessage());
-        $stores = [];
         $message = '<div class="alert alert-danger">Unable to fetch stores. Please try again later.</div>';
     }
-    $totalPages = ceil($total / $perPage);
 } elseif (in_array($action, ['edit', 'view', 'assign_admin']) && $id > 0) {
     $stmt = $pdo->prepare('SELECT * FROM stores WHERE id = ?');
     $stmt->execute([$id]);
@@ -334,13 +227,7 @@ if ($action === 'list') {
         exit();
     }
     if ($action === 'view') {
-        // Fetch store + manager
-        $stmt = $pdo->prepare('
-            SELECT s.*, u.username AS manager
-            FROM stores s
-            LEFT JOIN users u ON s.manager_id = u.id
-            WHERE s.id = ?
-        ');
+        $stmt = $pdo->prepare('SELECT s.*, u.username AS manager FROM stores s LEFT JOIN users u ON s.manager_id = u.id WHERE s.id = ?');
         $stmt->execute([$id]);
         $store = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$store) {
@@ -369,41 +256,20 @@ if ($action === 'list') {
             <?= $message ?>
         <?php endif; ?>
         <div class="d-flex justify-content-between mb-3">
-            <div>
-                <a href="stores.php?action=create" class="btn btn-primary btn-sm me-2">
-                    <i class="fas fa-plus"></i> New Store
-                </a>
-            </div>
-            <form class="d-flex" method="GET" action="stores.php">
-                <input type="hidden" name="action" value="list">
-                <input class="form-control form-control-sm me-2" type="search" name="search" placeholder="Search"
-                    value="<?= htmlspecialchars($search ?? '') ?>">
-                <button class="btn btn-outline-secondary btn-sm" type="submit">
-                    <i class="fas fa-search"></i>
-                </button>
-            </form>
+            <a href="stores.php?action=create" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Store</a>
         </div>
         <div class="table-responsive shadow-sm">
             <table id="storesTable" class="table table-striped table-hover table-sm align-middle">
                 <thead class="table-dark">
                     <tr>
-                        <th>
-                            <a href="?action=list&sort=name&order=<?= $sort === 'name' && $order === 'ASC' ? 'DESC' : 'ASC' ?>"
-                                class="text-white text-decoration-none">Name</a>
-                        </th>
-                        <th>
-                            <a href="?action=list&sort=address&order=<?= $sort === 'address' && $order === 'ASC' ? 'DESC' : 'ASC' ?>"
-                                class="text-white text-decoration-none">Address</a>
-                        </th>
+                        <th>Name</th>
+                        <th>Address</th>
                         <th>Phone</th>
                         <th>Email</th>
                         <th>Logo</th>
                         <th>Manager</th>
                         <th>Status</th>
-                        <th>
-                            <a href="?action=list&sort=created_at&order=<?= $sort === 'created_at' && $order === 'ASC' ? 'DESC' : 'ASC' ?>"
-                                class="text-white text-decoration-none">Created</a>
-                        </th>
+                        <th>Created</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -419,44 +285,17 @@ if ($action === 'list') {
                                 <td><?= htmlspecialchars($store['address']) ?></td>
                                 <td><?= htmlspecialchars($store['phone']) ?></td>
                                 <td><?= htmlspecialchars($store['email']) ?></td>
-                                <td>
-                                    <?php if (!empty($store['logo'])): ?>
-                                        <img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Logo" style="max-height:40px;">
-                                    <?php else: ?>
-                                        <span class="text-muted">No Logo</span>
-                                    <?php endif; ?>
-                                </td>
+                                <td><?php if (!empty($store['logo'])): ?><img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Logo" style="max-height:40px;"><?php else: ?><span class="text-muted">No Logo</span><?php endif; ?></td>
                                 <td><?= htmlspecialchars($store['manager'] ?? 'N/A') ?></td>
-                                <td>
-                                    <span class="badge <?= $store['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
-                                        <?= $store['is_active'] ? 'Active' : 'Inactive' ?>
-                                    </span>
-                                </td>
+                                <td><span class="badge <?= $store['is_active'] ? 'bg-success' : 'bg-secondary' ?>"><?= $store['is_active'] ? 'Active' : 'Inactive' ?></span></td>
                                 <td><?= htmlspecialchars($store['created_at']) ?></td>
                                 <td>
                                     <div class="d-flex flex-wrap gap-1">
-                                        <a href="stores.php?action=view&id=<?= $store['id'] ?>"
-                                            class="btn btn-sm btn-info" title="View">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="stores.php?action=edit&id=<?= $store['id'] ?>"
-                                            class="btn btn-sm btn-warning" title="Edit">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        <a href="stores.php?action=delete&id=<?= $store['id'] ?>"
-                                            class="btn btn-sm btn-danger" title="Delete"
-                                            onclick="return confirm('Are you sure you want to delete this store?');">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </a>
-                                        <a href="stores.php?action=toggle_status&id=<?= $store['id'] ?>"
-                                            class="btn btn-sm <?= $store['is_active'] ? 'btn-secondary' : 'btn-success' ?>"
-                                            title="<?= $store['is_active'] ? 'Deactivate' : 'Activate' ?>">
-                                            <i class="fas <?= $store['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
-                                        </a>
-                                        <a href="stores.php?action=assign_admin&id=<?= $store['id'] ?>"
-                                            class="btn btn-sm btn-primary" title="Assign Admin">
-                                            <i class="fas fa-user-cog"></i>
-                                        </a>
+                                        <a href="stores.php?action=view&id=<?= $store['id'] ?>" class="btn btn-sm btn-info" title="View"><i class="fas fa-eye"></i></a>
+                                        <a href="stores.php?action=edit&id=<?= $store['id'] ?>" class="btn btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></a>
+                                        <a href="stores.php?action=delete&id=<?= $store['id'] ?>" class="btn btn-sm btn-danger" title="Delete" onclick="return confirm('Are you sure you want to delete this store?');"><i class="fas fa-trash-alt"></i></a>
+                                        <a href="stores.php?action=toggle_status&id=<?= $store['id'] ?>" class="btn btn-sm <?= $store['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $store['is_active'] ? 'Deactivate' : 'Activate' ?>"><i class="fas <?= $store['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i></a>
+                                        <a href="stores.php?action=assign_admin&id=<?= $store['id'] ?>" class="btn btn-sm btn-primary" title="Assign Admin"><i class="fas fa-user-cog"></i></a>
                                     </div>
                                 </td>
                             </tr>
@@ -464,20 +303,6 @@ if ($action === 'list') {
                     <?php endif; ?>
                 </tbody>
             </table>
-            <?php if ($totalPages > 1): ?>
-                <nav class="mt-3">
-                    <ul class="pagination justify-content-center">
-                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
-                            <li class="page-item <?= $p == $page ? 'active' : '' ?>">
-                                <a class="page-link"
-                                    href="?action=list&page=<?= $p ?>&sort=<?= $sort ?>&order=<?= $order ?>&search=<?= htmlspecialchars($search) ?>">
-                                    <?= $p ?>
-                                </a>
-                            </li>
-                        <?php endfor; ?>
-                    </ul>
-                </nav>
-            <?php endif; ?>
         </div>
     </div>
 <?php elseif ($action === 'create'): ?>
@@ -488,28 +313,11 @@ if ($action === 'list') {
         <?php endif; ?>
         <form method="POST" action="stores.php?action=create" enctype="multipart/form-data" class="shadow p-4 bg-light rounded">
             <div class="row g-3">
-                <div class="col-md-6">
-                    <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="name" name="name" required maxlength="100"
-                        value="<?= htmlspecialchars($_POST['name'] ?? '') ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="address" class="form-label">Address <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="address" name="address" required maxlength="255"
-                        value="<?= htmlspecialchars($_POST['address'] ?? '') ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="phone" class="form-label">Phone <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="phone" name="phone" required maxlength="20"
-                        value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control form-control-sm" id="email" name="email" required maxlength="100"
-                        value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="manager_id" class="form-label">Manager</label>
+                <div class="col-md-6"><label for="name" class="form-label">Name <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="name" name="name" required maxlength="100" value="<?= htmlspecialchars($_POST['name'] ?? '') ?>"></div>
+                <div class="col-md-6"><label for="address" class="form-label">Address <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="address" name="address" required maxlength="255" value="<?= htmlspecialchars($_POST['address'] ?? '') ?>"></div>
+                <div class="col-md-6"><label for="phone" class="form-label">Phone <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="phone" name="phone" required maxlength="20" value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>"></div>
+                <div class="col-md-6"><label for="email" class="form-label">Email <span class="text-danger">*</span></label><input type="email" class="form-control form-control-sm" id="email" name="email" required maxlength="100" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"></div>
+                <div class="col-md-6"><label for="manager_id" class="form-label">Manager</label>
                     <select class="form-select form-select-sm" id="manager_id" name="manager_id">
                         <option value="">Select Manager</option>
                         <?php
@@ -527,10 +335,7 @@ if ($action === 'list') {
                         ?>
                     </select>
                 </div>
-                <div class="col-md-6">
-                    <label for="logo" class="form-label">Logo</label>
-                    <input type="file" class="form-control form-control-sm" id="logo" name="logo" accept="image/*">
-                </div>
+                <div class="col-md-6"><label for="logo" class="form-label">Logo</label><input type="file" class="form-control form-control-sm" id="logo" name="logo" accept="image/*"></div>
             </div>
             <hr>
             <h5>Weekly Schedule</h5>
@@ -538,42 +343,23 @@ if ($action === 'list') {
             $daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
             foreach ($daysOfWeek as $d):
                 $startField = strtolower($d) . "_start";
-                $endField   = strtolower($d) . "_end";
+                $endField = strtolower($d) . "_end";
             ?>
                 <div class="row g-2 mb-2">
                     <div class="col-md-2 d-flex align-items-center fw-bold"><?= $d ?></div>
-                    <div class="col-md-5">
-                        <label class="form-label mb-0 small">Start Time</label>
-                        <input type="time" class="form-control form-control-sm" name="<?= $startField ?>"
-                            value="<?= htmlspecialchars($_POST[$startField] ?? '') ?>">
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label mb-0 small">End Time</label>
-                        <input type="time" class="form-control form-control-sm" name="<?= $endField ?>"
-                            value="<?= htmlspecialchars($_POST[$endField] ?? '') ?>">
-                    </div>
+                    <div class="col-md-5"><label class="form-label mb-0 small">Start Time</label><input type="time" class="form-control form-control-sm" name="<?= $startField ?>" value="<?= htmlspecialchars($_POST[$startField] ?? '') ?>"></div>
+                    <div class="col-md-5"><label class="form-label mb-0 small">End Time</label><input type="time" class="form-control form-control-sm" name="<?= $endField ?>" value="<?= htmlspecialchars($_POST[$endField] ?? '') ?>"></div>
                 </div>
             <?php endforeach; ?>
             <hr>
             <h5>Holidays</h5>
-            <p class="small text-muted">
-                Enter one holiday per line in the format: <code>YYYY-MM-DD,Description</code><br>
-                For example: <code>2024-12-25,Christmas Day</code>
-            </p>
+            <p class="small text-muted">Enter one holiday per line in the format: <code>YYYY-MM-DD,Description</code><br>For example: <code>2024-12-25,Christmas Day</code></p>
             <textarea class="form-control form-control-sm" name="holidays" rows="4"><?= htmlspecialchars($_POST['holidays'] ?? '') ?></textarea>
-            <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-success btn-sm">
-                    <i class="fas fa-save"></i> Create Store
-                </button>
-                <a href="stores.php?action=list" class="btn btn-secondary btn-sm">
-                    <i class="fas fa-times"></i> Cancel
-                </a>
-            </div>
+            <div class="d-flex gap-2 mt-4"><button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Create Store</button><a href="stores.php?action=list" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Cancel</a></div>
         </form>
     </div>
 <?php elseif ($action === 'edit' && isset($store)): ?>
     <?php
-    // We parse the existing JSON so we can fill the form with existing values
     $daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     $decoded = ["days" => [], "holidays" => []];
     if (!empty($store['work_schedule'])) {
@@ -590,28 +376,11 @@ if ($action === 'list') {
         <?php endif; ?>
         <form method="POST" action="stores.php?action=edit&id=<?= $store['id'] ?>" enctype="multipart/form-data" class="shadow p-4 bg-light rounded">
             <div class="row g-3">
-                <div class="col-md-6">
-                    <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="name" name="name" required maxlength="100"
-                        value="<?= htmlspecialchars($_POST['name'] ?? $store['name']) ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="address" class="form-label">Address <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="address" name="address" required maxlength="255"
-                        value="<?= htmlspecialchars($_POST['address'] ?? $store['address']) ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="phone" class="form-label">Phone <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="phone" name="phone" required maxlength="20"
-                        value="<?= htmlspecialchars($_POST['phone'] ?? $store['phone']) ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control form-control-sm" id="email" name="email" required maxlength="100"
-                        value="<?= htmlspecialchars($_POST['email'] ?? $store['email']) ?>">
-                </div>
-                <div class="col-md-6">
-                    <label for="manager_id" class="form-label">Manager</label>
+                <div class="col-md-6"><label for="name" class="form-label">Name <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="name" name="name" required maxlength="100" value="<?= htmlspecialchars($_POST['name'] ?? $store['name']) ?>"></div>
+                <div class="col-md-6"><label for="address" class="form-label">Address <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="address" name="address" required maxlength="255" value="<?= htmlspecialchars($_POST['address'] ?? $store['address']) ?>"></div>
+                <div class="col-md-6"><label for="phone" class="form-label">Phone <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="phone" name="phone" required maxlength="20" value="<?= htmlspecialchars($_POST['phone'] ?? $store['phone']) ?>"></div>
+                <div class="col-md-6"><label for="email" class="form-label">Email <span class="text-danger">*</span></label><input type="email" class="form-control form-control-sm" id="email" name="email" required maxlength="100" value="<?= htmlspecialchars($_POST['email'] ?? $store['email']) ?>"></div>
+                <div class="col-md-6"><label for="manager_id" class="form-label">Manager</label>
                     <select class="form-select form-select-sm" id="manager_id" name="manager_id">
                         <option value="">Select Manager</option>
                         <?php
@@ -620,8 +389,7 @@ if ($action === 'list') {
                             $admin_stmt->execute();
                             $admins = $admin_stmt->fetchAll(PDO::FETCH_ASSOC);
                             foreach ($admins as $admin) {
-                                $sel = ((isset($_POST['manager_id']) && $_POST['manager_id'] == $admin['id'])
-                                    || (!isset($_POST['manager_id']) && $store['manager_id'] == $admin['id'])) ? 'selected' : '';
+                                $sel = ((isset($_POST['manager_id']) && $_POST['manager_id'] == $admin['id']) || (!isset($_POST['manager_id']) && $store['manager_id'] == $admin['id'])) ? 'selected' : '';
                                 echo "<option value=\"{$admin['id']}\" $sel>" . htmlspecialchars($admin['username']) . "</option>";
                             }
                         } catch (PDOException $e) {
@@ -630,21 +398,9 @@ if ($action === 'list') {
                         ?>
                     </select>
                 </div>
-                <div class="col-md-6">
-                    <label for="logo" class="form-label">Logo</label>
-                    <input type="file" class="form-control form-control-sm" id="logo" name="logo" accept="image/*">
-                    <?php if (!empty($store['logo'])): ?>
-                        <div class="mt-2">
-                            <img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Current Logo" style="max-height:80px;">
-                        </div>
-                    <?php endif; ?>
-                </div>
+                <div class="col-md-6"><label for="logo" class="form-label">Logo</label><input type="file" class="form-control form-control-sm" id="logo" name="logo" accept="image/*"><?php if (!empty($store['logo'])): ?><div class="mt-2"><img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Current Logo" style="max-height:80px;"></div><?php endif; ?></div>
                 <div class="col-md-6 align-self-end">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1"
-                            <?= ($store['is_active'] || (isset($_POST['is_active']) && $_POST['is_active'])) ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="is_active">Active</label>
-                    </div>
+                    <div class="form-check"><input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= ($store['is_active'] || (isset($_POST['is_active']) && $_POST['is_active'])) ? 'checked' : '' ?>><label class="form-check-label" for="is_active">Active</label></div>
                 </div>
             </div>
             <hr>
@@ -652,29 +408,19 @@ if ($action === 'list') {
             <?php
             foreach ($daysOfWeek as $d):
                 $startField = strtolower($d) . "_start";
-                $endField   = strtolower($d) . "_end";
+                $endField = strtolower($d) . "_end";
                 $savedStart = $decoded['days'][$d]['start'] ?? '';
-                $savedEnd   = $decoded['days'][$d]['end']   ?? '';
+                $savedEnd = $decoded['days'][$d]['end'] ?? '';
             ?>
                 <div class="row g-2 mb-2">
                     <div class="col-md-2 d-flex align-items-center fw-bold"><?= $d ?></div>
-                    <div class="col-md-5">
-                        <label class="form-label mb-0 small">Start Time</label>
-                        <input type="time" class="form-control form-control-sm" name="<?= $startField ?>"
-                            value="<?= htmlspecialchars($_POST[$startField] ?? $savedStart) ?>">
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label mb-0 small">End Time</label>
-                        <input type="time" class="form-control form-control-sm" name="<?= $endField ?>"
-                            value="<?= htmlspecialchars($_POST[$endField] ?? $savedEnd) ?>">
-                    </div>
+                    <div class="col-md-5"><label class="form-label mb-0 small">Start Time</label><input type="time" class="form-control form-control-sm" name="<?= $startField ?>" value="<?= htmlspecialchars($_POST[$startField] ?? $savedStart) ?>"></div>
+                    <div class="col-md-5"><label class="form-label mb-0 small">End Time</label><input type="time" class="form-control form-control-sm" name="<?= $endField ?>" value="<?= htmlspecialchars($_POST[$endField] ?? $savedEnd) ?>"></div>
                 </div>
             <?php endforeach; ?>
             <hr>
             <h5>Holidays</h5>
-            <p class="small text-muted">
-                One holiday per line: <code>YYYY-MM-DD,Description</code>
-            </p>
+            <p class="small text-muted">One holiday per line: <code>YYYY-MM-DD,Description</code></p>
             <?php
             $holidaysText = "";
             if (!empty($decoded['holidays']) && is_array($decoded['holidays'])) {
@@ -684,14 +430,7 @@ if ($action === 'list') {
             }
             ?>
             <textarea class="form-control form-control-sm" name="holidays" rows="4"><?= htmlspecialchars($_POST['holidays'] ?? $holidaysText) ?></textarea>
-            <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="fas fa-save"></i> Save Changes
-                </button>
-                <a href="stores.php?action=list" class="btn btn-secondary btn-sm">
-                    <i class="fas fa-times"></i> Cancel
-                </a>
-            </div>
+            <div class="d-flex gap-2 mt-4"><button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Save Changes</button><a href="stores.php?action=list" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Cancel</a></div>
         </form>
     </div>
 <?php elseif ($action === 'delete' && $id > 0): ?>
@@ -704,22 +443,11 @@ if ($action === 'list') {
         if (!$store):
         ?>
             <div class="alert alert-danger">Store not found.</div>
-            <a href="stores.php?action=list" class="btn btn-secondary btn-sm">
-                <i class="fas fa-arrow-left"></i> Back to List
-            </a>
+            <a href="stores.php?action=list" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-left"></i> Back to List</a>
         <?php else: ?>
-            <div class="alert alert-warning">
-                Are you sure you want to delete <strong><?= htmlspecialchars($store['name']) ?></strong> (<?= htmlspecialchars($store['email']) ?>)?
-            </div>
+            <div class="alert alert-warning">Are you sure you want to delete <strong><?= htmlspecialchars($store['name']) ?></strong> (<?= htmlspecialchars($store['email']) ?>)?</div>
             <form method="POST" action="stores.php?action=delete&id=<?= $id ?>">
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-danger btn-sm">
-                        <i class="fas fa-check"></i> Yes, delete
-                    </button>
-                    <a href="stores.php?action=list" class="btn btn-secondary btn-sm">
-                        <i class="fas fa-times"></i> No, cancel
-                    </a>
-                </div>
+                <div class="d-flex gap-2"><button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-check"></i> Yes, delete</button><a href="stores.php?action=list" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> No, cancel</a></div>
             </form>
         <?php endif; ?>
     </div>
@@ -733,18 +461,8 @@ if ($action === 'list') {
     <div class="container mt-4">
         <h2 class="mb-4"><i class="fas fa-eye"></i> Store Details</h2>
         <ul class="nav nav-tabs" id="storeTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button"
-                    role="tab" aria-controls="details" aria-selected="true">
-                    Details
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendarTab" type="button"
-                    role="tab" aria-controls="calendarTab" aria-selected="false">
-                    Calendar
-                </button>
-            </li>
+            <li class="nav-item" role="presentation"><button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab" aria-controls="details" aria-selected="true">Details</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendarTab" type="button" role="tab" aria-controls="calendarTab" aria-selected="false">Calendar</button></li>
         </ul>
         <div class="tab-content border p-3" id="storeTabsContent">
             <div class="tab-pane fade show active" id="details" role="tabpanel" aria-labelledby="details-tab">
@@ -772,14 +490,7 @@ if ($action === 'list') {
                         </tr>
                         <tr>
                             <th>Logo</th>
-                            <td>
-                                <?php if (!empty($store['logo'])): ?>
-                                    <img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Store Logo"
-                                        style="max-height:80px;">
-                                <?php else: ?>
-                                    <span class="text-muted">No Logo</span>
-                                <?php endif; ?>
-                            </td>
+                            <td><?php if (!empty($store['logo'])): ?><img src="uploads/logos/<?= htmlspecialchars($store['logo']) ?>" alt="Store Logo" style="max-height:80px;"><?php else: ?><span class="text-muted">No Logo</span><?php endif; ?></td>
                         </tr>
                         <tr>
                             <th>Manager</th>
@@ -787,50 +498,33 @@ if ($action === 'list') {
                         </tr>
                         <tr>
                             <th>Status</th>
-                            <td>
-                                <?= $store['is_active']
-                                    ? '<span class="badge bg-success">Active</span>'
-                                    : '<span class="badge bg-secondary">Inactive</span>' ?>
-                            </td>
+                            <td><?= $store['is_active'] ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></td>
                         </tr>
                         <tr>
                             <th>Weekly Schedule</th>
-                            <td>
-                                <?php
-                                if (!empty($decoded['days'])):
-                                    echo "<table class='table table-bordered table-sm mb-0'>";
-                                    echo "<tr class='table-secondary'><th>Day</th><th>Start</th><th>End</th></tr>";
+                            <td><?php if (!empty($decoded['days'])) {
+                                    echo "<table class='table table-bordered table-sm mb-0'><tr class='table-secondary'><th>Day</th><th>Start</th><th>End</th></tr>";
                                     foreach ($decoded['days'] as $dayName => $info) {
                                         $start = htmlspecialchars($info['start'] ?? '');
-                                        $end   = htmlspecialchars($info['end'] ?? '');
+                                        $end = htmlspecialchars($info['end'] ?? '');
                                         echo "<tr><td>{$dayName}</td><td>{$start}</td><td>{$end}</td></tr>";
                                     }
                                     echo "</table>";
-                                else:
+                                } else {
                                     echo "<em>No schedule defined.</em>";
-                                endif;
-                                ?>
-                            </td>
+                                } ?></td>
                         </tr>
                         <tr>
                             <th>Holidays</th>
-                            <td>
-                                <?php
-                                if (!empty($decoded['holidays'])) {
+                            <td><?php if (!empty($decoded['holidays'])) {
                                     echo "<ul class='mb-0'>";
                                     foreach ($decoded['holidays'] as $h) {
-                                        echo "<li><strong>"
-                                            . htmlspecialchars($h['date'])
-                                            . "</strong> - "
-                                            . htmlspecialchars($h['desc'])
-                                            . "</li>";
+                                        echo "<li><strong>" . htmlspecialchars($h['date']) . "</strong> - " . htmlspecialchars($h['desc']) . "</li>";
                                     }
                                     echo "</ul>";
                                 } else {
                                     echo "<em>No holidays defined.</em>";
-                                }
-                                ?>
-                            </td>
+                                } ?></td>
                         </tr>
                         <tr>
                             <th>Created At</th>
@@ -842,9 +536,7 @@ if ($action === 'list') {
                         </tr>
                     </table>
                 </div>
-                <a href="stores.php?action=list" class="btn btn-secondary btn-sm mt-3">
-                    <i class="fas fa-arrow-left"></i> Back to List
-                </a>
+                <a href="stores.php?action=list" class="btn btn-secondary btn-sm mt-3"><i class="fas fa-arrow-left"></i> Back to List</a>
             </div>
             <div class="tab-pane fade" id="calendarTab" role="tabpanel" aria-labelledby="calendar-tab">
                 <div id="storeCalendar" style="width:100%; max-width:100%; margin:0 auto;"></div>
@@ -858,7 +550,6 @@ if ($action === 'list') {
                 var schedule = <?= json_encode($decoded) ?>;
                 var events = [];
                 if (schedule.days) {
-                    // We'll map day names to numeric daysOfWeek
                     var dayMap = {
                         "Sunday": 0,
                         "Monday": 1,
@@ -914,62 +605,35 @@ if ($action === 'list') {
             <?= $message ?>
         <?php endif; ?>
         <form method="POST" action="stores.php?action=assign_admin&id=<?= $store['id'] ?>" class="shadow p-4 bg-light rounded">
-            <div class="mb-3">
-                <label for="admin_id" class="form-label">Select an Admin</label>
+            <div class="mb-3"><label for="admin_id" class="form-label">Select an Admin</label>
                 <select class="form-select form-select-sm" id="admin_id" name="admin_id">
                     <option value="">Select Administrator</option>
-                    <?php if (!empty($admins)): ?>
-                        <?php foreach ($admins as $admin): ?>
-                            <option value="<?= $admin['id'] ?>" <?= ($store['manager_id'] == $admin['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($admin['username']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php if (!empty($admins)): foreach ($admins as $admin): ?>
+                            <option value="<?= $admin['id'] ?>" <?= ($store['manager_id'] == $admin['id']) ? 'selected' : '' ?>><?= htmlspecialchars($admin['username']) ?></option>
+                    <?php endforeach;
+                    endif; ?>
                 </select>
             </div>
             <div class="border-top pt-3 mt-3">
                 <h5>Create a New Admin</h5>
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" value="1" id="create_new_admin" name="create_new_admin">
-                    <label class="form-check-label" for="create_new_admin">Create new admin user</label>
-                </div>
-                <div class="mb-2">
-                    <label for="new_admin_username" class="form-label">Username</label>
-                    <input type="text" class="form-control form-control-sm" id="new_admin_username" name="new_admin_username">
-                </div>
-                <div class="mb-3">
-                    <label for="new_admin_password" class="form-label">Password</label>
-                    <input type="password" class="form-control form-control-sm" id="new_admin_password" name="new_admin_password">
-                </div>
+                <div class="form-check mb-2"><input class="form-check-input" type="checkbox" value="1" id="create_new_admin" name="create_new_admin"><label class="form-check-label" for="create_new_admin">Create new admin user</label></div>
+                <div class="mb-2"><label for="new_admin_username" class="form-label">Username</label><input type="text" class="form-control form-control-sm" id="new_admin_username" name="new_admin_username"></div>
+                <div class="mb-3"><label for="new_admin_password" class="form-label">Password</label><input type="password" class="form-control form-control-sm" id="new_admin_password" name="new_admin_password"></div>
             </div>
-            <div class="d-flex gap-2 mt-3">
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="fas fa-save"></i> Save
-                </button>
-                <a href="stores.php?action=list" class="btn btn-secondary btn-sm">
-                    <i class="fas fa-times"></i> Cancel
-                </a>
-            </div>
+            <div class="d-flex gap-2 mt-3"><button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Save</button><a href="stores.php?action=list" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Cancel</a></div>
         </form>
     </div>
 <?php endif; ?>
-
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-
-<!-- FullCalendar CSS -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.6/index.global.min.css" rel="stylesheet" />
-
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-
-<!-- FullCalendar JS -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.6/index.global.min.js"></script>
 <script>
     $(function() {
@@ -978,16 +642,10 @@ if ($action === 'list') {
             width: '100%'
         });
         $('#storesTable').DataTable({
-            paging: false,
-            searching: false,
-            info: false,
-            order: [],
             language: {
                 emptyTable: "No stores found."
             }
         });
     });
 </script>
-<?php
-require_once 'includes/footer.php';
-?>
+<?php require_once 'includes/footer.php'; ?>

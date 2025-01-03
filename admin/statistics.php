@@ -2,627 +2,648 @@
 ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-require 'vendor/autoload.php';
+require '../vendor/autoload.php';
+
 define('ROLE_ADMIN', 'admin');
-define('ROLE_WAITER', 'waiter');
-define('ROLE_DELIVERY', 'delivery');
-// Check if the user is logged in and has the admin role
+
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== ROLE_ADMIN) {
     header('HTTP/1.1 403 Forbidden');
     echo "<h1>403 Forbidden</h1><p>You do not have permission to access this page.</p>";
     require_once 'includes/footer.php';
     exit();
 }
-// Function to sanitize output
+
 function sanitize($data)
 {
     return htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
 }
-// Handle custom date filtering
-$filter_start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-$filter_end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
-$filter_day = isset($_GET['filter_day']) ? $_GET['filter_day'] : '';
-// Function to calculate summary statistics
-function getSummaryStatistics($pdo, $start_date, $end_date, $filter_day)
+
+$filters = [
+    'start_date' => $_GET['start_date'] ?? '',
+    'end_date' => $_GET['end_date'] ?? '',
+    'filter_day' => $_GET['filter_day'] ?? '',
+    'status' => $_GET['status'] ?? '',
+    'store_id' => $_GET['store_id'] ?? '',
+    'payment_method' => $_GET['payment_method'] ?? '',
+    'waiter_id' => $_GET['waiter_id'] ?? '',
+    'delivery_person_id' => $_GET['delivery_person_id'] ?? '',
+    'coupon_usage' => $_GET['coupon_usage'] ?? '',
+    'tip_min' => $_GET['tip_min'] ?? '',
+    'tip_max' => $_GET['tip_max'] ?? ''
+];
+
+// Fetch distinct payment methods
+$payment_methods_stmt = $pdo->prepare("SELECT DISTINCT payment_method FROM orders WHERE deleted_at IS NULL");
+$payment_methods_stmt->execute();
+$payment_methods = $payment_methods_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+// Fetch stores
+$stores_stmt = $pdo->prepare("SELECT id, name FROM stores");
+$stores_stmt->execute();
+$stores = $stores_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch waiters
+$waiters_stmt = $pdo->prepare("SELECT id, username FROM users WHERE role = 'waiter'");
+$waiters_stmt->execute();
+$waiters = $waiters_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch delivery persons
+$delivery_persons_stmt = $pdo->prepare("SELECT id, username FROM users WHERE role = 'delivery'");
+$delivery_persons_stmt->execute();
+$delivery_persons = $delivery_persons_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Define possible order statuses
+$statuses = ['New Order', 'Kitchen', 'On the Way', 'Delivered', 'Canceled'];
+
+// Function to apply filters to SQL queries
+function applyFilters($sql, $filters, &$params)
 {
-    $sql = "
-        SELECT 
-            COUNT(o.id) AS total_orders,
-            SUM(o.total_amount) AS total_sales,
-            AVG(o.total_amount) AS average_order_value
-        FROM orders o
-        WHERE o.deleted_at IS NULL
-    ";
-    $params = [];
-    if ($start_date && $end_date) {
+    if ($filters['start_date'] && $filters['end_date']) {
         $sql .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-        $params[] = $start_date;
-        $params[] = $end_date;
-    } elseif ($filter_day) {
-        $sql .= " AND DAYNAME(o.created_at) = ?";
-        $params[] = $filter_day;
+        $params[] = $filters['start_date'];
+        $params[] = $filters['end_date'];
     }
+
+    if ($filters['filter_day']) {
+        $sql .= " AND DAYNAME(o.created_at) = ?";
+        $params[] = $filters['filter_day'];
+    }
+
+    if ($filters['status']) {
+        $sql .= " AND o.status = ?";
+        $params[] = $filters['status'];
+    }
+
+    if ($filters['store_id']) {
+        $sql .= " AND o.store_id = ?";
+        $params[] = $filters['store_id'];
+    }
+
+    if ($filters['payment_method']) {
+        $sql .= " AND o.payment_method = ?";
+        $params[] = $filters['payment_method'];
+    }
+
+    if ($filters['waiter_id']) {
+        $sql .= " AND o.user_id = ?";
+        $params[] = $filters['waiter_id'];
+    }
+
+    if ($filters['delivery_person_id']) {
+        $sql .= " AND o.delivery_user_id = ?";
+        $params[] = $filters['delivery_person_id'];
+    }
+
+    if ($filters['coupon_usage'] === 'with') {
+        $sql .= " AND o.coupon_code IS NOT NULL AND o.coupon_code != ''";
+    } elseif ($filters['coupon_usage'] === 'without') {
+        $sql .= " AND (o.coupon_code IS NULL OR o.coupon_code = '')";
+    }
+
+    if ($filters['tip_min'] !== '' && is_numeric($filters['tip_min'])) {
+        $sql .= " AND o.tip_amount >= ?";
+        $params[] = $filters['tip_min'];
+    }
+    if ($filters['tip_max'] !== '' && is_numeric($filters['tip_max'])) {
+        $sql .= " AND o.tip_amount <= ?";
+        $params[] = $filters['tip_max'];
+    }
+
+    return $sql;
+}
+
+// Function to fetch data based on SQL query and filters
+function fetchData($pdo, $baseSql, $filters, $limit = null)
+{
+    $params = [];
+    $sql = applyFilters($baseSql, $filters, $params);
+    if ($limit) {
+        $sql .= " LIMIT $limit";
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Function to get summary statistics
+function getSummaryStatistics($pdo, $filters)
+{
+    $sql = "SELECT COUNT(o.id) AS total_orders, 
+                   SUM(o.total_amount) AS total_sales, 
+                   AVG(o.total_amount) AS average_order_value 
+            FROM orders o 
+            WHERE o.deleted_at IS NULL";
+    $params = [];
+    $sql = applyFilters($sql, $filters, $params);
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
-$summary_stats = getSummaryStatistics($pdo, $filter_start_date, $filter_end_date, $filter_day);
+
+// Function to get total tips
+function getTotalTips($pdo, $filters)
+{
+    $sql = "SELECT SUM(o.tip_amount) AS total_tips 
+            FROM orders o 
+            WHERE o.deleted_at IS NULL";
+    $params = [];
+    $sql = applyFilters($sql, $filters, $params);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result['total_tips'] ?? 0;
+}
+
+// Function to get VAT statistics
+function getVATStatistics($pdo, $filters, $rate)
+{
+    $sql = "SELECT SUM(o.total_amount) * ? AS vat 
+            FROM orders o 
+            WHERE o.deleted_at IS NULL";
+    $params = [$rate];
+    $sql = applyFilters($sql, $filters, $params);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result['vat'] ?? 0;
+}
+
+$summary_stats = getSummaryStatistics($pdo, $filters);
+$total_tips = getTotalTips($pdo, $filters);
+$vat1 = getVATStatistics($pdo, $filters, 0.01);
+$vat2 = getVATStatistics($pdo, $filters, 0.02);
 ?>
-<div class="container-fluid mt-4">
-    <h1 class="mb-4">Sales Statistics</h1>
-    <!-- Summary Statistics Cards -->
-    <div class="row mb-4">
-        <div class="col-md-4 mb-3">
-            <div class="card text-white bg-primary summary-card">
-                <div class="card-body">
-                    <h5 class="card-title">Total Sales (€)</h5>
-                    <p class="card-text fs-4"><?= isset($summary_stats['total_sales']) ? number_format($summary_stats['total_sales'], 2) : '0.00' ?></p>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Sales Statistics Dashboard</title>
+    <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"> -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+    
+</head>
+
+<body class="p-3">
+    <div class="container-fluid">
+        <h1 class="mb-4">Sales Statistics Dashboard</h1>
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-primary h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Total revenue generated from all orders.">Total Sales (€)</h5>
+                        <p class="card-text fs-4"><?= number_format($summary_stats['total_sales'] ?? 0, 2) ?></p>
+                        <span class="text-muted small">Aggregate sales excluding tips and discounts.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-success h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Total number of orders placed.">Total Orders</h5>
+                        <p class="card-text fs-4"><?= sanitize($summary_stats['total_orders'] ?? 0) ?></p>
+                        <span class="text-muted small">Count of all active orders.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-warning h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Average value per order.">Average Order Value (€)</h5>
+                        <p class="card-text fs-4"><?= number_format($summary_stats['average_order_value'] ?? 0, 2) ?></p>
+                        <span class="text-muted small">Average revenue per order.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-info h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="Total amount of tips received from all orders.">Total Tips (€)</h5>
+                        <p class="card-text fs-4"><?= number_format($total_tips, 2) ?></p>
+                        <span class="text-muted small">Aggregate tips excluding sales.</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
-            <div class="card text-white bg-success summary-card">
-                <div class="card-body">
-                    <h5 class="card-title">Total Orders</h5>
-                    <p class="card-text fs-4"><?= isset($summary_stats['total_orders']) ? sanitize($summary_stats['total_orders']) : '0' ?></p>
+        <!-- VAT Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card text-white bg-secondary h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="VAT at 1% rate based on total sales.">VAT (Tvsh 1) (€)</h5>
+                        <p class="card-text fs-4"><?= number_format($vat1, 2) ?></p>
+                        <span class="text-muted small">Calculated as 1% of total sales.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card text-white bg-secondary h-100">
+                    <div class="card-body">
+                        <h5 class="card-title" data-bs-toggle="tooltip" data-bs-placement="top" title="VAT at 2% rate based on total sales.">VAT (Tvsh 2) (€)</h5>
+                        <p class="card-text fs-4"><?= number_format($vat2, 2) ?></p>
+                        <span class="text-muted small">Calculated as 2% of total sales.</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
-            <div class="card text-white bg-warning summary-card">
-                <div class="card-body">
-                    <h5 class="card-title">Average Order Value (€)</h5>
-                    <p class="card-text fs-4"><?= isset($summary_stats['average_order_value']) ? number_format($summary_stats['average_order_value'], 2) : '0.00' ?></p>
-                </div>
+        <!-- Custom Filters -->
+        <div class="card mb-4">
+            <div class="card-header"><strong>Custom Filters</strong></div>
+            <div class="card-body">
+                <form method="GET" action="statistics.php" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="text" class="form-control" id="start_date" name="start_date" placeholder="YYYY-MM-DD" value="<?= sanitize($filters['start_date']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Select the beginning date for the sales data range.">
+                        <span class="text-muted small">Format: YYYY-MM-DD</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="text" class="form-control" id="end_date" name="end_date" placeholder="YYYY-MM-DD" value="<?= sanitize($filters['end_date']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Select the ending date for the sales data range.">
+                        <span class="text-muted small">Format: YYYY-MM-DD</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter_day" class="form-label">Day of Week</label>
+                        <select class="form-select" id="filter_day" name="filter_day" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data for a specific day of the week.">
+                            <option value="">-- Select Day --</option>
+                            <?php foreach (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day): ?>
+                                <option value="<?= $day ?>" <?= $filters['filter_day'] === $day ? 'selected' : '' ?>><?= $day ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Optional filter by day.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Order Status</label>
+                        <select class="form-select" id="status" name="status" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data based on order status.">
+                            <option value="">-- Select Status --</option>
+                            <?php foreach ($statuses as $status): ?>
+                                <option value="<?= $status ?>" <?= $filters['status'] === $status ? 'selected' : '' ?>><?= $status ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Optional filter by status.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="store_id" class="form-label">Store</label>
+                        <select class="form-select" id="store_id" name="store_id" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data for a specific store.">
+                            <option value="">-- Select Store --</option>
+                            <?php foreach ($stores as $store): ?>
+                                <option value="<?= $store['id'] ?>" <?= $filters['store_id'] == $store['id'] ? 'selected' : '' ?>><?= sanitize($store['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Select a store to view its sales.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="payment_method" class="form-label">Payment Method</label>
+                        <select class="form-select" id="payment_method" name="payment_method" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data based on payment method.">
+                            <option value="">-- Select Payment Method --</option>
+                            <?php foreach (['Card', 'PayPal', 'Stripe', 'Cash'] as $method): ?>
+                                <option value="<?= sanitize($method) ?>" <?= $filters['payment_method'] === $method ? 'selected' : '' ?>><?= sanitize($method) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Choose a payment type.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="waiter_id" class="form-label">Waiter</label>
+                        <select class="form-select" id="waiter_id" name="waiter_id" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data for a specific waiter.">
+                            <option value="">-- Select Waiter --</option>
+                            <?php foreach ($waiters as $waiter): ?>
+                                <option value="<?= $waiter['id'] ?>" <?= $filters['waiter_id'] == $waiter['id'] ? 'selected' : '' ?>><?= sanitize($waiter['username']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Optional filter by waiter.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="delivery_person_id" class="form-label">Delivery Person</label>
+                        <select class="form-select" id="delivery_person_id" name="delivery_person_id" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter sales data for a specific delivery person.">
+                            <option value="">-- Select Delivery Person --</option>
+                            <?php foreach ($delivery_persons as $dp): ?>
+                                <option value="<?= $dp['id'] ?>" <?= $filters['delivery_person_id'] == $dp['id'] ? 'selected' : '' ?>><?= sanitize($dp['username']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="text-muted small">Optional filter by delivery personnel.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="coupon_usage" class="form-label">Coupon Usage</label>
+                        <select class="form-select" id="coupon_usage" name="coupon_usage" data-bs-toggle="tooltip" data-bs-placement="top" title="Filter orders based on coupon usage.">
+                            <option value="">-- Select Coupon Usage --</option>
+                            <option value="with" <?= $filters['coupon_usage'] === 'with' ? 'selected' : '' ?>>With Coupon</option>
+                            <option value="without" <?= $filters['coupon_usage'] === 'without' ? 'selected' : '' ?>>Without Coupon</option>
+                        </select>
+                        <span class="text-muted small">Filter orders that used or did not use a coupon.</span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Tip Amount Range (€)</label>
+                        <div class="input-group">
+                            <input type="number" step="0.01" class="form-control" name="tip_min" placeholder="Min" value="<?= sanitize($filters['tip_min']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Enter the minimum tip amount to filter orders.">
+                            <span class="input-group-text">-</span>
+                            <input type="number" step="0.01" class="form-control" name="tip_max" placeholder="Max" value="<?= sanitize($filters['tip_max']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Enter the maximum tip amount to filter orders.">
+                        </div>
+                        <span class="text-muted small">Specify tip range for filtering.</span>
+                    </div>
+                    <div class="col-md-12 align-self-end">
+                        <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Apply the selected filters to update the statistics.">Apply Filters</button>
+                        <a href="statistics.php" class="btn btn-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Reset all filters to view complete data.">Reset</a>
+                    </div>
+                </form>
             </div>
+        </div>
+        <!-- Data Tables -->
+        <div class="row">
+            <?php
+            $sections = [
+                [
+                    'title' => '1. Sales Statistics per Product',
+                    'headerClass' => 'bg-success',
+                    'query' => "SELECT p.name AS product_name, 
+                                      SUM(oi.quantity) AS total_quantity_sold, 
+                                      SUM(oi.price * oi.quantity) AS total_sales 
+                               FROM order_items oi 
+                               JOIN products p ON oi.product_id = p.id 
+                               JOIN orders o ON oi.order_id = o.id 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "p.name",
+                    'orderBy' => "total_sales DESC",
+                    'limit' => 10,
+                    'tableId' => 'productSalesTable',
+                    'columns' => ['Product Name', 'Total Quantity Sold', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['product_name']),
+                            sanitize($row['total_quantity_sold']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '2. Daily Sales Statistics',
+                    'headerClass' => 'bg-info',
+                    'query' => "SELECT DATE(o.created_at) AS sale_date, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "DATE(o.created_at)",
+                    'orderBy' => "sale_date DESC",
+                    'limit' => null,
+                    'tableId' => 'dailySalesTable',
+                    'columns' => ['Sale Date', 'Total Orders', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['sale_date']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '3. Weekly Sales Statistics',
+                    'headerClass' => 'bg-warning',
+                    'query' => "SELECT YEAR(o.created_at) AS sale_year, 
+                                      WEEK(o.created_at, 1) AS sale_week, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "sale_year, sale_week",
+                    'orderBy' => "sale_year DESC, sale_week DESC",
+                    'limit' => 10,
+                    'tableId' => 'weeklySalesTable',
+                    'columns' => ['Year', 'Week Number', 'Total Orders', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['sale_year']),
+                            sanitize($row['sale_week']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '4. Monthly Sales Statistics',
+                    'headerClass' => 'bg-danger',
+                    'query' => "SELECT YEAR(o.created_at) AS sale_year, 
+                                      MONTH(o.created_at) AS sale_month, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "sale_year, sale_month",
+                    'orderBy' => "sale_year DESC, sale_month DESC",
+                    'limit' => 12,
+                    'tableId' => 'monthlySalesTable',
+                    'columns' => ['Year', 'Month', 'Total Orders', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['sale_year']),
+                            date("F", mktime(0, 0, 0, $row['sale_month'], 10)),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '5. Custom Calendar-Based Sales Statistics',
+                    'headerClass' => 'bg-secondary',
+                    'query' => "SELECT o.id, 
+                                      o.customer_name, 
+                                      o.total_amount, 
+                                      o.tip_amount, 
+                                      o.created_at 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => null,
+                    'orderBy' => "o.created_at DESC",
+                    'limit' => null,
+                    'tableId' => 'customSalesTable',
+                    'columns' => ['Customer Name', 'Total Amount (€)', 'Tip (€)', 'Order Date & Time'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            // sanitize($row['id']),
+                            sanitize($row['customer_name']),
+                            number_format($row['total_amount'], 2),
+                            number_format($row['tip_amount'], 2),
+                            sanitize($row['created_at'])
+                        ];
+                    }
+                ],
+                [
+                    'title' => '6. Sales Statistics per Waiter',
+                    'headerClass' => 'bg-primary',
+                    'query' => "SELECT u.username AS waiter_name, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales, 
+                                      SUM(o.tip_amount) AS total_tips 
+                               FROM orders o 
+                               JOIN users u ON o.user_id = u.id 
+                               WHERE o.deleted_at IS NULL AND u.role = 'waiter'",
+                    'groupBy' => "u.username",
+                    'orderBy' => "total_sales DESC",
+                    'limit' => 10,
+                    'tableId' => 'waiterSalesTable',
+                    'columns' => ['Waiter Name', 'Total Orders', 'Total Sales (€)', 'Total Tips (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['waiter_name']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2),
+                            number_format($row['total_tips'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '7. Sales Statistics per Delivery Person',
+                    'headerClass' => 'bg-dark',
+                    'query' => "SELECT u.username AS delivery_person, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales, 
+                                      SUM(o.tip_amount) AS total_tips 
+                               FROM orders o 
+                               JOIN users u ON o.delivery_user_id = u.id 
+                               WHERE o.deleted_at IS NULL AND u.role = 'delivery'",
+                    'groupBy' => "u.username",
+                    'orderBy' => "total_sales DESC",
+                    'limit' => 10,
+                    'tableId' => 'deliverySalesTable',
+                    'columns' => ['Delivery Person', 'Total Orders', 'Total Sales (€)', 'Total Tips (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['delivery_person']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2),
+                            number_format($row['total_tips'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '8. Sales Statistics by Payment Method',
+                    'headerClass' => 'bg-info',
+                    'query' => "SELECT o.payment_method, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "o.payment_method",
+                    'orderBy' => "total_sales DESC",
+                    'limit' => null,
+                    'tableId' => 'paymentMethodSalesTable',
+                    'columns' => ['Payment Method', 'Total Orders', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['payment_method']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '9. VAT Statistics (Tvsh 1)',
+                    'headerClass' => 'bg-secondary',
+                    'query' => "SELECT 
+                                (SUM(o.total_amount) * 0.01) AS vat1 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => null,
+                    'orderBy' => null,
+                    'limit' => null,
+                    'tableId' => 'vat1Table',
+                    'columns' => ['VAT (Tvsh 1) (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            number_format($row['vat1'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '10. VAT Statistics (Tvsh 2)',
+                    'headerClass' => 'bg-secondary',
+                    'query' => "SELECT 
+                                (SUM(o.total_amount) * 0.02) AS vat2 
+                               FROM orders o 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => null,
+                    'orderBy' => null,
+                    'limit' => null,
+                    'tableId' => 'vat2Table',
+                    'columns' => ['VAT (Tvsh 2) (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            number_format($row['vat2'], 2)
+                        ];
+                    }
+                ],
+                [
+                    'title' => '11. Total Sales by Store and Payment Type',
+                    'headerClass' => 'bg-dark',
+                    'query' => "SELECT s.name AS store_name, 
+                                      o.payment_method, 
+                                      COUNT(o.id) AS total_orders, 
+                                      SUM(o.total_amount) AS total_sales 
+                               FROM orders o 
+                               JOIN stores s ON o.store_id = s.id 
+                               WHERE o.deleted_at IS NULL",
+                    'groupBy' => "s.name, o.payment_method",
+                    'orderBy' => "s.name ASC, total_sales DESC",
+                    'limit' => null,
+                    'tableId' => 'storePaymentSalesTable',
+                    'columns' => ['Store Name', 'Payment Method', 'Total Orders', 'Total Sales (€)'],
+                    'dataMapping' => function ($row) {
+                        return [
+                            sanitize($row['store_name']),
+                            sanitize($row['payment_method']),
+                            sanitize($row['total_orders']),
+                            number_format($row['total_sales'], 2)
+                        ];
+                    }
+                ],
+            ];
+
+            foreach ($sections as $section):
+                if ($section['limit']) {
+                    $data = fetchData($pdo, $section['query'], $filters, $section['limit']);
+                } else {
+                    $data = fetchData($pdo, $section['query'], $filters);
+                }
+            ?>
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header <?= $section['headerClass'] ?> text-white d-flex justify-content-between align-items-center">
+                            <strong><?= $section['title'] ?></strong>
+                        </div>
+                        <div class="card-body">
+                            <table id="<?= $section['tableId'] ?>" class="table table-striped table-bordered">
+                                <thead>
+                                    <tr>
+                                        <?php foreach ($section['columns'] as $col): ?>
+                                            <th><?= $col ?></th>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($data as $row): ?>
+                                        <tr>
+                                            <?php foreach ($section['dataMapping']($row) as $cell): ?>
+                                                <td><?= $cell ?></td>
+                                            <?php endforeach; ?>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                            <span class="text-muted small">Use the export buttons above the table to download data.</span>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </div>
     </div>
-    <!-- Custom Date Filtering Section -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <strong>Custom Date/Day Filtering</strong>
-        </div>
-        <div class="card-body">
-            <form method="GET" action="statistics.php" class="row g-3">
-                <div class="col-md-4">
-                    <label for="start_date" class="form-label">Start Date</label>
-                    <input type="text" class="form-control" id="start_date" name="start_date" placeholder="Start Date" value="<?= sanitize($filter_start_date) ?>">
-                </div>
-                <div class="col-md-4">
-                    <label for="end_date" class="form-label">End Date</label>
-                    <input type="text" class="form-control" id="end_date" name="end_date" placeholder="End Date" value="<?= sanitize($filter_end_date) ?>">
-                </div>
-                <div class="col-md-4">
-                    <label for="filter_day" class="form-label">Select Day of Week</label>
-                    <select class="form-select" id="filter_day" name="filter_day">
-                        <option value="">-- Select Day --</option>
-                        <?php
-                        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                        foreach ($days as $day) {
-                            $selected = ($filter_day === $day) ? 'selected' : '';
-                            echo "<option value=\"{$day}\" {$selected}>{$day}</option>";
-                        }
-                        ?>
-                    </select>
-                </div>
-                <div class="col-md-12 align-self-end">
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
-                    <a href="statistics.php" class="btn btn-secondary">Reset</a>
-                </div>
-            </form>
-        </div>
-    </div>
-    <!-- Statistics Dashboard -->
-    <div class="row">
-        <!-- 1. Sales Statistics per Product -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-success text-white">
-                    <strong>1. Sales Statistics per Product</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Sales per Product
-                    $sql_product_sales = "
-                            SELECT 
-                                p.name AS product_name,
-                                SUM(oi.quantity) AS total_quantity_sold,
-                                SUM(oi.price * oi.quantity) AS total_sales
-                            FROM order_items oi
-                            JOIN products p ON oi.product_id = p.id
-                            JOIN orders o ON oi.order_id = o.id
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    // Apply custom date filters if any
-                    $params = [];
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_product_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params[] = $filter_start_date;
-                        $params[] = $filter_end_date;
-                    } elseif ($filter_day) {
-                        $sql_product_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params[] = $filter_day;
-                    }
-                    $sql_product_sales .= "
-                            GROUP BY p.name
-                            ORDER BY total_sales DESC
-                            LIMIT 10
-                        ";
-                    $stmt = $pdo->prepare($sql_product_sales);
-                    $stmt->execute($params);
-                    $product_sales = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="productSalesChart"></div>
-                    </div>
-                    <table id="productSalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Product Name</th>
-                                <th>Total Quantity Sold</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($product_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['product_name']) ?></td>
-                                    <td><?= sanitize($row['total_quantity_sold']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <!-- 2. Daily Sales Statistics -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-info text-white">
-                    <strong>2. Daily Sales Statistics</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Daily Sales
-                    $sql_daily_sales = "
-                            SELECT 
-                                DATE(o.created_at) AS sale_date,
-                                COUNT(o.id) AS total_orders,
-                                SUM(o.total_amount) AS total_sales
-                            FROM orders o
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    // Apply custom date filters if any
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_daily_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_daily = [$filter_start_date, $filter_end_date];
-                    } elseif ($filter_day) {
-                        $sql_daily_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_daily = [$filter_day];
-                    } else {
-                        $params_daily = [];
-                    }
-                    $sql_daily_sales .= "
-                            GROUP BY DATE(o.created_at)
-                            ORDER BY sale_date DESC
-                        ";
-                    $stmt_daily = $pdo->prepare($sql_daily_sales);
-                    $stmt_daily->execute($params_daily);
-                    $daily_sales = $stmt_daily->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="dailySalesChart"></div>
-                    </div>
-                    <table id="dailySalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Sale Date</th>
-                                <th>Total Orders</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($daily_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['sale_date']) ?></td>
-                                    <td><?= sanitize($row['total_orders']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row">
-        <!-- 3. Weekly Sales Statistics -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-warning text-white">
-                    <strong>3. Weekly Sales Statistics</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Weekly Sales
-                    $sql_weekly_sales = "
-                            SELECT 
-                                YEAR(o.created_at) AS sale_year,
-                                WEEK(o.created_at, 1) AS sale_week,
-                                COUNT(o.id) AS total_orders,
-                                SUM(o.total_amount) AS total_sales
-                            FROM orders o
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    // Apply custom date filters if any
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_weekly_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_weekly = [$filter_start_date, $filter_end_date];
-                    } elseif ($filter_day) {
-                        $sql_weekly_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_weekly = [$filter_day];
-                    } else {
-                        $params_weekly = [];
-                    }
-                    $sql_weekly_sales .= "
-                            GROUP BY sale_year, sale_week
-                            ORDER BY sale_year DESC, sale_week DESC
-                            LIMIT 10
-                        ";
-                    $stmt_weekly = $pdo->prepare($sql_weekly_sales);
-                    $stmt_weekly->execute($params_weekly);
-                    $weekly_sales = $stmt_weekly->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="weeklySalesChart"></div>
-                    </div>
-                    <table id="weeklySalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Year</th>
-                                <th>Week Number</th>
-                                <th>Total Orders</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($weekly_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['sale_year']) ?></td>
-                                    <td><?= sanitize($row['sale_week']) ?></td>
-                                    <td><?= sanitize($row['total_orders']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <!-- 4. Monthly Sales Statistics -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-danger text-white">
-                    <strong>4. Monthly Sales Statistics</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Monthly Sales
-                    $sql_monthly_sales = "
-                            SELECT 
-                                YEAR(o.created_at) AS sale_year,
-                                MONTH(o.created_at) AS sale_month,
-                                COUNT(o.id) AS total_orders,
-                                SUM(o.total_amount) AS total_sales
-                            FROM orders o
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    // Apply custom date filters if any
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_monthly_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_monthly = [$filter_start_date, $filter_end_date];
-                    } elseif ($filter_day) {
-                        $sql_monthly_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_monthly = [$filter_day];
-                    } else {
-                        $params_monthly = [];
-                    }
-                    $sql_monthly_sales .= "
-                            GROUP BY sale_year, sale_month
-                            ORDER BY sale_year DESC, sale_month DESC
-                            LIMIT 12
-                        ";
-                    $stmt_monthly = $pdo->prepare($sql_monthly_sales);
-                    $stmt_monthly->execute($params_monthly);
-                    $monthly_sales = $stmt_monthly->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="monthlySalesChart"></div>
-                    </div>
-                    <table id="monthlySalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Year</th>
-                                <th>Month</th>
-                                <th>Total Orders</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($monthly_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['sale_year']) ?></td>
-                                    <td><?= date("F", mktime(0, 0, 0, $row['sale_month'], 10)) ?></td>
-                                    <td><?= sanitize($row['total_orders']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row">
-        <!-- 5. Custom Calendar-Based Sales Statistics -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-secondary text-white">
-                    <strong>5. Custom Calendar-Based Sales Statistics</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Custom Calendar-Based Sales
-                    $sql_custom_sales = "
-                            SELECT 
-                                o.id,
-                                o.customer_name,
-                                o.total_amount,
-                                o.created_at
-                            FROM orders o
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    $params_custom = [];
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_custom_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_custom = [$filter_start_date, $filter_end_date];
-                    }
-                    if ($filter_day) {
-                        $sql_custom_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_custom[] = $filter_day;
-                    }
-                    $sql_custom_sales .= "
-                            ORDER BY o.created_at DESC
-                        ";
-                    $stmt_custom = $pdo->prepare($sql_custom_sales);
-                    $stmt_custom->execute($params_custom);
-                    $custom_sales = $stmt_custom->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="customSalesChart"></div>
-                    </div>
-                    <table id="customSalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Order ID</th>
-                                <th>Customer Name</th>
-                                <th>Total Amount (€)</th>
-                                <th>Order Date & Time</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($custom_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['id']) ?></td>
-                                    <td><?= sanitize($row['customer_name']) ?></td>
-                                    <td><?= number_format($row['total_amount'], 2) ?></td>
-                                    <td><?= sanitize($row['created_at']) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <!-- 6. Sales Statistics per Waiter -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-primary text-white">
-                    <strong>6. Sales Statistics per Waiter</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Sales per Waiter
-                    $sql_waiter_sales = "
-                            SELECT 
-                                u.username AS waiter_name,
-                                COUNT(o.id) AS total_orders,
-                                SUM(o.total_amount) AS total_sales
-                            FROM orders o
-                            JOIN users u ON o.user_id = u.id
-                            WHERE o.deleted_at IS NULL AND u.role = 'waiter'
-                        ";
-                    // Apply custom date filters if any
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_waiter_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_waiter = [$filter_start_date, $filter_end_date];
-                    } elseif ($filter_day) {
-                        $sql_waiter_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_waiter = [$filter_day];
-                    } else {
-                        $params_waiter = [];
-                    }
-                    $sql_waiter_sales .= "
-                            GROUP BY u.username
-                            ORDER BY total_sales DESC
-                            LIMIT 10
-                        ";
-                    $stmt_waiter = $pdo->prepare($sql_waiter_sales);
-                    $stmt_waiter->execute($params_waiter);
-                    $waiter_sales = $stmt_waiter->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="waiterSalesChart"></div>
-                    </div>
-                    <table id="waiterSalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Waiter Name</th>
-                                <th>Total Orders</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($waiter_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['waiter_name']) ?></td>
-                                    <td><?= sanitize($row['total_orders']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row">
-        <!-- 7. Sales Statistics per Delivery Person -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <strong>7. Sales Statistics per Delivery Person</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Sales per Delivery Person
-                    $sql_delivery_sales = "
-                            SELECT 
-                                u.username AS delivery_person,
-                                COUNT(o.id) AS total_orders,
-                                SUM(o.total_amount) AS total_sales
-                            FROM orders o
-                            JOIN users u ON o.delivery_user_id = u.id
-                            WHERE o.deleted_at IS NULL AND u.role = 'delivery'
-                        ";
-                    // Apply custom date filters if any
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_delivery_sales .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_delivery = [$filter_start_date, $filter_end_date];
-                    } elseif ($filter_day) {
-                        $sql_delivery_sales .= " AND DAYNAME(o.created_at) = ?";
-                        $params_delivery = [$filter_day];
-                    } else {
-                        $params_delivery = [];
-                    }
-                    $sql_delivery_sales .= "
-                            GROUP BY u.username
-                            ORDER BY total_sales DESC
-                            LIMIT 10
-                        ";
-                    $stmt_delivery = $pdo->prepare($sql_delivery_sales);
-                    $stmt_delivery->execute($params_delivery);
-                    $delivery_sales = $stmt_delivery->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="deliverySalesChart"></div>
-                    </div>
-                    <table id="deliverySalesTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Delivery Person</th>
-                                <th>Total Orders</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($delivery_sales as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['delivery_person']) ?></td>
-                                    <td><?= sanitize($row['total_orders']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <!-- 8. Top 10 Products Chart (Additional Feature) -->
-        <div class="col-lg-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header bg-secondary text-white">
-                    <strong>8. Top 10 Products</strong>
-                </div>
-                <div class="card-body">
-                    <?php
-                    // SQL Query for Top 10 Products
-                    $sql_top_products = "
-                            SELECT 
-                                p.name AS product_name,
-                                SUM(oi.quantity) AS total_quantity_sold,
-                                SUM(oi.price * oi.quantity) AS total_sales
-                            FROM order_items oi
-                            JOIN products p ON oi.product_id = p.id
-                            JOIN orders o ON oi.order_id = o.id
-                            WHERE o.deleted_at IS NULL
-                        ";
-                    // Apply custom date filters if any
-                    $params_top = [];
-                    if ($filter_start_date && $filter_end_date) {
-                        $sql_top_products .= " AND DATE(o.created_at) BETWEEN ? AND ?";
-                        $params_top[] = $filter_start_date;
-                        $params_top[] = $filter_end_date;
-                    } elseif ($filter_day) {
-                        $sql_top_products .= " AND DAYNAME(o.created_at) = ?";
-                        $params_top[] = $filter_day;
-                    }
-                    $sql_top_products .= "
-                            GROUP BY p.name
-                            ORDER BY total_sales DESC
-                            LIMIT 10
-                        ";
-                    $stmt_top = $pdo->prepare($sql_top_products);
-                    $stmt_top->execute($params_top);
-                    $top_products = $stmt_top->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    <div class="chart-container">
-                        <div id="topProductsChart"></div>
-                    </div>
-                    <table id="topProductsTable" class="table table-striped table-bordered mt-3">
-                        <thead>
-                            <tr>
-                                <th>Product Name</th>
-                                <th>Total Quantity Sold</th>
-                                <th>Total Sales (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($top_products as $row): ?>
-                                <tr>
-                                    <td><?= sanitize($row['product_name']) ?></td>
-                                    <td><?= sanitize($row['total_quantity_sold']) ?></td>
-                                    <td><?= number_format($row['total_sales'], 2) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Footer -->
     <?php include 'includes/footer.php'; ?>
-    <!-- jQuery, Bootstrap JS, Flatpickr JS, DataTables JS, DataTables Buttons JS, ApexCharts -->
+
+    <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-    <!-- DataTables Buttons JS for Export -->
     <script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -630,327 +651,74 @@ $summary_stats = getSummaryStatistics($pdo, $filter_start_date, $filter_end_date
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
-    <!-- ApexCharts -->
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <script>
         $(document).ready(function() {
-            // Initialize Flatpickr
+            // Initialize Flatpickr for date inputs
             $("#start_date, #end_date").flatpickr({
-                dateFormat: "Y-m-d"
+                dateFormat: "Y-m-d",
+                allowInput: true
             });
-            // Initialize DataTables with Export Buttons
-            function initializeDataTable(tableId) {
-                $('#' + tableId).DataTable({
+
+            // Initialize Bootstrap tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            });
+
+            // Initialize DataTables with export buttons
+            function initDataTable(id) {
+                $('#' + id).DataTable({
                     dom: 'Bfrtip',
                     buttons: [{
                             extend: 'csvHtml5',
-                            text: 'CSV',
+                            text: '<i class="bi bi-file-earmark-excel"></i> CSV',
                             className: 'btn btn-success btn-sm'
                         },
                         {
                             extend: 'pdfHtml5',
-                            text: 'PDF',
+                            text: '<i class="bi bi-file-earmark-pdf"></i> PDF',
                             className: 'btn btn-danger btn-sm',
                             orientation: 'landscape',
                             pageSize: 'A4'
                         },
                         {
                             extend: 'print',
-                            text: 'Print',
+                            text: '<i class="bi bi-printer"></i> Print',
                             className: 'btn btn-secondary btn-sm'
                         }
                     ],
-                    "order": [
+                    order: [
                         [2, "desc"]
                     ],
-                    "pageLength": 5,
-                    "lengthChange": false,
-                    "searching": false,
-                    "paging": true,
-                    "responsive": true
+                    pageLength: 5,
+                    lengthChange: false,
+                    searching: true,
+                    responsive: true,
+                    language: {
+                        emptyTable: "No data available",
+                        search: "Search orders:"
+                    }
                 });
             }
-            // Initialize all DataTables with export buttons
-            initializeDataTable('productSalesTable');
-            initializeDataTable('dailySalesTable');
-            initializeDataTable('weeklySalesTable');
-            initializeDataTable('monthlySalesTable');
-            initializeDataTable('customSalesTable');
-            initializeDataTable('waiterSalesTable');
-            initializeDataTable('deliverySalesTable');
-            initializeDataTable('topProductsTable');
-            // Initialize ApexCharts
-            // 1. Product Sales Chart
-            var optionsProduct = {
-                chart: {
-                    type: 'bar',
-                    height: 300
-                },
-                series: [{
-                    name: 'Total Sales (€)',
-                    data: <?= json_encode(array_column($product_sales, 'total_sales')) ?>
-                }],
-                xaxis: {
-                    categories: <?= json_encode(array_column($product_sales, 'product_name')) ?>,
-                    labels: {
-                        rotate: -45
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                title: {
-                    text: 'Sales per Product',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartProduct = new ApexCharts(document.querySelector("#productSalesChart"), optionsProduct);
-            chartProduct.render();
-            // 2. Daily Sales Chart
-            var optionsDaily = {
-                chart: {
-                    type: 'line',
-                    height: 300
-                },
-                series: [{
-                    name: 'Daily Sales (€)',
-                    data: <?= json_encode(array_column($daily_sales, 'total_sales')) ?>
-                }],
-                xaxis: {
-                    categories: <?= json_encode(array_column($daily_sales, 'sale_date')) ?>,
-                    title: {
-                        text: 'Date'
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                title: {
-                    text: 'Daily Sales Trends',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartDaily = new ApexCharts(document.querySelector("#dailySalesChart"), optionsDaily);
-            chartDaily.render();
-            // 3. Weekly Sales Chart
-            var optionsWeekly = {
-                chart: {
-                    type: 'bar',
-                    height: 300
-                },
-                series: [{
-                    name: 'Weekly Sales (€)',
-                    data: <?= json_encode(array_column($weekly_sales, 'total_sales')) ?>
-                }],
-                xaxis: {
-                    categories: <?= json_encode(array_map(function ($row) {
-                                    return "Year {$row['sale_year']} - Week {$row['sale_week']}";
-                                }, $weekly_sales)) ?>,
-                    labels: {
-                        rotate: -45
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                title: {
-                    text: 'Weekly Sales',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartWeekly = new ApexCharts(document.querySelector("#weeklySalesChart"), optionsWeekly);
-            chartWeekly.render();
-            // 4. Monthly Sales Chart
-            var optionsMonthly = {
-                chart: {
-                    type: 'line',
-                    height: 300
-                },
-                series: [{
-                    name: 'Monthly Sales (€)',
-                    data: <?= json_encode(array_column($monthly_sales, 'total_sales')) ?>
-                }],
-                xaxis: {
-                    categories: <?= json_encode(array_map(function ($row) {
-                                    return "{$row['sale_year']} - " . date("F", mktime(0, 0, 0, $row['sale_month'], 10));
-                                }, $monthly_sales)) ?>,
-                    title: {
-                        text: 'Month'
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                title: {
-                    text: 'Monthly Sales Trends',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartMonthly = new ApexCharts(document.querySelector("#monthlySalesChart"), optionsMonthly);
-            chartMonthly.render();
-            // 5. Custom Sales Chart
-            var customDates = <?= json_encode(array_column($custom_sales, 'created_at')) ?>;
-            var customTotals = <?= json_encode(array_column($custom_sales, 'total_amount')) ?>;
-            var optionsCustom = {
-                chart: {
-                    type: 'scatter',
-                    height: 300
-                },
-                series: [{
-                    name: 'Custom Sales',
-                    data: customDates.map(function(date, index) {
-                        return [new Date(date).getTime(), customTotals[index]];
-                    })
-                }],
-                xaxis: {
-                    type: 'datetime',
-                    title: {
-                        text: 'Date & Time'
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                title: {
-                    text: 'Custom Calendar-Based Sales',
-                    align: 'center'
-                },
-                tooltip: {
-                    x: {
-                        format: 'dd MMM yyyy HH:mm'
-                    },
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartCustom = new ApexCharts(document.querySelector("#customSalesChart"), optionsCustom);
-            chartCustom.render();
-            // 6. Waiter Sales Chart
-            var optionsWaiter = {
-                chart: {
-                    type: 'pie',
-                    height: 300
-                },
-                series: <?= json_encode(array_column($waiter_sales, 'total_sales')) ?>,
-                labels: <?= json_encode(array_column($waiter_sales, 'waiter_name')) ?>,
-                colors: ['#17a2b8', '#28a745', '#ffc107', '#dc3545', '#6c757d', '#9900cc', '#ff9933', '#4bc0c0', '#ffce56', '#36a2eb'],
-                title: {
-                    text: 'Sales Distribution Among Waiters',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartWaiter = new ApexCharts(document.querySelector("#waiterSalesChart"), optionsWaiter);
-            chartWaiter.render();
-            // 7. Delivery Person Sales Chart
-            var optionsDelivery = {
-                chart: {
-                    type: 'donut',
-                    height: 300
-                },
-                series: <?= json_encode(array_column($delivery_sales, 'total_sales')) ?>,
-                labels: <?= json_encode(array_column($delivery_sales, 'delivery_person')) ?>,
-                colors: ['#28a745', '#17a2b8', '#ffc107', '#dc3545', '#6c757d', '#9900cc', '#ff9933', '#4bc0c0', '#ffce56', '#36a2eb'],
-                title: {
-                    text: 'Sales Distribution Among Delivery Persons',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartDelivery = new ApexCharts(document.querySelector("#deliverySalesChart"), optionsDelivery);
-            chartDelivery.render();
-            // 8. Top 10 Products Chart (Additional Feature)
-            var optionsTopProducts = {
-                chart: {
-                    type: 'bar',
-                    height: 300
-                },
-                series: [{
-                    name: 'Total Sales (€)',
-                    data: <?= json_encode(array_column($top_products, 'total_sales')) ?>
-                }],
-                plotOptions: {
-                    bar: {
-                        horizontal: true,
-                    }
-                },
-                xaxis: {
-                    categories: <?= json_encode(array_column($top_products, 'product_name')) ?>,
-                    title: {
-                        text: 'Sales (€)'
-                    }
-                },
-                yaxis: {
-                    title: {
-                        text: 'Product Name'
-                    }
-                },
-                title: {
-                    text: 'Top 10 Products',
-                    align: 'center'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(val) {
-                            return '€ ' + val.toFixed(2);
-                        }
-                    }
-                }
-            };
-            var chartTopProducts = new ApexCharts(document.querySelector("#topProductsChart"), optionsTopProducts);
-            chartTopProducts.render();
+
+            const tableIds = [
+                'productSalesTable',
+                'dailySalesTable',
+                'weeklySalesTable',
+                'monthlySalesTable',
+                'customSalesTable',
+                'waiterSalesTable',
+                'deliverySalesTable',
+                'paymentMethodSalesTable',
+                'vat1Table',
+                'vat2Table',
+                'storePaymentSalesTable'
+            ];
+
+            tableIds.forEach(initDataTable);
         });
     </script>
+</body>
+
+</html>

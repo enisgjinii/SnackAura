@@ -317,3 +317,135 @@
 **Context:** File: C:\laragon\www\arber-dobruna\admin\orders.php Line: 555
 ---
 
+### [2024-12-30 13:05:38] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 22
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
+### [2024-12-30 22:04:55] Error
+
+**Message:** Uncaught Exception: Undefined variable $delivery_users
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
+---
+
