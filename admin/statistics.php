@@ -4,9 +4,7 @@ require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require '../vendor/autoload.php';
 
-define('ROLE_ADMIN', 'admin');
-
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== ROLE_ADMIN) {
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'super-admin') {
     header('HTTP/1.1 403 Forbidden');
     echo "<h1>403 Forbidden</h1><p>You do not have permission to access this page.</p>";
     require_once 'includes/footer.php';
@@ -181,7 +179,7 @@ $vat2 = getVATStatistics($pdo, $filters, 0.02);
     <title>Sales Statistics Dashboard</title>
     <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"> -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
-    
+
 </head>
 
 <body class="p-3">

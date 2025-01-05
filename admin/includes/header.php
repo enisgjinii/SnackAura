@@ -32,7 +32,7 @@ $deliveryMenuItems = [
 ];
 // Determine which menu items to display based on the role
 switch ($userRole) {
-    case 'admin':
+    case 'admin' || 'super-admin':
         $menuItems = $adminMenuItems;
         break;
     case 'delivery':

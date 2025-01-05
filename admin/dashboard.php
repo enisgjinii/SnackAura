@@ -21,7 +21,7 @@ $user_id = $_SESSION['user_id'];
 $metrics = [];
 $recent_orders = [];
 
-if ($role === 'admin') {
+if ($role === 'admin' || $role === 'super-admin') {
     $metrics = [
         ['title' => 'Categories', 'count' => getCount($pdo, 'categories'), 'color' => 'primary', 'icon' => 'fa-list', 'link' => 'categories.php'],
         ['title' => 'Products', 'count' => getCount($pdo, 'products'), 'color' => 'success', 'icon' => 'fa-box', 'link' => 'products.php'],
@@ -77,7 +77,7 @@ if ($role === 'admin') {
     <?php if ($metrics): ?>
         <div class="row">
             <?php foreach ($metrics as $metric): ?>
-                <div class="col-md-<?= $role === 'admin' ? '4' : '12' ?> mb-4">
+                <div class="col-md-<?= $role === 'admin' || $role === 'super-admin' ? '4' : '12' ?> mb-4">
                     <div class="card text-white bg-<?= $metric['color'] ?> h-100">
                         <div class="card-header d-flex align-items-center">
                             <i class="fas <?= $metric['icon'] ?> me-2"></i><?= $metric['title'] ?>
@@ -116,7 +116,7 @@ if ($role === 'admin') {
                             <td><?= htmlspecialchars($order['created_at']) ?></td>
                             <td>
                                 <a href="orders.php?action=view_details&id=<?= htmlspecialchars($order['id']) ?>" class="btn btn-sm btn-info">View</a>
-                                <?php if ($role === 'admin'): ?>
+                                <?php if ($role === 'admin' || $role === 'super-admin'): ?>
                                     <a href="orders.php?action=update_status&id=<?= htmlspecialchars($order['id']) ?>" class="btn btn-sm btn-warning">Update Status</a>
                                 <?php elseif ($role === 'delivery'): ?>
                                     <a href="orders.php?action=mark_delivered&id=<?= htmlspecialchars($order['id']) ?>" class="btn btn-sm btn-success">Mark as Delivered</a>

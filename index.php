@@ -1,12 +1,9 @@
 <?php
-
-
 ob_start();
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require 'vendor/autoload.php';
-
 use Stripe\Stripe;
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
@@ -16,7 +13,6 @@ use PayPal\Api\Payment;
 use PayPal\Api\RedirectUrls;
 use PayPal\Api\Transaction;
 use PayPal\Api\PaymentExecution;
-
 Stripe::setApiKey("sk_test_XXX");
 $paypal = new ApiContext(new OAuthTokenCredential(
     'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-Ndgpng0NLAiWr',
@@ -759,7 +755,6 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="de">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -786,39 +781,32 @@ try {
             justify-content: center;
             align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
-
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
                 height: 250px
             }
-
             .offers-section .card-img-top {
                 height: 150px
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
             cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -826,16 +814,13 @@ try {
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
-
         .store-card.selected {
             border: 2px solid #0d6efd;
             background-color: #e7f1ff;
         }
-
         .store-card .select-store-btn {
             width: 100%
         }
@@ -844,7 +829,6 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
-
 <body>
     <?php if ($is_closed): ?>
         <div class="alert alert-danger text-center m-0" role="alert">
@@ -1204,7 +1188,6 @@ try {
                             <i class="bi bi-bag-check-fill"></i>
                             Bestellung abschicken
                         </button>
-
                     </div>
                 </form>
             </div>
@@ -1564,102 +1547,8 @@ try {
             </div>
         </div>
     </main>
-    <footer class="bg-light text-muted pt-5 pb-4">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">
-                        <?php if (!empty($main_store['logo'])): ?>
-                            <img src="<?= htmlspecialchars($main_store['logo']) ?>" alt="Logo" width="40" height="40" class="me-2">
-                        <?php endif; ?>
-                        <?= htmlspecialchars($main_store['name'] ?? 'Restaurant') ?>
-                    </h5>
-                    <p>Experience the finest dining with us.</p>
-                </div>
-                <div class="col-md-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">AGB</h5>
-                    <button type="button" class="btn btn-link p-0 text-reset" data-bs-toggle="modal" data-bs-target="#agbModal">Read AGB</button>
-                </div>
-                <div class="col-md-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Impressum</h5>
-                    <button type="button" class="btn btn-link p-0 text-reset" data-bs-toggle="modal" data-bs-target="#impressumModal">View Impressum</button>
-                </div>
-                <div class="col-md-3">
-                    <h5 class="text-uppercase mb-4 font-weight-bold text-dark">Datenschutz</h5>
-                    <button type="button" class="btn btn-link p-0 text-reset" data-bs-toggle="modal" data-bs-target="#datenschutzModal">Privacy Policy</button>
-                </div>
-            </div>
-            <hr class="mb-4">
-            <div class="row align-items-center">
-                <div class="col-md-7">
-                    <p>© <?= date('Y') ?> <?= htmlspecialchars($main_store['name'] ?? 'Restaurant') ?>. All rights reserved.</p>
-                </div>
-                <div class="col-md-5 text-end">
-                    <div class="social-media">
-                        <?php
-                        foreach (['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'] as $social) {
-                            if (!empty($main_store[$social])): ?>
-                                <a href="<?= htmlspecialchars($main_store[$social]) ?>" target="_blank">
-                                    <i class="bi bi-<?= explode('_', $social)[0] ?>"></i>
-                                </a>
-                        <?php endif;
-                        } ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </footer>
-    <!-- AGB Modal -->
-    <div class="modal fade" id="agbModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">AGB</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <?= !empty($main_store['agb']) ? nl2br(htmlspecialchars($main_store['agb'])) : '<em>No AGB provided.</em>' ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Impressum Modal -->
-    <div class="modal fade" id="impressumModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Impressum</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <?= !empty($main_store['impressum']) ? nl2br(htmlspecialchars($main_store['impressum'])) : '<em>No Impressum provided.</em>' ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Datenschutz Modal -->
-    <div class="modal fade" id="datenschutzModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Datenschutz</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <?= !empty($main_store['datenschutzerklaerung']) ? nl2br(htmlspecialchars($main_store['datenschutzerklaerung'])) : '<em>No Datenschutzerklärung provided.</em>' ?>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <?php include 'footer.php'; ?>
+    <?php include 'rules.php'; ?>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -1786,7 +1675,6 @@ try {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
-
             function updateEstimatedPrice(form) {
                 let base = parseFloat(form.dataset.baseprice || "0");
                 let pid = form.dataset.productid;
@@ -1806,7 +1694,6 @@ try {
                 let final = (base + sp + totalExtras + dp) * q;
                 if (es) es.textContent = final.toFixed(2) + "€";
             }
-
             function limitSauceQuantities(form) {
                 let sz = form.querySelector('.size-selector');
                 if (!sz || !sz.value) return;
@@ -1827,7 +1714,6 @@ try {
                     }
                 }
             }
-
             function updateSizeSpecificOptions(form, sd) {
                 let se = [],
                     ss = [];
@@ -1877,7 +1763,6 @@ try {
                 }
                 initializeEventListeners(form);
             }
-
             function initializeEventListeners(form) {
                 form.querySelectorAll('.item-quantity').forEach(iq => {
                     iq.addEventListener('change', () => {
@@ -1929,6 +1814,5 @@ try {
         });
     </script>
 </body>
-
 </html>
 <?php ob_end_flush(); ?>

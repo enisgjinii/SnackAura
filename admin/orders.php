@@ -92,13 +92,14 @@ function getDeliveryUsers($pdo)
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$user_role = $_SESSION['role'] ?? 'admin';
+$user_role = $_SESSION['role'] ?? 'admin' ?? 'super-admin';
 $user_id   = $_SESSION['user_id'] ?? 1;
 $action    = $_GET['action']     ?? 'view';
 $id        = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message   = '';
 
 $allowed_actions = [
+    'super-admin' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
     'admin'    => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
     'delivery' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'update_status_form', 'update_status']
 ];
@@ -216,7 +217,7 @@ try {
                 exit;
             }
         case 'view_trash':
-            if ($user_role !== 'admin') {
+            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -229,7 +230,7 @@ try {
             $trash_orders = $t->fetchAll(PDO::FETCH_ASSOC);
             break;
         case 'restore':
-            if ($user_role !== 'admin') {
+            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -246,7 +247,7 @@ try {
                 exit;
             }
         case 'permanent_delete':
-            if ($user_role !== 'admin') {
+            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -283,7 +284,7 @@ try {
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
         case 'assign_delivery':
-            if ($user_role !== 'admin') {
+            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -312,7 +313,7 @@ try {
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
         case 'top_products':
-            if ($user_role !== 'admin') {
+            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -326,7 +327,7 @@ try {
                 $st = in_array($ord['status'], $statuses) ? $ord['status'] : 'New Order';
                 $status_orders[$st][] = $ord;
             }
-            $delivery_users = $user_role === 'admin' ? getDeliveryUsers($pdo) : [];
+            $delivery_users = $user_role === 'admin' || $user_role === 'super-admin' ? getDeliveryUsers($pdo) : [];
             break;
     }
 } catch (Exception $e) {
@@ -475,7 +476,7 @@ try {
                 <li class="nav-item">
                     <a class="nav-link <?= ($action !== 'view_trash' && $action !== 'top_products') ? 'active' : '' ?>" href="orders.php?action=view">View Orders</a>
                 </li>
-                <?php if ($user_role === 'admin'): ?>
+                <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
                     <li class="nav-item">
                         <a class="nav-link <?= ($action === 'view_trash' ? 'active' : '') ?>" href="orders.php?action=view_trash">Trash</a>
                     </li>
@@ -528,7 +529,7 @@ try {
                             <p><strong>Status:</strong> <?= htmlspecialchars($order['status']) ?></p>
                             <p><strong>Delivery User:</strong>
                                 <?php
-                                if ($order['delivery_user_id'] && $user_role === 'admin') {
+                                if ($order['delivery_user_id'] && $user_role === 'admin' || $user_role === 'super-admin') {
                                     $st = $pdo->prepare("SELECT username FROM users WHERE id=? LIMIT 1");
                                     $st->execute([$order['delivery_user_id']]);
                                     $du = $st->fetch(PDO::FETCH_ASSOC);
@@ -852,7 +853,7 @@ try {
                                         <th>Scheduled Time</th>
                                         <th>Created</th>
                                         <th>Status</th>
-                                        <?php if ($user_role === 'admin'): ?>
+                                        <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
                                             <th>Assign Delivery</th>
                                         <?php endif; ?>
                                         <th>Coupon Code</th>
@@ -882,7 +883,7 @@ try {
                                             <td><?= htmlspecialchars($o['scheduled_time'] ?? 'N/A') ?></td>
                                             <td><?= htmlspecialchars($o['created_at']) ?></td>
                                             <td><?= htmlspecialchars($o['status']) ?></td>
-                                            <?php if ($user_role === 'admin'): ?>
+                                            <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
                                                 <td>
                                                     <form method="POST" action="orders.php?action=assign_delivery&id=<?= $o['id'] ?>" class="assign-form">
                                                         <select name="delivery_user_id" class="form-select form-select-sm me-2" required>
@@ -900,13 +901,13 @@ try {
                                             <td>
                                                 <a href="orders.php?action=view_details&id=<?= $o['id'] ?>" class="btn btn-sm btn-info me-1"><i class="bi bi-eye"></i></a>
                                                 <a href="orders.php?action=update_status_form&id=<?= $o['id'] ?>" class="btn btn-sm btn-warning me-1"><i class="bi bi-pencil"></i></a>
-                                                <?php if ($user_role === 'admin'): ?>
+                                                <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
                                                     <a href="orders.php?action=delete&id=<?= $o['id'] ?>" class="btn btn-sm btn-danger me-1" onclick="return confirm('Move to trash?');"><i class="bi bi-trash"></i></a>
                                                     <button type="button" class="btn btn-sm btn-secondary me-1" data-bs-toggle="modal" data-bs-target="#delayModal<?= $o['id'] ?>"><i class="bi bi-clock"></i></button>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
-                                        <?php if ($user_role === 'admin'): ?>
+                                        <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
                                             <div class="modal fade" id="delayModal<?= $o['id'] ?>" tabindex="-1">
                                                 <div class="modal-dialog modal-dialog-centered">
                                                     <div class="modal-content">
