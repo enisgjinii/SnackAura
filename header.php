@@ -4,10 +4,10 @@
         <div class="container d-flex justify-content-between align-items-center">
             <!-- Logo Section -->
             <a href="index.php" class="d-flex align-items-center">
-                <?php if (!empty($cart_logo) && file_exists($cart_logo)): ?>
-                    <img src="<?= htmlspecialchars($cart_logo) ?>" alt="Cart Logo"
-                        style="width: 100%; height: 80px; object-fit: cover" id="cart-logo" loading="lazy"
-                        onerror="this.src='https://via.placeholder.com/150?text=Logo';">
+                <?php if (!empty($main_store['logo'])) :  ?>
+                    <div class="mb-3 text-center">
+                        <img src="admin/<?= $main_store['logo'] ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://via.placeholder.com/150?text=Logo';" style="width: 100%; height: 80px; object-fit: cover" id="cart-logo">
+                    </div>
                 <?php endif; ?>
             </a>
             <!-- Action Buttons -->
