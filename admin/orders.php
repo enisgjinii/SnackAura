@@ -20,121 +20,90 @@ function log_error($m, $c = '')
         FILE_APPEND | LOCK_EX
     );
 }
-
 function sendEmail($to, $toName, $sub, $body)
 {
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'egjini17@gmail.com';
-        $mail->Password   = 'axnjsldfudhohipv';
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'egjini17@gmail.com';
+        $mail->Password = 'axnjsldfudhohipv';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
+        $mail->Port = 587;
         $mail->setFrom('egjini17@gmail.com', 'Yumiis');
         $mail->addAddress($to, $toName);
         $mail->isHTML(true);
         $mail->CharSet = 'UTF-8';
         $mail->Subject = $sub;
-        $mail->Body    = $body;
+        $mail->Body = $body;
         $mail->send();
     } catch (Exception $e) {
         log_error("Mail Error: " . $mail->ErrorInfo, "Sending Email to: $to");
     }
 }
-
 function sendStatusUpdateEmail($e, $n, $oid, $st, $sd = null, $stm = null)
 {
     $sub = "Order #$oid Status Updated";
     $i = ($sd && $stm) ? "<p><strong>Scheduled Delivery:</strong> $sd at $stm</p>" : '';
-    $b = "<html><body><h2>Hello, $n</h2>
-         <p>Your order #$oid status is now <strong>$st</strong>.</p>
-         $i
-         <p>Thank you for choosing Yumiis!</p></body></html>";
+    $b = "<html><body><h2>Hello, $n</h2><p>Your order #$oid status is now <strong>$st</strong>.</p>$i<p>Thank you for choosing Yumiis!</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
-
 function sendDelayNotificationEmail($e, $n, $oid, $t)
 {
     $sub = "Delay Notification for Order #$oid";
-    $b = "<html><body><h2>Hello, $n</h2>
-         <p>Your order #$oid may be delayed by $t hour(s).</p>
-         <p>Please let us know if this is acceptable.</p>
-         </body></html>";
+    $b = "<html><body><h2>Hello, $n</h2><p>Your order #$oid may be delayed by $t hour(s).</p><p>Please let us know if this is acceptable.</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
-
 function notifyDeliveryPerson($e, $n, $oid, $st)
 {
     $sub = "New Order Assigned - Order #$oid";
-    $b = "<html><body><h2>Hello, $n</h2>
-         <p>You have been assigned to order #$oid with status $st.</p>
-         <p>Please proceed as required.</p></body></html>";
+    $b = "<html><body><h2>Hello, $n</h2><p>You have been assigned to order #$oid with status $st.</p><p>Please proceed as required.</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
-
 set_exception_handler(function ($e) {
     log_error("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
     header("Location: orders.php?action=view&message=unknown_error");
     exit;
 });
-
 set_error_handler(function ($sv, $m, $f, $l) {
     if (!(error_reporting() & $sv)) return;
     throw new ErrorException($m, 0, $sv, $f, $l);
 });
-
 function getDeliveryUsers($pdo)
 {
     $q = $pdo->prepare("SELECT id,username,email FROM users WHERE role='delivery' AND is_active=1");
     $q->execute();
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }
-
-$user_role = $_SESSION['role'] ?? 'admin' ?? 'super-admin';
-$user_id   = $_SESSION['user_id'] ?? 1;
-$action    = $_GET['action']     ?? 'view';
-$id        = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$message   = '';
-
+$user_role = $_SESSION['role'] ?? 'admin';
+$user_id = $_SESSION['user_id'] ?? 1;
+$action = $_GET['action'] ?? 'view';
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$message = '';
 $allowed_actions = [
-    'super-admin' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
-    'admin'    => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
+    'admin' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
     'delivery' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'update_status_form', 'update_status']
 ];
-
 if (!isset($allowed_actions[$user_role]) || !in_array($action, $allowed_actions[$user_role])) {
     header('HTTP/1.1 403 Forbidden');
     echo "<h1>403 Forbidden</h1><p>Role: " . htmlspecialchars($user_role) . "</p>";
     require_once 'includes/footer.php';
     exit;
 }
-
 $statuses = ['New Order', 'Kitchen', 'On the Way', 'Delivered', 'Canceled'];
-
 function getAllOrders($pdo)
 {
-    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount
-                       FROM orders o
-                       LEFT JOIN tips t ON o.tip_id=t.id
-                       WHERE o.is_deleted=0
-                       ORDER BY o.created_at DESC");
+    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.is_deleted=0 ORDER BY o.created_at DESC");
     $q->execute();
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }
-
 function getOrderById($pdo, $id)
 {
-    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount
-                       FROM orders o
-                       LEFT JOIN tips t ON o.tip_id=t.id
-                       WHERE o.id=? AND o.is_deleted=0
-                       LIMIT 1");
+    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.id=? AND o.is_deleted=0 LIMIT 1");
     $q->execute([$id]);
     return $q->fetch(PDO::FETCH_ASSOC);
 }
-
 function getTopProducts($pdo)
 {
     $q = $pdo->prepare("SELECT order_details FROM orders WHERE is_deleted=0");
@@ -154,7 +123,6 @@ function getTopProducts($pdo)
     arsort($count);
     return array_slice($count, 0, 10, true);
 }
-
 try {
     switch ($action) {
         case 'view_details':
@@ -217,20 +185,16 @@ try {
                 exit;
             }
         case 'view_trash':
-            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
+            if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
-            $t = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount
-                                FROM orders o
-                                LEFT JOIN tips t ON o.tip_id=t.id
-                                WHERE o.is_deleted=1
-                                ORDER BY o.updated_at DESC");
+            $t = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.is_deleted=1 ORDER BY o.updated_at DESC");
             $t->execute();
             $trash_orders = $t->fetchAll(PDO::FETCH_ASSOC);
             break;
         case 'restore':
-            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
+            if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -247,7 +211,7 @@ try {
                 exit;
             }
         case 'permanent_delete':
-            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
+            if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -284,7 +248,7 @@ try {
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
         case 'assign_delivery':
-            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
+            if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -313,7 +277,7 @@ try {
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
         case 'top_products':
-            if ($user_role !== 'admin' || $user_role !== 'super-admin') {
+            if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
@@ -327,8 +291,7 @@ try {
                 $st = in_array($ord['status'], $statuses) ? $ord['status'] : 'New Order';
                 $status_orders[$st][] = $ord;
             }
-            $delivery_users = $user_role === 'admin' || $user_role === 'super-admin' ? getDeliveryUsers($pdo) : [];
-            break;
+            $delivery_users = $user_role === 'admin' ? getDeliveryUsers($pdo) : [];
     }
 } catch (Exception $e) {
     log_error("Action switch error: " . $e->getMessage());
@@ -352,27 +315,14 @@ try {
             font-family: Arial, sans-serif;
         }
 
-        .table thead th {
-            white-space: nowrap;
-        }
-
-        .status-section {
-            margin-bottom: 30px;
-        }
-
-        .assign-form {
-            display: flex;
-            align-items: center;
-        }
-
-        .assign-form select {
-            margin-right: 5px;
+        .btn-group-top {
+            margin-bottom: 1rem;
         }
 
         .badge-status {
-            font-size: 0.9rem;
-            padding: 0.4em 0.6em;
-            border-radius: 0.25rem;
+            font-size: .9rem;
+            padding: .4em .6em;
+            border-radius: .25rem;
         }
 
         .badge-new {
@@ -395,25 +345,17 @@ try {
             background-color: #dc3545;
         }
 
-        .modal-invoice-header {
-            background-color: #333;
-            color: #fff;
-        }
-
-        .modal-invoice-header h5 {
-            margin: 0;
-            font-size: 1.25rem;
-        }
-
-        .invoice-container {
-            padding: 1rem;
-        }
-
-        .invoice-header {
+        .assign-form {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+        }
+
+        .assign-form select {
+            margin-right: 5px;
+        }
+
+        .modal-xl {
+            max-width: 90% !important;
         }
 
         .invoice-logo {
@@ -427,15 +369,6 @@ try {
             margin: 0;
         }
 
-        .store-info {
-            line-height: 1.4;
-            margin-bottom: 1rem;
-        }
-
-        .customer-info {
-            margin-bottom: 1rem;
-        }
-
         .invoice-items table {
             width: 100%;
             border-collapse: collapse;
@@ -443,49 +376,26 @@ try {
 
         .invoice-items th,
         .invoice-items td {
-            padding: 0.5rem;
+            padding: .5rem;
             border: 1px solid #ddd;
         }
 
         .invoice-items th {
             background-color: #f2f2f2;
         }
-
-        .invoice-summary {
-            margin-top: 1rem;
-            text-align: right;
-        }
-
-        .invoice-summary p {
-            margin: 0;
-        }
-
-        .invoice-footer {
-            margin-top: 1rem;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #666;
-        }
     </style>
 </head>
 
 <body class="p-3">
     <div class="container-fluid">
-        <nav class="mb-4">
-            <ul class="nav nav-tabs">
-                <li class="nav-item">
-                    <a class="nav-link <?= ($action !== 'view_trash' && $action !== 'top_products') ? 'active' : '' ?>" href="orders.php?action=view">View Orders</a>
-                </li>
-                <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
-                    <li class="nav-item">
-                        <a class="nav-link <?= ($action === 'view_trash' ? 'active' : '') ?>" href="orders.php?action=view_trash">Trash</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link <?= ($action === 'top_products' ? 'active' : '') ?>" href="orders.php?action=top_products">Top 10 Products</a>
-                    </li>
-                <?php endif; ?>
-            </ul>
-        </nav>
+        <!-- Simple button group instead of tabs -->
+        <div class="btn-group-top">
+            <button class="btn btn-primary me-2" onclick="window.location='orders.php?action=view'">View Orders</button>
+            <?php if ($user_role === 'admin'): ?>
+                <button class="btn btn-dark me-2" onclick="window.location='orders.php?action=view_trash'">Trash</button>
+                <button class="btn btn-info" onclick="window.location='orders.php?action=top_products'">Top 10 Products</button>
+            <?php endif; ?>
+        </div>
         <?php if (isset($_GET['message'])): ?>
             <div class="alert alert-info alert-dismissible fade show" role="alert">
                 <?= htmlspecialchars($_GET['message']) ?>
@@ -510,15 +420,14 @@ try {
                             <p><strong>Address:</strong> <?= htmlspecialchars($order['delivery_address']) ?></p>
                             <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?>€</p>
                             <p><strong>Tip:</strong>
-                                <?php if (!empty($order['tip_name'])) {
-                                    $ti = $order['tip_percentage'] !== null
-                                        ? htmlspecialchars($order['tip_percentage']) . '%'
-                                        : number_format($order['tip_fixed_amount'], 2) . '€';
+                                <?php
+                                if (!empty($order['tip_name'])) {
+                                    $ti = $order['tip_percentage'] !== null ? htmlspecialchars($order['tip_percentage']) . '%' : number_format($order['tip_fixed_amount'], 2) . '€';
                                     echo "<span class='badge bg-info'>" . htmlspecialchars($order['tip_name']) . "</span> ($ti)";
                                 } else {
                                     echo "N/A";
-                                } ?>
-                            </p>
+                                }
+                                ?></p>
                             <p><strong>Tip Amount:</strong> <?= number_format($order['tip_amount'], 2) ?>€</p>
                             <p><strong>Coupon Code:</strong> <?= htmlspecialchars($order['coupon_code'] ?? 'N/A') ?></p>
                             <p><strong>Coupon Discount:</strong> <?= number_format(($order['coupon_discount'] ?? 0), 2) ?>€</p>
@@ -529,7 +438,7 @@ try {
                             <p><strong>Status:</strong> <?= htmlspecialchars($order['status']) ?></p>
                             <p><strong>Delivery User:</strong>
                                 <?php
-                                if ($order['delivery_user_id'] && $user_role === 'admin' || $user_role === 'super-admin') {
+                                if ($order['delivery_user_id'] && $user_role === 'admin') {
                                     $st = $pdo->prepare("SELECT username FROM users WHERE id=? LIMIT 1");
                                     $st->execute([$order['delivery_user_id']]);
                                     $du = $st->fetch(PDO::FETCH_ASSOC);
@@ -537,8 +446,7 @@ try {
                                 } else {
                                     echo "Unassigned";
                                 }
-                                ?>
-                            </p>
+                                ?></p>
                             <p><strong>Created At:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                             <p><strong>Updated At:</strong> <?= htmlspecialchars($order['updated_at'] ?? 'N/A') ?></p>
                         </div>
@@ -546,7 +454,7 @@ try {
                             <h5>Order Items</h5>
                             <?php
                             $details = json_decode($order['order_details'], true);
-                            $items   = $details['items'] ?? [];
+                            $items = $details['items'] ?? [];
                             if ($items):
                                 foreach ($items as $item): ?>
                                     <div class="card mb-3">
@@ -605,51 +513,37 @@ try {
                             <?php endif; ?>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-dark mt-3" data-bs-toggle="modal" data-bs-target="#invoiceModal">
-                        <i class="bi bi-file-earmark-text"></i> View Invoice
-                    </button>
+                    <button type="button" class="btn btn-dark mt-3" data-bs-toggle="modal" data-bs-target="#invoiceModal"><i class="bi bi-file-earmark-text"></i> View Invoice</button>
                     <a href="orders.php?action=view" class="btn btn-secondary mt-3">Back</a>
                 </div>
             </div>
             <div class="modal fade" id="invoiceModal" tabindex="-1">
                 <div class="modal-dialog modal-xl modal-dialog-centered">
                     <div class="modal-content">
-                        <div class="modal-header modal-invoice-header">
+                        <div class="modal-header bg-dark text-white">
                             <h5 class="modal-title">Invoice for Order #<?= htmlspecialchars($order['id']) ?></h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
                             <?php
-                            $invTip  = number_format($order['tip_amount'], 2);
+                            $invTip = number_format($order['tip_amount'], 2);
                             $invDisc = number_format($order['coupon_discount'] ?? 0, 2);
                             $subtotal = ($order['total_amount'] + (float)$invDisc - (float)$order['tip_amount']);
                             $invSubtotal = number_format($subtotal, 2);
                             ?>
-                            <div class="invoice-container">
-                                <div class="invoice-header">
-                                    <div>
-                                        <img src="store_logo.png" alt="Store Logo" class="invoice-logo">
-                                    </div>
-                                    <div>
-                                        <h3 class="invoice-title">INVOICE</h3>
-                                    </div>
+                            <div class="p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <img src="store_logo.png" alt="Store Logo" class="invoice-logo">
+                                    <h3 class="invoice-title">INVOICE</h3>
                                 </div>
-                                <div class="store-info">
-                                    <strong>Yumiis Restaurant</strong><br>
-                                    123 Main St<br>
-                                    Some City, 12345<br>
-                                    +1 (555) 123-4567<br>
-                                    contact@yumiis.com
+                                <div class="mb-3">
+                                    <strong>Yumiis Restaurant</strong><br>123 Main St<br>Some City, 12345<br>+1 (555) 123-4567<br>contact@yumiis.com
                                 </div>
-                                <div class="customer-info">
-                                    <p>
-                                        <strong>Bill To:</strong> <?= htmlspecialchars($order['customer_name']) ?><br>
-                                        <?= htmlspecialchars($order['delivery_address']) ?><br>
-                                        <?= htmlspecialchars($order['customer_email']) ?>
-                                    </p>
+                                <div class="mb-3">
+                                    <p><strong>Bill To:</strong> <?= htmlspecialchars($order['customer_name']) ?><br><?= htmlspecialchars($order['delivery_address']) ?><br><?= htmlspecialchars($order['customer_email']) ?></p>
                                     <p><strong>Order Date:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                                 </div>
-                                <div class="invoice-items">
+                                <div class="invoice-items mb-3">
                                     <table>
                                         <thead>
                                             <tr>
@@ -663,7 +557,7 @@ try {
                                             <?php
                                             if (!empty($items)) {
                                                 foreach ($items as $it) {
-                                                    $nm  = htmlspecialchars($it['name'] ?? 'Item');
+                                                    $nm = htmlspecialchars($it['name'] ?? 'Item');
                                                     $qty = intval($it['quantity'] ?? 1);
                                                     $uni = number_format($it['unit_price'] ?? 0, 2);
                                                     $tpr = number_format($it['total_price'] ?? 0, 2);
@@ -676,20 +570,14 @@ try {
                                         </tbody>
                                     </table>
                                 </div>
-                                <div class="invoice-summary">
-                                    <p><strong>Subtotal:</strong> <?= $invSubtotal ?> €</p>
-                                    <p><strong>Tip:</strong> <?= $invTip ?> €</p>
-                                    <p><strong>Coupon Discount:</strong> <?= $invDisc ?> €</p>
-                                    <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?> €</p>
-                                </div>
-                                <div class="invoice-footer">
-                                    <p>Thank you for your order!</p>
-                                </div>
+                                <p><strong>Subtotal:</strong> <?= $invSubtotal ?> €</p>
+                                <p><strong>Tip:</strong> <?= $invTip ?> €</p>
+                                <p><strong>Coupon Discount:</strong> <?= $invDisc ?> €</p>
+                                <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?> €</p>
+                                <p class="text-center mt-4" style="font-size:.9rem;color:#666;">Thank you for your order!</p>
                             </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
+                        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
                     </div>
                 </div>
             </div>
@@ -759,8 +647,7 @@ try {
                                                 if (!empty($tr['tip_name'])) {
                                                     $xx = $tr['tip_percentage'] !== null ? htmlspecialchars($tr['tip_percentage']) . '%' : number_format($tr['tip_fixed_amount'], 2) . '€';
                                                     echo "<span class='badge bg-info'>" . htmlspecialchars($tr['tip_name']) . "</span> ($xx)";
-                                                } else echo 'N/A';
-                                                ?></td>
+                                                } else echo 'N/A'; ?></td>
                                             <td><?= number_format($tr['tip_amount'], 2) ?></td>
                                             <td><?= htmlspecialchars($tr['scheduled_date'] ?? 'N/A') ?></td>
                                             <td><?= htmlspecialchars($tr['scheduled_time'] ?? 'N/A') ?></td>
@@ -821,17 +708,17 @@ try {
             <?php
         else:
             foreach ($statuses as $st): ?>
-                <div class="status-section">
-                    <h4 class="mb-3">
+                <div class="mb-4">
+                    <h4 class="mb-2">
                         <?= htmlspecialchars($st) ?> Orders
                         <?php
                         $badge = match ($st) {
-                            'New Order'  => 'badge-new',
-                            'Kitchen'    => 'badge-kitchen',
+                            'New Order' => 'badge-new',
+                            'Kitchen' => 'badge-kitchen',
                             'On the Way' => 'badge-on-way',
-                            'Delivered'  => 'badge-delivered',
-                            'Canceled'   => 'badge-canceled',
-                            default      => 'badge-secondary',
+                            'Delivered' => 'badge-delivered',
+                            'Canceled' => 'badge-canceled',
+                            default => 'badge-secondary',
                         };
                         ?>
                         <span class="badge badge-status <?= $badge ?>"><?= $st ?></span>
@@ -853,7 +740,7 @@ try {
                                         <th>Scheduled Time</th>
                                         <th>Created</th>
                                         <th>Status</th>
-                                        <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
+                                        <?php if ($user_role === 'admin'): ?>
                                             <th>Assign Delivery</th>
                                         <?php endif; ?>
                                         <th>Coupon Code</th>
@@ -865,9 +752,7 @@ try {
                                     <?php foreach ($status_orders[$st] as $o):
                                         $tipBadge = 'N/A';
                                         if (!empty($o['tip_name'])) {
-                                            $val = $o['tip_percentage'] !== null
-                                                ? htmlspecialchars($o['tip_percentage']) . '%'
-                                                : number_format($o['tip_fixed_amount'], 2) . '€';
+                                            $val = $o['tip_percentage'] !== null ? htmlspecialchars($o['tip_percentage']) . '%' : number_format($o['tip_fixed_amount'], 2) . '€';
                                             $tipBadge = "<span class='badge bg-info'>" . htmlspecialchars($o['tip_name']) . "</span> ($val)";
                                         } ?>
                                         <tr>
@@ -883,13 +768,15 @@ try {
                                             <td><?= htmlspecialchars($o['scheduled_time'] ?? 'N/A') ?></td>
                                             <td><?= htmlspecialchars($o['created_at']) ?></td>
                                             <td><?= htmlspecialchars($o['status']) ?></td>
-                                            <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
+                                            <?php if ($user_role === 'admin'): ?>
                                                 <td>
                                                     <form method="POST" action="orders.php?action=assign_delivery&id=<?= $o['id'] ?>" class="assign-form">
                                                         <select name="delivery_user_id" class="form-select form-select-sm me-2" required>
                                                             <option value="">Choose</option>
                                                             <?php foreach ($delivery_users as $du): ?>
-                                                                <option value="<?= htmlspecialchars($du['id']) ?>" <?= ($o['delivery_user_id'] == $du['id'] ? 'selected' : '') ?>><?= htmlspecialchars($du['username']) ?></option>
+                                                                <option value="<?= htmlspecialchars($du['id']) ?>" <?= ($o['delivery_user_id'] == $du['id'] ? 'selected' : '') ?>>
+                                                                    <?= htmlspecialchars($du['username']) ?>
+                                                                </option>
                                                             <?php endforeach; ?>
                                                         </select>
                                                         <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-person-check"></i></button>
@@ -901,13 +788,13 @@ try {
                                             <td>
                                                 <a href="orders.php?action=view_details&id=<?= $o['id'] ?>" class="btn btn-sm btn-info me-1"><i class="bi bi-eye"></i></a>
                                                 <a href="orders.php?action=update_status_form&id=<?= $o['id'] ?>" class="btn btn-sm btn-warning me-1"><i class="bi bi-pencil"></i></a>
-                                                <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
+                                                <?php if ($user_role === 'admin'): ?>
                                                     <a href="orders.php?action=delete&id=<?= $o['id'] ?>" class="btn btn-sm btn-danger me-1" onclick="return confirm('Move to trash?');"><i class="bi bi-trash"></i></a>
                                                     <button type="button" class="btn btn-sm btn-secondary me-1" data-bs-toggle="modal" data-bs-target="#delayModal<?= $o['id'] ?>"><i class="bi bi-clock"></i></button>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
-                                        <?php if ($user_role === 'admin' || $user_role === 'super-admin'): ?>
+                                        <?php if ($user_role === 'admin'): ?>
                                             <div class="modal fade" id="delayModal<?= $o['id'] ?>" tabindex="-1">
                                                 <div class="modal-dialog modal-dialog-centered">
                                                     <div class="modal-content">
@@ -958,7 +845,7 @@ try {
                 responsive: true,
                 language: {
                     emptyTable: "No data available",
-                    search: "Search orders:"
+                    search: "Search:"
                 }
             });
             <?php if (!empty($all_orders)): ?>
