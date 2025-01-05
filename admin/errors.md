@@ -449,3 +449,87 @@
 **Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 808
 ---
 
+### [2025-01-05 16:44:11] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/view_trash.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 432
+---
+
+### [2025-01-05 16:44:14] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/view_trash.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 432
+---
+
+### [2025-01-05 16:44:14] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/view_trash.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 432
+---
+
+### [2025-01-05 16:44:15] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/view_trash.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 432
+---
+
+### [2025-01-05 16:44:19] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/view_details.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 422
+---
+
+### [2025-01-05 17:42:22] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/trash_view.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 519
+---
+
+### [2025-01-05 17:42:23] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/trash_view.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 519
+---
+
+### [2025-01-05 17:42:23] Error
+
+**Message:** Uncaught Exception: include(C:\xampp\htdocs\arber-dobruna\admin/partials/top_products_view.php): Failed to open stream: No such file or directory
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 523
+---
+
+### [2025-01-05 18:01:22] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+
+### [2025-01-05 18:39:57] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+
+### [2025-01-05 18:40:07] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+
+### [2025-01-05 18:40:21] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+
+### [2025-01-05 18:40:30] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+
+### [2025-01-05 18:40:44] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
+---
+

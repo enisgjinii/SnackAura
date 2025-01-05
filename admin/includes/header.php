@@ -1,102 +1,105 @@
 <?php
 // admin/includes/header.php
+
+// Include authentication script
 require_once 'auth.php';
-// Get current page
+
+// Get the current page name
 $currentPage = basename($_SERVER['PHP_SELF']);
-// Get session user role
+
+// Retrieve user role from session
 $userRole = $_SESSION['role'] ?? '';
-// Define menu items for different roles with updated icons
+
+// Define menu items for different user roles with appropriate icons
+$menuItems = [];
+
 $adminMenuItems = [
     ['dashboard.php', 'fas fa-chart-pie', 'Dashboard'],
     ['categories.php', 'fas fa-th-list', 'Categories'],
     ['products.php', 'fas fa-box', 'Products'],
-    // ['sizes.php', 'fas fa-arrows-alt', 'Sizes'],
-    // ['extras.php', 'fas fa-layer-group', 'Extras'],
     ['settings.php', 'fas fa-sliders-h', 'Settings'],
     ['orders.php', 'fas fa-receipt', 'Orders'],
     ['drinks.php', 'fas fa-coffee', 'Drinks'],
-    // ['sauces.php', 'fas fa-bottle-water', 'Sauces'],
-    // ['informations.php', 'fas fa-info', 'Informations'],
     ['cupons.php', 'fas fa-tags', 'Coupons'],
     ['users.php', 'fas fa-user-friends', 'Users'],
-    // ['products_mixes.php', 'fas fa-blender', 'Products Mixes'],
     ['reservations.php', 'fas fa-calendar-check', 'Reservations'],
     ['stores.php', 'fas fa-shop', 'Stores'],
     ['banners.php', 'fas fa-photo-video', 'Banners'],
-    // ['offers.php', 'fas fa-percentage', 'Offers'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
+    ['github.php', 'fab fa-github', 'Github'],
 ];
+
 $deliveryMenuItems = [
     ['dashboard.php', 'fas fa-chart-pie', 'Dashboard'],
     ['orders.php', 'fas fa-receipt', 'Orders'],
 ];
-// Determine which menu items to display based on the role
+
+// Assign menu items based on user role
 switch ($userRole) {
-    case 'admin' || 'super-admin':
+    case 'admin':
+    case 'super-admin':
         $menuItems = $adminMenuItems;
         break;
     case 'delivery':
         $menuItems = $deliveryMenuItems;
         break;
-        // Add cases for other roles like 'waiter' here
+        // Additional roles can be added here
     default:
-        $menuItems = []; // No menu items if role is unrecognized
+        $menuItems = []; // No menu items for unrecognized roles
         break;
 }
-// settings_fetch.php
-// Fetch legal settings (AGB, Impressum, Datenschutzerklärung) and social media links
+
+// Fetch settings from the database
 try {
-    // Define all required keys
-    $legal_keys = ['agb', 'impressum', 'datenschutzerklaerung'];
-    $social_keys = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
-    $cart_keys = ['cart_logo', 'cart_description']; // New Cart Settings
-    // Merge all keys into a single array for a combined query
-    $all_keys = array_merge($legal_keys, $social_keys, $cart_keys); // Include cart_keys
-    // Create placeholders for the IN clause
-    $placeholders = rtrim(str_repeat('?,', count($all_keys)), ',');
-    // Prepare the SQL statement
+    // Define required keys
+    $legalKeys = ['agb', 'impressum', 'datenschutzerklaerung'];
+    $socialKeys = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
+    $cartKeys = ['cart_logo', 'cart_description'];
+
+    // Combine all keys for the query
+    $allKeys = array_merge($legalKeys, $socialKeys, $cartKeys);
+    $placeholders = rtrim(str_repeat('?,', count($allKeys)), ',');
+
+    // Prepare and execute the SQL statement
     $stmt = $pdo->prepare("SELECT `key`, `value` FROM `settings` WHERE `key` IN ($placeholders)");
-    // Execute the statement with all keys
-    $stmt->execute($all_keys);
-    // Fetch the results as an associative array
+    $stmt->execute($allKeys);
     $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    // Assign legal settings with default fallbacks
+
+    // Assign settings with default fallbacks
     $agb = $settings['agb'] ?? 'No AGB available.';
     $impressum = $settings['impressum'] ?? 'No Impressum available.';
     $datenschutzerklaerung = $settings['datenschutzerklaerung'] ?? 'No Datenschutzerklärung available.';
-    // Assign social media links with default empty strings if not set
-    $social_links = [
-        'facebook_link' => $settings['facebook_link'] ?? '',
-        'twitter_link' => $settings['twitter_link'] ?? '',
-        'instagram_link' => $settings['instagram_link'] ?? '',
-        'linkedin_link' => $settings['linkedin_link'] ?? '',
-        'youtube_link' => $settings['youtube_link'] ?? '',
+
+    $socialLinks = [
+        'facebook_link'    => $settings['facebook_link'] ?? '',
+        'twitter_link'     => $settings['twitter_link'] ?? '',
+        'instagram_link'   => $settings['instagram_link'] ?? '',
+        'linkedin_link'    => $settings['linkedin_link'] ?? '',
+        'youtube_link'     => $settings['youtube_link'] ?? '',
     ];
-    // Assign cart settings with default fallbacks
-    $cart_logo = $settings['cart_logo'] ?? ''; // Default empty string
-    $cart_description = $settings['cart_description'] ?? ''; // Default empty string
-    // Adjust cart_logo path if necessary (remove '../' if present)
-    if (!empty($cart_logo)) {
-        $cart_logo = str_replace('../', '', $cart_logo);
+
+    $cartLogo = $settings['cart_logo'] ?? '';
+    $cartDescription = $settings['cart_description'] ?? '';
+
+    // Clean cart logo path if necessary
+    if (!empty($cartLogo)) {
+        $cartLogo = str_replace('../', '', $cartLogo);
     }
 } catch (PDOException $e) {
-    // Log the error with context
+    // Log error and assign default values
     log_error_markdown("Failed to fetch settings: " . $e->getMessage(), "Fetching Settings");
-    // Assign default values for legal settings in case of an error
     $agb = 'Error loading AGB.';
     $impressum = 'Error loading Impressum.';
     $datenschutzerklaerung = 'Error loading Datenschutzerklärung.';
-    // Assign default empty strings for social media links in case of an error
-    $social_links = [
-        'facebook_link' => '',
-        'twitter_link' => '',
-        'instagram_link' => '',
-        'linkedin_link' => '',
-        'youtube_link' => '',
+    $socialLinks = [
+        'facebook_link'    => '',
+        'twitter_link'     => '',
+        'instagram_link'   => '',
+        'linkedin_link'    => '',
+        'youtube_link'     => '',
     ];
-    // Assign default empty strings for cart settings in case of an error
-    $cart_logo = '';
-    $cart_description = '';
+    $cartLogo = '';
+    $cartDescription = '';
 }
 ?>
 <!DOCTYPE html>
@@ -109,14 +112,10 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- Custom CSS -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
     <link href="assets/css/styles.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/v/bs5/jq-3.7.0/jszip-3.10.1/dt-2.1.8/af-2.7.0/b-3.2.0/b-colvis-3.2.0/b-html5-3.2.0/cr-2.0.4/date-1.5.4/fc-5.0.4/fh-4.0.1/kt-2.12.1/r-3.0.3/rg-1.5.1/rr-1.5.0/sc-2.4.3/sb-1.8.1/sp-2.3.3/sl-2.1.0/sr-1.4.1/datatables.min.css" rel="stylesheet">
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- DataTables CSS -->
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <!-- Select2 CSS -->
@@ -124,20 +123,19 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-bootstrap-4@5/bootstrap-4.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://kit.fontawesome.com/a076d05399.css" crossorigin="anonymous">
-    <!-- Fav Icon -->
-    <?php if (!empty($cart_logo)): ?>
-        <link rel="icon" type="image/png" href="../<?php echo htmlspecialchars($cart_logo, ENT_QUOTES, 'UTF-8'); ?>">
+    <!-- Favicon -->
+    <?php if (!empty($cartLogo)): ?>
+        <link rel="icon" type="image/png" href="<?= htmlspecialchars('../' . $cartLogo, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
 
     <style>
+        /* Global Styles */
         * {
-            font-family: "Inter", sans-serif;
-            font-optical-sizing: auto;
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
         }
 
-        /* Color Palette */
+        /* Color Palette Variables */
         :root {
             --sidebar-bg: #2C3E50;
             --sidebar-header-bg: #1A252F;
@@ -145,7 +143,7 @@ try {
             --sidebar-active-bg: #2980B9;
             --sidebar-text: #ECF0F1;
             --sidebar-hover-text: #FFFFFF;
-            --navbar-bg: linear-gradient(90deg, #ffffff, #f8f9fa);
+            --navbar-bg: #ffffff;
             --content-bg: #F8F9FA;
             --toggle-btn-bg: #2C3E50;
             --toggle-btn-hover-bg: #1A252F;
@@ -158,7 +156,7 @@ try {
         #sidebar {
             min-width: 250px;
             max-width: 250px;
-            height: fit-content;
+            height: 100vh;
             background-color: var(--sidebar-bg);
             color: var(--sidebar-text);
             transition: all 0.3s;
@@ -167,7 +165,7 @@ try {
             display: flex;
             flex-direction: column;
             border-radius: 15px;
-            margin: 5px;
+            margin: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
@@ -176,6 +174,7 @@ try {
             max-width: 80px;
         }
 
+        /* Sidebar Header */
         #sidebar .sidebar-header {
             padding: 1rem;
             background-color: var(--sidebar-header-bg);
@@ -185,16 +184,15 @@ try {
             border-bottom: 1px solid var(--border-color);
         }
 
+        /* Sidebar Menu */
         #sidebar .list-unstyled {
             padding: 0;
             flex-grow: 1;
             overflow-y: auto;
-            /* Enables vertical scrolling */
             max-height: calc(100vh - 120px);
-            /* Adjust height as per your layout */
         }
 
-        /* Optional: Customize the scrollbar appearance */
+        /* Scrollbar Styling */
         #sidebar .list-unstyled::-webkit-scrollbar {
             width: 8px;
         }
@@ -208,10 +206,7 @@ try {
             background-color: rgba(255, 255, 255, 0.5);
         }
 
-        #sidebar .list-unstyled li {
-            width: 100%;
-        }
-
+        /* Sidebar Links */
         #sidebar .list-unstyled .nav-link {
             color: var(--sidebar-text);
             display: flex;
@@ -234,7 +229,8 @@ try {
             border-left: 4px solid var(--sidebar-active-bg);
         }
 
-        #sidebar .list-unstyled .nav-link .fas {
+        /* Icon Styling */
+        #sidebar .list-unstyled .nav-link i {
             margin-right: 0.75rem;
             width: 20px;
             text-align: center;
@@ -245,8 +241,8 @@ try {
             display: none;
         }
 
-        /* Tooltip Styling */
-        #sidebar.collapsed .list-unstyled .nav-link .nav-label::after {
+        /* Tooltip for Collapsed Sidebar */
+        #sidebar.collapsed .list-unstyled .nav-link::after {
             content: attr(data-tooltip);
             position: absolute;
             left: 100%;
@@ -265,24 +261,23 @@ try {
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
-        #sidebar.collapsed .list-unstyled .nav-link:hover .nav-label::after {
+        #sidebar.collapsed .list-unstyled .nav-link:hover::after {
             opacity: 1;
         }
 
-        /* Content Styling */
+        /* Content Area */
         #content {
-            width: calc(100% - 250px);
             margin-left: 250px;
             padding: 1rem;
             transition: all 0.3s;
             flex-grow: 1;
-            /* background-color: var(--content-bg); */
+            background-color: var(--content-bg);
             min-height: 100vh;
         }
 
         #sidebar.collapsed+#content {
-            width: calc(100% - 80px);
             margin-left: 80px;
+            width: calc(100% - 80px);
         }
 
         /* Toggle Button */
@@ -306,6 +301,7 @@ try {
             background: var(--navbar-bg);
             border-bottom: 1px solid var(--border-color);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border-radius: 0.5rem;
         }
 
         /* Responsive Adjustments */
@@ -319,13 +315,13 @@ try {
             }
 
             #content {
-                width: 100%;
                 margin-left: 0;
+                width: 100%;
             }
 
             #sidebar.active+#content {
-                width: 100%;
                 margin-left: 250px;
+                width: calc(100% - 250px);
             }
 
             #sidebar.collapsed {
@@ -334,21 +330,7 @@ try {
             }
         }
 
-        /* Scrollbar Styling (Optional) */
-        #sidebar .list-unstyled::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #sidebar .list-unstyled::-webkit-scrollbar-thumb {
-            background-color: rgba(236, 240, 241, 0.2);
-            border-radius: 3px;
-        }
-
-        #sidebar .list-unstyled::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(236, 240, 241, 0.4);
-        }
-
-        /* Additional Styling Enhancements */
+        /* Dropdown Menu Styling */
         .dropdown-menu {
             min-width: 200px;
             background-color: var(--dropdown-bg);
@@ -365,18 +347,18 @@ try {
 
 <body>
     <div class="d-flex">
-        <!-- Sidebar -->
+        <!-- Sidebar Navigation -->
         <nav id="sidebar" class="<?= isset($_COOKIE['sidebar_collapsed']) && $_COOKIE['sidebar_collapsed'] === 'true' ? 'collapsed' : '' ?>" aria-label="Sidebar Navigation">
             <div class="sidebar-header">
-                <h4><?= isset($_SESSION['company_name']) ? htmlspecialchars($_SESSION['company_name']) : 'Y' ?></h4>
+                <h4><?= htmlspecialchars($_SESSION['company_name'] ?? 'Your Company', ENT_QUOTES, 'UTF-8') ?></h4>
             </div>
             <ul class="list-unstyled components">
                 <?php if (!empty($menuItems)): ?>
                     <?php foreach ($menuItems as [$href, $icon, $label]): ?>
                         <li class="<?= $currentPage === $href ? 'active' : '' ?>">
-                            <a href="<?= htmlspecialchars($href) ?>" class="nav-link" data-tooltip="<?= htmlspecialchars($label) ?>" aria-label="<?= htmlspecialchars($label) ?>">
-                                <i class="<?= htmlspecialchars($icon) ?>"></i>
-                                <span class="nav-label"><?= htmlspecialchars($label) ?></span>
+                            <a href="<?= htmlspecialchars($href, ENT_QUOTES, 'UTF-8') ?>" class="nav-link" data-tooltip="<?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>">
+                                <i class="<?= htmlspecialchars($icon, ENT_QUOTES, 'UTF-8') ?>"></i>
+                                <span class="nav-label"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
                             </a>
                         </li>
                     <?php endforeach; ?>
@@ -390,21 +372,24 @@ try {
                 <?php endif; ?>
             </ul>
         </nav>
-        <!-- Page Content -->
+
+        <!-- Main Content Area -->
         <div id="content" class="flex-grow-1">
-            <nav class="navbar navbar-expand-lg navbar-light rounded-2 border  mb-4">
+            <!-- Top Navigation Bar -->
+            <nav class="navbar navbar-expand-lg navbar-light rounded-2 border mb-4">
                 <button type="button" id="sidebarCollapse" class="btn" aria-label="Toggle Sidebar">
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="container-fluid">
                     <div class="ms-auto d-flex align-items-center">
+                        <!-- User Dropdown Menu -->
                         <div class="dropdown">
-                            <button class="btn btn-secondary dropdown-toggle d-flex align-items-center" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-user-circle me-1"></i> <?= htmlspecialchars($_SESSION['username']) ?>
+                            <button class="btn btn-secondary dropdown-toggle d-flex align-items-center" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user-circle me-1"></i> <?= htmlspecialchars($_SESSION['username'], ENT_QUOTES, 'UTF-8') ?>
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton1">
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                                 <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i> Profile</a></li>
-                                <li><a class="dropdown-item" href="#"><i class="fas fa-id-badge me-2"></i> Role: <?= htmlspecialchars($_SESSION['role']) ?></a></li>
+                                <li><a class="dropdown-item" href="#"><i class="fas fa-id-badge me-2"></i> Role: <?= htmlspecialchars($_SESSION['role'], ENT_QUOTES, 'UTF-8') ?></a></li>
                                 <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i> Settings</a></li>
                                 <li>
                                     <hr class="dropdown-divider">
