@@ -26,7 +26,7 @@ $adminMenuItems = [
     ['stores.php', 'fas fa-shop', 'Stores'],
     ['banners.php', 'fas fa-photo-video', 'Banners'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
-    ['github.php', 'fab fa-github', 'Github'],
+    ['logs.php', 'fas fa-history', 'Audit'],
 ];
 
 $deliveryMenuItems = [
