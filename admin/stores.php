@@ -8,28 +8,35 @@ $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 $daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-function validateStore($data, $pdo, $id = 0)
+function validateStore($data, PDO $pdo, int $id = 0): array
 {
     $errors = [];
     $sanitized = [];
     $required = ['name', 'address', 'phone', 'email'];
     foreach ($required as $f) {
         $v = trim($data[$f] ?? '');
-        if (!$v) $errors[] = ucfirst($f) . " is required.";
-        else $sanitized[$f] = $v;
+        if ($v === '') {
+            $errors[] = "Field '{$f}' is required, but was empty.";
+        } else {
+            $sanitized[$f] = $v;
+        }
     }
     if (!empty($sanitized['email']) && !filter_var($sanitized['email'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format.";
+        $errors[] = "Invalid email format: '{$sanitized['email']}'.";
     }
-    $sanitized['manager_id'] = isset($data['manager_id']) ? (int)$data['manager_id'] : null;
-    $social = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
-    foreach ($social as $link) {
-        $url = trim($data[$link] ?? '');
-        if ($url) {
-            if (!filter_var($url, FILTER_VALIDATE_URL)) {
-                $errors[] = "Invalid URL for " . ucfirst(str_replace('_', ' ', $link)) . ".";
-            } else $sanitized[$link] = $url;
-        } else $sanitized[$link] = null;
+    $sanitized['manager_id'] = (isset($data['manager_id']) && ctype_digit($data['manager_id'])) ? (int)$data['manager_id'] : null;
+    $soc = ['facebook_link', 'twitter_link', 'instagram_link', 'linkedin_link', 'youtube_link'];
+    foreach ($soc as $l) {
+        $u = trim($data[$l] ?? '');
+        if ($u) {
+            if (!filter_var($u, FILTER_VALIDATE_URL)) {
+                $errors[] = "Invalid URL for '{$l}': '{$u}'.";
+            } else {
+                $sanitized[$l] = $u;
+            }
+        } else {
+            $sanitized[$l] = null;
+        }
     }
     $nums = [
         'minimum_order',
@@ -43,38 +50,59 @@ function validateStore($data, $pdo, $id = 0)
         'shipping_vat_percentage'
     ];
     foreach ($nums as $f) {
-        $v = $data[$f] ?? null;
-        if ($v === '' || $v === null) $errors[] = ucfirst(str_replace('_', ' ', $f)) . " is required.";
-        elseif (!is_numeric($v)) $errors[] = ucfirst(str_replace('_', ' ', $f)) . " must be numeric.";
-        elseif (floatval($v) < 0) $errors[] = ucfirst(str_replace('_', ' ', $f)) . " cannot be negative.";
-        else $sanitized[$f] = $v;
+        $val = $data[$f] ?? null;
+        if ($val === '' || $val === null) {
+            $errors[] = "Required numeric field '{$f}' was empty.";
+        } elseif (!is_numeric($val)) {
+            $errors[] = "Field '{$f}' must be numeric, got: '{$val}'.";
+        } elseif (floatval($val) < 0) {
+            $errors[] = "Field '{$f}' cannot be negative, got: '{$val}'.";
+        } else {
+            $sanitized[$f] = $val;
+        }
     }
     $pcz = trim($data['postal_code_zones'] ?? '');
     if ($pcz) {
         json_decode($pcz);
-        if (json_last_error() !== JSON_ERROR_NONE) $errors[] = "Invalid JSON for Postal Code Zones.";
-        else $sanitized['postal_code_zones'] = $pcz;
-    } else $sanitized['postal_code_zones'] = null;
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $errors[] = "Invalid JSON in 'postal_code_zones': '{$pcz}'";
+        } else {
+            $sanitized['postal_code_zones'] = $pcz;
+        }
+    } else {
+        $sanitized['postal_code_zones'] = null;
+    }
     $sql = "SELECT COUNT(*) FROM stores WHERE (name=:name OR email=:email)";
-    if ($id > 0) $sql .= " AND id!=:id";
+    if ($id > 0) {
+        $sql .= " AND id!=:id";
+    }
     $stmt = $pdo->prepare($sql);
-    $params = [':name' => $sanitized['name'] ?? '', ':email' => $sanitized['email'] ?? ''];
-    if ($id > 0) $params[':id'] = $id;
+    $params = [
+        ':name' => $sanitized['name'] ?? '',
+        ':email' => $sanitized['email'] ?? ''
+    ];
+    if ($id > 0) {
+        $params[':id'] = $id;
+    }
     try {
         $stmt->execute($params);
-        if ($stmt->fetchColumn() > 0) $errors[] = "Store name or email already exists.";
+        if ($stmt->fetchColumn() > 0) {
+            $errors[] = "A store with this name or email already exists.";
+        }
     } catch (PDOException $e) {
-        error_log($e->getMessage());
-        $errors[] = "An internal error occurred.";
+        error_log("validateStore DB Error: " . $e->getMessage());
+        $errors[] = "DB Error in validateStore: " . $e->getMessage();
     }
     return [$errors, $sanitized];
 }
 
-function handleFileUpload(&$errors, $fileKey = 'logo')
+function handleFileUpload(array &$errors, string $fileKey = 'logo'): ?string
 {
-    if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) return null;
+    if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
     if ($_FILES[$fileKey]['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = "Error uploading file for $fileKey.";
+        $errors[] = "Upload error code {$_FILES[$fileKey]['error']} for '{$fileKey}'.";
         return null;
     }
     $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -82,12 +110,12 @@ function handleFileUpload(&$errors, $fileKey = 'logo')
     $mime = finfo_file($finfo, $_FILES[$fileKey]['tmp_name']);
     finfo_close($finfo);
     if (!in_array($mime, $allowed)) {
-        $errors[] = "Invalid file type for $fileKey. Allowed: JPEG, PNG, GIF, WEBP.";
+        $errors[] = "Invalid file type for '{$fileKey}' = '{$mime}'. Allowed: " . implode(', ', $allowed);
         return null;
     }
     $dir = __DIR__ . '/uploads/logos/';
     if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-        $errors[] = "Failed to create upload dir for $fileKey.";
+        $errors[] = "Failed to create directory '{$dir}' for '{$fileKey}'. Check permissions.";
         return null;
     }
     $orig = basename($_FILES[$fileKey]['name']);
@@ -95,13 +123,13 @@ function handleFileUpload(&$errors, $fileKey = 'logo')
     $newName = $fileKey . '_' . time() . '.' . $ext;
     $dest = $dir . $newName;
     if (!move_uploaded_file($_FILES[$fileKey]['tmp_name'], $dest)) {
-        $errors[] = "Failed to move uploaded file for $fileKey.";
+        $errors[] = "Failed to move uploaded file to '{$dest}' for '{$fileKey}'.";
         return null;
     }
     return "uploads/logos/$newName";
 }
 
-function buildWorkScheduleJSON($data)
+function buildWorkScheduleJSON(array $data): string
 {
     global $daysOfWeek;
     $s = ['days' => [], 'holidays' => []];
@@ -110,8 +138,12 @@ function buildWorkScheduleJSON($data)
         $ek = strtolower($d) . "_end";
         $sv = trim($data[$sk] ?? '');
         $ev = trim($data[$ek] ?? '');
-        if ($sv && !preg_match('/^(?:2[0-3]|[01]\d):[0-5]\d$/', $sv)) $sv = '';
-        if ($ev && !preg_match('/^(?:2[0-3]|[01]\d):[0-5]\d$/', $ev)) $ev = '';
+        if ($sv && !preg_match('/^(?:2[0-3]|[01]\d):[0-5]\d$/', $sv)) {
+            $sv = '';
+        }
+        if ($ev && !preg_match('/^(?:2[0-3]|[01]\d):[0-5]\d$/', $ev)) {
+            $ev = '';
+        }
         $s['days'][$d] = ['start' => $sv, 'end' => $ev];
     }
     $hol = trim($data['holidays'] ?? '');
@@ -119,70 +151,68 @@ function buildWorkScheduleJSON($data)
         foreach (explode("\n", $hol) as $l) {
             $l = trim($l);
             if (!$l) continue;
-            $parts = explode(',', $l, 2);
-            if (count($parts) < 1) continue;
-            $date = trim($parts[0]);
-            $desc = isset($parts[1]) ? trim($parts[1]) : 'Holiday';
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) continue;
-            $s['holidays'][] = ['date' => $date, 'desc' => $desc];
+            $p = explode(',', $l, 2);
+            $date = trim($p[0] ?? '');
+            $desc = trim($p[1] ?? 'Holiday');
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $s['holidays'][] = ['date' => $date, 'desc' => $desc];
+            }
         }
     }
     return json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 }
 
+function buildSettings($post, $data): array
+{
+    return [
+        'minimum_order' => $data['minimum_order'] ?? '5.00',
+        'agb' => trim($post['agb'] ?? ''),
+        'impressum' => trim($post['impressum'] ?? ''),
+        'datenschutzerklaerung' => trim($post['datenschutzerklaerung'] ?? ''),
+        'facebook_link' => $data['facebook_link'] ?? null,
+        'twitter_link' => $data['twitter_link'] ?? null,
+        'instagram_link' => $data['instagram_link'] ?? null,
+        'linkedin_link' => $data['linkedin_link'] ?? null,
+        'youtube_link' => $data['youtube_link'] ?? null,
+        'cart_description' => trim($post['cart_description'] ?? ''),
+        'store_lat' => trim($post['store_lat'] ?? '41.327500'),
+        'store_lng' => trim($post['store_lng'] ?? '19.818900'),
+        'shipping_calculation_mode' => trim($post['shipping_calculation_mode'] ?? 'radius'),
+        'shipping_distance_radius' => trim($data['shipping_distance_radius'] ?? '10'),
+        'shipping_fee_base' => trim($data['shipping_fee_base'] ?? '0.00'),
+        'shipping_fee_per_km' => trim($data['shipping_fee_per_km'] ?? '0.50'),
+        'shipping_free_threshold' => trim($data['shipping_free_threshold'] ?? '50.00'),
+        'google_maps_api_key' => trim($post['google_maps_api_key'] ?? ''),
+        'postal_code_zones' => $data['postal_code_zones'] ?? null,
+        'shipping_enable_google_distance_matrix' => isset($post['shipping_enable_google_distance_matrix']) ? 1 : 0,
+        'shipping_matrix_region' => trim($post['shipping_matrix_region'] ?? ''),
+        'shipping_matrix_units' => trim($post['shipping_matrix_units'] ?? 'metric'),
+        'shipping_weekend_surcharge' => trim($data['shipping_weekend_surcharge'] ?? '0.00'),
+        'shipping_holiday_surcharge' => trim($data['shipping_holiday_surcharge'] ?? '0.00'),
+        'shipping_handling_fee' => trim($data['shipping_handling_fee'] ?? '0.00'),
+        'shipping_vat_percentage' => trim($data['shipping_vat_percentage'] ?? '20.00')
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create') {
-        list($errors, $data) = validateStore($_POST, $pdo);
+        list($errors, $sanitized) = validateStore($_POST, $pdo);
         $logo = handleFileUpload($errors, 'logo');
         $cartLogo = handleFileUpload($errors, 'cart_logo');
         $ws = buildWorkScheduleJSON($_POST);
-        $settings = [
-            'minimum_order' => $data['minimum_order'] ?? '5.00',
-            'agb' => trim($_POST['agb'] ?? ''),
-            'impressum' => trim($_POST['impressum'] ?? ''),
-            'datenschutzerklaerung' => trim($_POST['datenschutzerklaerung'] ?? ''),
-            'facebook_link' => $data['facebook_link'] ?? null,
-            'twitter_link' => $data['twitter_link'] ?? null,
-            'instagram_link' => $data['instagram_link'] ?? null,
-            'linkedin_link' => $data['linkedin_link'] ?? null,
-            'youtube_link' => $data['youtube_link'] ?? null,
-            'cart_description' => trim($_POST['cart_description'] ?? ''),
-            'store_lat' => trim($_POST['store_lat'] ?? '41.327500'),
-            'store_lng' => trim($_POST['store_lng'] ?? '19.818900'),
-            'shipping_calculation_mode' => trim($_POST['shipping_calculation_mode'] ?? 'radius'),
-            'shipping_distance_radius' => trim($data['shipping_distance_radius'] ?? '10'),
-            'shipping_fee_base' => trim($data['shipping_fee_base'] ?? '0.00'),
-            'shipping_fee_per_km' => trim($data['shipping_fee_per_km'] ?? '0.50'),
-            'shipping_free_threshold' => trim($data['shipping_free_threshold'] ?? '50.00'),
-            'google_maps_api_key' => trim($_POST['google_maps_api_key'] ?? ''),
-            'postal_code_zones' => $data['postal_code_zones'] ?? null,
-            'shipping_enable_google_distance_matrix' => isset($_POST['shipping_enable_google_distance_matrix']) ? 1 : 0,
-            'shipping_matrix_region' => trim($_POST['shipping_matrix_region'] ?? ''),
-            'shipping_matrix_units' => trim($_POST['shipping_matrix_units'] ?? 'metric'),
-            'shipping_weekend_surcharge' => trim($data['shipping_weekend_surcharge'] ?? '0.00'),
-            'shipping_holiday_surcharge' => trim($data['shipping_holiday_surcharge'] ?? '0.00'),
-            'shipping_handling_fee' => trim($data['shipping_handling_fee'] ?? '0.00'),
-            'shipping_vat_percentage' => trim($data['shipping_vat_percentage'] ?? '20.00'),
-        ];
+        $settings = buildSettings($_POST, $sanitized);
         if (!empty($errors)) {
-            $message = '<div class="alert alert-danger">' . implode('<br>', array_map('htmlspecialchars', $errors)) . '</div>';
+            $d = implode('<br>', array_map('htmlspecialchars', $errors));
+            $message = '<div class="alert alert-danger">Errors occurred:<br>' . $d . '</div>';
         } else {
-            $sql = "INSERT INTO stores(name,address,phone,email,manager_id,is_active,logo,cart_logo,work_schedule,
-                minimum_order,agb,impressum,datenschutzerklaerung,facebook_link,twitter_link,instagram_link,
-                linkedin_link,youtube_link,cart_description,store_lat,store_lng,shipping_calculation_mode,
-                shipping_distance_radius,shipping_fee_base,shipping_fee_per_km,shipping_free_threshold,
-                google_maps_api_key,postal_code_zones,shipping_enable_google_distance_matrix,shipping_matrix_region,
-                shipping_matrix_units,shipping_weekend_surcharge,shipping_holiday_surcharge,shipping_handling_fee,
-                shipping_vat_percentage,created_at)
-                VALUES(:n,:ad,:ph,:em,:m,1,:lg,:cl,:ws,:mn,:agb,:imp,:dse,:fb,:tw,:ig,:li,:yt,:cd,:lat,:lng,:scm,
-                :sdr,:sfb,:sfkm,:sft,:gapi,:pcz,:sedm,:smr,:smu,:swe,:sho,:shf,:svat,NOW())";
+            $sql = "INSERT INTO stores(name,address,phone,email,manager_id,is_active,logo,cart_logo,work_schedule,minimum_order,agb,impressum,datenschutzerklaerung,facebook_link,twitter_link,instagram_link,linkedin_link,youtube_link,cart_description,store_lat,store_lng,shipping_calculation_mode,shipping_distance_radius,shipping_fee_base,shipping_fee_per_km,shipping_free_threshold,google_maps_api_key,postal_code_zones,shipping_enable_google_distance_matrix,shipping_matrix_region,shipping_matrix_units,shipping_weekend_surcharge,shipping_holiday_surcharge,shipping_handling_fee,shipping_vat_percentage,created_at)VALUES(:n,:ad,:ph,:em,:m,1,:lg,:cl,:ws,:mn,:agb,:imp,:dse,:fb,:tw,:ig,:li,:yt,:cd,:lat,:lng,:scm,:sdr,:sfb,:sfkm,:sft,:gapi,:pcz,:sedm,:smr,:smu,:swe,:sho,:shf,:svat,NOW())";
             $stmt = $pdo->prepare($sql);
             $params = [
-                ':n' => $data['name'],
-                ':ad' => $data['address'],
-                ':ph' => $data['phone'],
-                ':em' => $data['email'],
-                ':m' => $data['manager_id'],
+                ':n' => $sanitized['name'],
+                ':ad' => $sanitized['address'],
+                ':ph' => $sanitized['phone'],
+                ':em' => $sanitized['email'],
+                ':m' => $sanitized['manager_id'],
                 ':lg' => $logo,
                 ':cl' => $cartLogo,
                 ':ws' => $ws,
@@ -219,52 +249,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             } catch (PDOException $e) {
                 error_log("Error creating store: " . $e->getMessage());
-                $message = '<div class="alert alert-danger">Unable to create store. Please try again later.</div>';
+                $message = '<div class="alert alert-danger">Unable to create store. Error detail: ' . htmlspecialchars($e->getMessage()) . '</div>';
             }
         }
     } elseif ($action === 'edit' && $id > 0) {
-        $stmt = $pdo->prepare("SELECT * FROM stores WHERE id=:id");
-        $stmt->execute([':id' => $id]);
-        $store = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM stores WHERE id=:id");
+            $stmt->execute([':id' => $id]);
+            $store = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("DB error fetching store: " . $e->getMessage());
+            $store = false;
+        }
         if (!$store) {
             header('Location: stores.php?action=list&message=' . urlencode("Store not found."));
             exit;
         }
-        list($errors, $data) = validateStore($_POST, $pdo, $id);
+        list($errors, $sanitized) = validateStore($_POST, $pdo, $id);
         $logo = handleFileUpload($errors, 'logo');
         $cartLogo = handleFileUpload($errors, 'cart_logo');
         $ws = buildWorkScheduleJSON($_POST);
-        $settings = [
-            'minimum_order' => $data['minimum_order'] ?? '5.00',
-            'agb' => trim($_POST['agb'] ?? ''),
-            'impressum' => trim($_POST['impressum'] ?? ''),
-            'datenschutzerklaerung' => trim($_POST['datenschutzerklaerung'] ?? ''),
-            'facebook_link' => $data['facebook_link'] ?? null,
-            'twitter_link' => $data['twitter_link'] ?? null,
-            'instagram_link' => $data['instagram_link'] ?? null,
-            'linkedin_link' => $data['linkedin_link'] ?? null,
-            'youtube_link' => $data['youtube_link'] ?? null,
-            'cart_description' => trim($_POST['cart_description'] ?? ''),
-            'store_lat' => trim($_POST['store_lat'] ?? '41.327500'),
-            'store_lng' => trim($_POST['store_lng'] ?? '19.818900'),
-            'shipping_calculation_mode' => trim($_POST['shipping_calculation_mode'] ?? 'radius'),
-            'shipping_distance_radius' => trim($data['shipping_distance_radius'] ?? '10'),
-            'shipping_fee_base' => trim($data['shipping_fee_base'] ?? '0.00'),
-            'shipping_fee_per_km' => trim($data['shipping_fee_per_km'] ?? '0.50'),
-            'shipping_free_threshold' => trim($data['shipping_free_threshold'] ?? '50.00'),
-            'google_maps_api_key' => trim($_POST['google_maps_api_key'] ?? ''),
-            'postal_code_zones' => $data['postal_code_zones'] ?? null,
-            'shipping_enable_google_distance_matrix' => isset($_POST['shipping_enable_google_distance_matrix']) ? 1 : 0,
-            'shipping_matrix_region' => trim($_POST['shipping_matrix_region'] ?? ''),
-            'shipping_matrix_units' => trim($_POST['shipping_matrix_units'] ?? 'metric'),
-            'shipping_weekend_surcharge' => trim($data['shipping_weekend_surcharge'] ?? '0.00'),
-            'shipping_holiday_surcharge' => trim($data['shipping_holiday_surcharge'] ?? '0.00'),
-            'shipping_handling_fee' => trim($data['shipping_handling_fee'] ?? '0.00'),
-            'shipping_vat_percentage' => trim($data['shipping_vat_percentage'] ?? '20.00'),
-        ];
+        $settings = buildSettings($_POST, $sanitized);
         $is_active = isset($_POST['is_active']) ? 1 : 0;
         if (!empty($errors)) {
-            $message = '<div class="alert alert-danger">' . implode('<br>', array_map('htmlspecialchars', $errors)) . '</div>';
+            $d = implode('<br>', array_map('htmlspecialchars', $errors));
+            $message = '<div class="alert alert-danger">Errors occurred:<br>' . $d . '</div>';
         } else {
             $f = [
                 'name' => ':n',
@@ -302,11 +311,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'shipping_vat_percentage' => ':svat'
             ];
             $p = [
-                ':n' => $data['name'],
-                ':ad' => $data['address'],
-                ':ph' => $data['phone'],
-                ':em' => $data['email'],
-                ':m' => $data['manager_id'],
+                ':n' => $sanitized['name'],
+                ':ad' => $sanitized['address'],
+                ':ph' => $sanitized['phone'],
+                ':em' => $sanitized['email'],
+                ':m' => $sanitized['manager_id'],
                 ':ia' => $is_active,
                 ':ws' => $ws,
                 ':min' => $settings['minimum_order'],
@@ -345,35 +354,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $p[':cl'] = $cartLogo;
             }
             $set = [];
-            foreach ($f as $k => $v) $set[] = "$k=$v";
+            foreach ($f as $k => $v) {
+                $set[] = "$k=$v";
+            }
             $sql = "UPDATE stores SET " . implode(', ', $set) . ",updated_at=NOW() WHERE id=:id";
             $p[':id'] = $id;
-            $stmt = $pdo->prepare($sql);
             try {
+                $stmt = $pdo->prepare($sql);
                 $stmt->execute($p);
-                if ($logo && !empty($store['logo']) && file_exists(__DIR__ . '/' . $store['logo'])) unlink(__DIR__ . '/' . $store['logo']);
-                if ($cartLogo && !empty($store['cart_logo']) && file_exists(__DIR__ . '/' . $store['cart_logo'])) unlink(__DIR__ . '/' . $store['cart_logo']);
+                if ($logo && !empty($store['logo']) && file_exists(__DIR__ . '/' . $store['logo'])) {
+                    unlink(__DIR__ . '/' . $store['logo']);
+                }
+                if ($cartLogo && !empty($store['cart_logo']) && file_exists(__DIR__ . '/' . $store['cart_logo'])) {
+                    unlink(__DIR__ . '/' . $store['cart_logo']);
+                }
                 header('Location: stores.php?action=list&message=' . urlencode("Store updated successfully."));
                 exit;
             } catch (PDOException $e) {
                 error_log("Error updating store: " . $e->getMessage());
-                $message = '<div class="alert alert-danger">Unable to update store. Please try again later.</div>';
+                $message = '<div class="alert alert-danger">Unable to update store. Detailed error: ' . htmlspecialchars($e->getMessage()) . '</div>';
             }
         }
     } elseif ($action === 'delete' && $id > 0) {
-        $stmt = $pdo->prepare("SELECT logo,cart_logo FROM stores WHERE id=:id");
-        $stmt->execute([':id' => $id]);
-        $store = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $stmt = $pdo->prepare("SELECT logo,cart_logo FROM stores WHERE id=:id");
+            $stmt->execute([':id' => $id]);
+            $store = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log($e->getMessage());
+            $store = false;
+        }
         if ($store) {
             try {
                 $pdo->prepare("DELETE FROM stores WHERE id=:id")->execute([':id' => $id]);
-                if (!empty($store['logo']) && file_exists(__DIR__ . '/' . $store['logo'])) unlink(__DIR__ . '/' . $store['logo']);
-                if (!empty($store['cart_logo']) && file_exists(__DIR__ . '/' . $store['cart_logo'])) unlink(__DIR__ . '/' . $store['cart_logo']);
+                if (!empty($store['logo']) && file_exists(__DIR__ . '/' . $store['logo'])) {
+                    unlink(__DIR__ . '/' . $store['logo']);
+                }
+                if (!empty($store['cart_logo']) && file_exists(__DIR__ . '/' . $store['cart_logo'])) {
+                    unlink(__DIR__ . '/' . $store['cart_logo']);
+                }
                 header('Location: stores.php?action=list&message=' . urlencode("Store deleted successfully."));
                 exit;
             } catch (PDOException $e) {
                 error_log($e->getMessage());
-                header('Location: stores.php?action=list&message=' . urlencode("Unable to delete store. Please try again later."));
+                header('Location: stores.php?action=list&message=' . urlencode("Unable to delete store. " . $e->getMessage()));
                 exit;
             }
         } else {
@@ -394,18 +418,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $hp = password_hash($newPass, PASSWORD_BCRYPT);
                     try {
-                        $ins = $pdo->prepare("INSERT INTO users(username,password,role,is_active) VALUES(:u,:p,'admin',1)");
+                        $pdo->beginTransaction();
+                        $ins = $pdo->prepare("INSERT INTO users(username,password,role,is_active)VALUES(:u,:p,'admin',1)");
                         $ins->execute([':u' => $newUser, ':p' => $hp]);
                         $newAdminId = $pdo->lastInsertId();
                         $pdo->prepare("UPDATE stores SET manager_id=:m WHERE id=:id")->execute([':m' => $newAdminId, ':id' => $id]);
+                        $pdo->commit();
                         header('Location: stores.php?action=list&message=' . urlencode("New admin created and assigned."));
                         exit;
                     } catch (PDOException $e) {
+                        $pdo->rollBack();
                         error_log($e->getMessage());
-                        $message = '<div class="alert alert-danger">Unable to create admin. Please try again later.</div>';
+                        $message = '<div class="alert alert-danger">Unable to create admin. ' . $e->getMessage() . '</div>';
                     }
                 }
-            } else $message = '<div class="alert alert-danger">Username and password are required to create a new admin.</div>';
+            } else {
+                $message = '<div class="alert alert-danger">Username and password are required to create a new admin.</div>';
+            }
         } else {
             if ($admin_id) {
                 try {
@@ -414,9 +443,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit;
                 } catch (PDOException $e) {
                     error_log($e->getMessage());
-                    $message = '<div class="alert alert-danger">Unable to assign admin. Please try again later.</div>';
+                    $message = '<div class="alert alert-danger">Unable to assign admin. ' . $e->getMessage() . '</div>';
                 }
-            } else $message = '<div class="alert alert-danger">No admin selected.</div>';
+            } else {
+                $message = '<div class="alert alert-danger">No admin selected.</div>';
+            }
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -434,7 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             } catch (PDOException $e) {
                 error_log($e->getMessage());
-                header('Location: stores.php?action=list&message=' . urlencode("Unable to toggle status. Please try again later."));
+                header('Location: stores.php?action=list&message=' . urlencode("Unable to toggle status. " . $e->getMessage()));
                 exit;
             }
         } else {
@@ -448,26 +479,35 @@ if ($action === 'list') {
     $message = $_GET['message'] ?? '';
     $stores = [];
     try {
-        $stmt = $pdo->prepare("SELECT s.id,s.name,s.address,s.phone,s.email,s.logo,s.cart_logo,u.username AS manager,s.is_active,s.created_at
-            FROM stores s LEFT JOIN users u ON s.manager_id=u.id ORDER BY s.created_at DESC");
+        $stmt = $pdo->prepare("SELECT s.id,s.name,s.address,s.phone,s.email,s.logo,s.cart_logo,u.username AS manager,s.is_active,s.created_at FROM stores s LEFT JOIN users u ON s.manager_id=u.id ORDER BY s.created_at DESC");
         $stmt->execute();
         $stores = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         error_log($e->getMessage());
-        $message = '<div class="alert alert-danger">Unable to fetch stores. Please try again later.</div>';
+        $message = '<div class="alert alert-danger">Unable to fetch stores. ' . $e->getMessage() . '</div>';
     }
 } elseif (in_array($action, ['edit', 'view', 'assign_admin']) && $id > 0) {
-    $stmt = $pdo->prepare("SELECT * FROM stores WHERE id=:id");
-    $stmt->execute([':id' => $id]);
-    $store = $stmt->fetch(PDO::FETCH_ASSOC);
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM stores WHERE id=:id");
+        $stmt->execute([':id' => $id]);
+        $store = $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log($e->getMessage());
+        $store = false;
+    }
     if (!$store) {
         header('Location: stores.php?action=list&message=' . urlencode("Store not found."));
         exit;
     }
     if ($action === 'view') {
-        $v = $pdo->prepare("SELECT s.*,u.username AS manager FROM stores s LEFT JOIN users u ON s.manager_id=u.id WHERE s.id=:id");
-        $v->execute([':id' => $id]);
-        $store = $v->fetch(PDO::FETCH_ASSOC);
+        try {
+            $v = $pdo->prepare("SELECT s.*,u.username AS manager FROM stores s LEFT JOIN users u ON s.manager_id=u.id WHERE s.id=:id");
+            $v->execute([':id' => $id]);
+            $store = $v->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log($e->getMessage());
+            $store = false;
+        }
         if (!$store) {
             header('Location: stores.php?action=list&message=' . urlencode("Store not found."));
             exit;
@@ -480,7 +520,7 @@ if ($action === 'list') {
         } catch (PDOException $e) {
             error_log($e->getMessage());
             $admins = [];
-            $message = '<div class="alert alert-danger">Unable to fetch admins. Please try again later.</div>';
+            $message = '<div class="alert alert-danger">Unable to fetch admins. ' . $e->getMessage() . '</div>';
         }
     }
 }
@@ -517,7 +557,8 @@ if ($action === 'list') {
                         <tr>
                             <td colspan="10" class="text-center">No stores found.</td>
                         </tr>
-                        <?php else: foreach ($stores as $s): ?>
+                    <?php else: ?>
+                        <?php foreach ($stores as $s): ?>
                             <tr>
                                 <td><?= htmlspecialchars($s['name']) ?></td>
                                 <td><?= htmlspecialchars($s['address']) ?></td>
@@ -546,13 +587,24 @@ if ($action === 'list') {
                                 <td><?= htmlspecialchars($s['created_at']) ?></td>
                                 <td>
                                     <div class="d-flex flex-wrap gap-1">
-                                        <a href="stores.php?action=view&id=<?= $s['id'] ?>" class="btn btn-sm btn-info" title="View"><i class="fas fa-eye"></i></a>
-                                        <a href="stores.php?action=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-warning" title="Edit"><i class="fas fa-edit"></i></a>
+                                        <a href="stores.php?action=view&id=<?= $s['id'] ?>" class="btn btn-sm btn-info" title="View">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="stores.php?action=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-warning" title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
                                         <a href="stores.php?action=delete&id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" title="Delete"
-                                            onclick="return confirm('Are you sure you want to delete this store?');"><i class="fas fa-trash-alt"></i></a>
-                                        <a href="stores.php?action=toggle_status&id=<?= $s['id'] ?>" class="btn btn-sm <?= $s['is_active'] ? 'btn-secondary' : 'btn-success' ?>"
-                                            title="<?= $s['is_active'] ? 'Deactivate' : 'Activate' ?>"><i class="fas <?= $s['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i></a>
-                                        <a href="stores.php?action=assign_admin&id=<?= $s['id'] ?>" class="btn btn-sm btn-primary" title="Assign Admin"><i class="fas fa-user-cog"></i></a>
+                                            onclick="return confirm('Are you sure you want to delete this store?');">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </a>
+                                        <a href="stores.php?action=toggle_status&id=<?= $s['id'] ?>"
+                                            class="btn btn-sm <?= $s['is_active'] ? 'btn-secondary' : 'btn-success' ?>"
+                                            title="<?= $s['is_active'] ? 'Deactivate' : 'Activate' ?>">
+                                            <i class="fas <?= $s['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
+                                        </a>
+                                        <a href="stores.php?action=assign_admin&id=<?= $s['id'] ?>" class="btn btn-sm btn-primary" title="Assign Admin">
+                                            <i class="fas fa-user-cog"></i>
+                                        </a>
                                     </div>
                                 </td>
                             </tr>
@@ -621,8 +673,8 @@ if ($action === 'list') {
                 </div>
                 <div class="col-md-6">
                     <label for="minimum_order" class="form-label">Minimum Order (€)</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm" id="minimum_order"
-                        name="minimum_order" required value="<?= htmlspecialchars($_POST['minimum_order'] ?? '5.00') ?>">
+                    <input type="number" step="0.01" class="form-control form-control-sm" id="minimum_order" name="minimum_order"
+                        required value="<?= htmlspecialchars($_POST['minimum_order'] ?? '5.00') ?>">
                     <div class="invalid-feedback">Please provide a valid minimum order.</div>
                 </div>
                 <div class="col-md-6">
@@ -701,26 +753,20 @@ if ($action === 'list') {
                     ['name' => 'shipping_handling_fee', 'label' => 'Handling Fee (€)', 'type' => 'number', 'step' => '0.01'],
                     ['name' => 'shipping_vat_percentage', 'label' => 'VAT on Shipping (%)', 'type' => 'number', 'step' => '0.01']
                 ];
-                foreach ($fields as $f):
-                ?>
+                foreach ($fields as $f): ?>
                     <div class="col-md-6">
                         <label for="<?= $f['name'] ?>" class="form-label"><?= $f['label'] ?></label>
                         <?php if ($f['type'] === 'select'): ?>
                             <select class="form-select form-select-sm" id="<?= $f['name'] ?>" name="<?= $f['name'] ?>">
-                                <?php foreach ($f['options'] as $val => $txt):
-                                    $sel = (isset($_POST[$f['name']]) && $_POST[$f['name']] == $val) ? 'selected' : ''; ?>
-                                    <option value="<?= htmlspecialchars($val) ?>" <?= $sel ?>><?= htmlspecialchars($txt) ?></option>
-                                <?php endforeach; ?>
+                                <?php foreach ($f['options'] as $val => $txt) {
+                                    $sel = (isset($_POST[$f['name']]) && $_POST[$f['name']] == $val) ? 'selected' : '';
+                                    echo "<option value=\"" . htmlspecialchars($val) . "\" $sel>" . htmlspecialchars($txt) . "</option>";
+                                } ?>
                             </select>
                         <?php elseif ($f['type'] === 'textarea'): ?>
                             <textarea class="form-control form-control-sm" id="<?= $f['name'] ?>" name="<?= $f['name'] ?>" rows="<?= $f['rows'] ?? 3 ?>"><?= htmlspecialchars($_POST[$f['name']] ?? '') ?></textarea>
                         <?php else: ?>
-                            <input type="<?= $f['type'] ?>" step="<?= $f['step'] ?? '' ?>" class="form-control form-control-sm"
-                                id="<?= $f['name'] ?>" name="<?= $f['name'] ?>"
-                                value="<?= htmlspecialchars($_POST[$f['name']] ?? '') ?>">
-                        <?php endif; ?>
-                        <?php if ($f['type'] === 'number'): ?>
-                            <div class="invalid-feedback">Please provide a valid value for <?= htmlspecialchars($f['label']) ?>.</div>
+                            <input type="<?= $f['type'] ?>" step="<?= $f['step'] ?? '' ?>" class="form-control form-control-sm" id="<?= $f['name'] ?>" name="<?= $f['name'] ?>" value="<?= htmlspecialchars($_POST[$f['name']] ?? '') ?>">
                         <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
@@ -862,8 +908,7 @@ if ($action === 'list') {
             <div class="row g-3">
                 <div class="col-md-6">
                     <label for="cart_description" class="form-label">Cart Description</label>
-                    <textarea class="form-control form-control-sm wysiwyg" id="cart_description" name="cart_description" rows="3">
-                    <?= htmlspecialchars($_POST['cart_description'] ?? $store['cart_description']) ?></textarea>
+                    <textarea class="form-control form-control-sm wysiwyg" id="cart_description" name="cart_description" rows="3"><?= htmlspecialchars($_POST['cart_description'] ?? $store['cart_description']) ?></textarea>
                 </div>
             </div>
             <hr>
@@ -908,29 +953,29 @@ if ($action === 'list') {
                         <label for="<?= $sf['name'] ?>" class="form-label"><?= $sf['label'] ?></label>
                         <?php if ($sf['type'] === 'select'): ?>
                             <select class="form-select form-select-sm" id="<?= $sf['name'] ?>" name="<?= $sf['name'] ?>">
-                                <?php foreach ($sf['options'] as $val => $txt):
-                                    $selected = '';
-                                    if (isset($_POST[$sf['name']])) $selected = $_POST[$sf['name']] == $val ? 'selected' : '';
-                                    else $selected = ($store[$sf['name']] == $val) ? 'selected' : '';
+                                <?php
+                                foreach ($sf['options'] as $val => $txt) {
+                                    if (isset($_POST[$sf['name']])) {
+                                        $selected = ($_POST[$sf['name']] == $val) ? 'selected' : '';
+                                    } else {
+                                        $selected = ($store[$sf['name']] == $val) ? 'selected' : '';
+                                    }
+                                    echo "<option value=\"" . htmlspecialchars($val) . "\" $selected>" . htmlspecialchars($txt) . "</option>";
+                                }
                                 ?>
-                                    <option value="<?= htmlspecialchars($val) ?>" <?= $selected ?>><?= htmlspecialchars($txt) ?></option>
-                                <?php endforeach; ?>
                             </select>
                         <?php elseif ($sf['type'] === 'textarea'): ?>
                             <textarea class="form-control form-control-sm" id="<?= $sf['name'] ?>" name="<?= $sf['name'] ?>" rows="<?= $sf['rows'] ?? 3 ?>"><?= htmlspecialchars($_POST[$sf['name']] ?? $store[$sf['name']] ?? '') ?></textarea>
                         <?php else: ?>
-                            <input type="<?= $sf['type'] ?>" step="<?= $sf['step'] ?? '' ?>" class="form-control form-control-sm" id="<?= $sf['name'] ?>" name="<?= $sf['name'] ?>"
-                                value="<?= htmlspecialchars($_POST[$sf['name']] ?? $store[$sf['name']] ?? '') ?>">
-                        <?php endif; ?>
-                        <?php if ($sf['type'] === 'number'): ?>
-                            <div class="invalid-feedback">Please provide a valid value for <?= htmlspecialchars($sf['label']) ?>.</div>
+                            <input type="<?= $sf['type'] ?>" step="<?= $sf['step'] ?? '' ?>" class="form-control form-control-sm" id="<?= $sf['name'] ?>" name="<?= $sf['name'] ?>" value="<?= htmlspecialchars($_POST[$sf['name']] ?? $store[$sf['name']] ?? '') ?>">
                         <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
             <hr>
             <h5>Weekly Schedule</h5>
-            <?php foreach ($daysOfWeek as $d):
+            <?php
+            foreach ($daysOfWeek as $d) {
                 $sf = strtolower($d) . "_start";
                 $ef = strtolower($d) . "_end";
                 $savedS = $_POST[$sf] ?? $decoded['days'][$d]['start'] ?? '';
@@ -947,7 +992,7 @@ if ($action === 'list') {
                         <input type="time" class="form-control form-control-sm" name="<?= $ef ?>" value="<?= htmlspecialchars($savedE) ?>">
                     </div>
                 </div>
-            <?php endforeach; ?>
+            <?php } ?>
             <hr>
             <h5>Holidays</h5>
             <p class="small text-muted">One holiday per line: <code>YYYY-MM-DD,Description</code></p>
@@ -974,9 +1019,15 @@ if ($action === 'list') {
     <div class="container mt-4">
         <h2 class="mb-4"><i class="fas fa-eye"></i> Store Details</h2>
         <ul class="nav nav-tabs" id="storeTabs" role="tablist">
-            <li class="nav-item" role="presentation"><button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab">Details</button></li>
-            <li class="nav-item" role="presentation"><button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">Settings</button></li>
-            <li class="nav-item" role="presentation"><button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendarTab" type="button" role="tab">Calendar</button></li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab">Details</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">Settings</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendarTab" type="button" role="tab">Calendar</button>
+            </li>
         </ul>
         <div class="tab-content border p-3" id="storeTabsContent">
             <div class="tab-pane fade show active" id="details" role="tabpanel">
@@ -1206,9 +1257,7 @@ if ($action === 'list') {
                 <select class="form-select form-select-sm" id="admin_id" name="admin_id" required>
                     <option value="">Select Administrator</option>
                     <?php if (!empty($admins)): foreach ($admins as $adm): ?>
-                            <option value="<?= htmlspecialchars($adm['id']) ?>" <?= ($store['manager_id'] == $adm['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($adm['username']) ?>
-                            </option>
+                            <option value="<?= htmlspecialchars($adm['id']) ?>" <?= ($store['manager_id'] == $adm['id']) ? 'selected' : '' ?>><?= htmlspecialchars($adm['username']) ?></option>
                         <?php endforeach;
                     else: ?>
                         <option value="" disabled>No active admins available.</option>
@@ -1286,7 +1335,6 @@ if ($action === 'list') {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1jzYkY6kZ6kZGP2MQH/PAVc4aNG4R1mR9VuAKT0U=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.6/index.global.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-o9N1jzYkY6kZ6kZGP2MQH/PAVc4aNG4R1mR9VuAKT0U=" crossorigin="" />
 <script>
     $(function() {
         $('.form-select').select2({
