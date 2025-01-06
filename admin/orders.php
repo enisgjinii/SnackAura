@@ -8,17 +8,10 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-
 function log_error($m, $c = '')
 {
     $t = date('Y-m-d H:i:s');
-    file_put_contents(
-        ERROR_LOG_FILE,
-        "### [$t] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES, 'UTF-8') . "\n"
-            . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES, 'UTF-8') . "\n" : '')
-            . "---\n\n",
-        FILE_APPEND | LOCK_EX
-    );
+    file_put_contents(ERROR_LOG_FILE, "### [$t] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES, 'UTF-8') . "\n" . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES, 'UTF-8') . "\n" : '') . "---\n\n", FILE_APPEND | LOCK_EX);
 }
 function sendEmail($to, $toName, $sub, $body)
 {
@@ -313,15 +306,49 @@ try {
         body {
             background: #f8f9fa;
             font-family: Arial, sans-serif;
+            font-size: .9rem;
+        }
+
+        .container-fluid {
+            max-width: 95%;
         }
 
         .btn-group-top {
-            margin-bottom: 1rem;
+            margin-bottom: .5rem;
+        }
+
+        .btn-group-top .btn {
+            padding: .2rem .6rem;
+            font-size: .8rem;
+        }
+
+        .alert-info {
+            padding: .4rem .6rem;
+            margin-bottom: .5rem;
+        }
+
+        .card .card-header {
+            padding: .3rem .6rem;
+            font-size: .9rem;
+        }
+
+        .card .card-body {
+            padding: .6rem;
+        }
+
+        .table thead th {
+            padding: .3rem;
+            font-size: .8rem;
+        }
+
+        .table td {
+            padding: .3rem;
+            font-size: .8rem;
         }
 
         .badge-status {
-            font-size: .9rem;
-            padding: .4em .6em;
+            font-size: .65rem;
+            padding: .1em .3em;
             border-radius: .25rem;
         }
 
@@ -352,43 +379,53 @@ try {
 
         .assign-form select {
             margin-right: 5px;
+            padding: .1rem .3rem;
+            font-size: .8rem;
         }
 
-        .modal-xl {
-            max-width: 90% !important;
+        .assign-form .btn {
+            padding: .2rem .4rem;
+            font-size: .8rem;
+        }
+
+        .modal-dialog {
+            max-width: 80%;
+        }
+
+        .modal-content .modal-header {
+            padding: .3rem .6rem;
+        }
+
+        .modal-content .modal-body {
+            padding: .6rem;
+        }
+
+        .modal-content .modal-footer {
+            padding: .3rem .6rem;
         }
 
         .invoice-logo {
-            max-width: 120px;
+            max-width: 80px;
             height: auto;
         }
 
         .invoice-title {
-            font-size: 1.3rem;
+            font-size: 1rem;
             font-weight: 600;
             margin: 0;
         }
 
-        .invoice-items table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
         .invoice-items th,
         .invoice-items td {
-            padding: .5rem;
+            padding: .2rem;
             border: 1px solid #ddd;
-        }
-
-        .invoice-items th {
-            background-color: #f2f2f2;
+            font-size: .8rem;
         }
     </style>
 </head>
 
-<body class="p-3">
+<body class="p-2">
     <div class="container-fluid">
-        <!-- Simple button group instead of tabs -->
         <div class="btn-group-top">
             <button class="btn btn-primary me-2" onclick="window.location='orders.php?action=view'">View Orders</button>
             <?php if ($user_role === 'admin'): ?>
@@ -399,17 +436,17 @@ try {
         <?php if (isset($_GET['message'])): ?>
             <div class="alert alert-info alert-dismissible fade show" role="alert">
                 <?= htmlspecialchars($_GET['message']) ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
             </div>
         <?php elseif (!empty($message)): ?>
             <?= $message ?>
         <?php endif; ?>
-        <h2 class="mb-4">Orders Management (Role: <?= htmlspecialchars($user_role) ?>)</h2>
+        <h5 class="mb-3">Orders Management (Role: <?= htmlspecialchars($user_role) ?>)</h5>
         <?php
         if ($action === 'view_details' && !empty($order)): ?>
-            <div class="card mb-4">
+            <div class="card mb-3">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">Order #<?= htmlspecialchars($order['id']) ?> Details</h4>
+                    Order #<?= htmlspecialchars($order['id']) ?> Details
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -426,8 +463,7 @@ try {
                                     echo "<span class='badge bg-info'>" . htmlspecialchars($order['tip_name']) . "</span> ($ti)";
                                 } else {
                                     echo "N/A";
-                                }
-                                ?></p>
+                                } ?></p>
                             <p><strong>Tip Amount:</strong> <?= number_format($order['tip_amount'], 2) ?>€</p>
                             <p><strong>Coupon Code:</strong> <?= htmlspecialchars($order['coupon_code'] ?? 'N/A') ?></p>
                             <p><strong>Coupon Discount:</strong> <?= number_format(($order['coupon_discount'] ?? 0), 2) ?>€</p>
@@ -445,21 +481,22 @@ try {
                                     echo $du ? htmlspecialchars($du['username']) : "Unassigned";
                                 } else {
                                     echo "Unassigned";
-                                }
-                                ?></p>
+                                } ?></p>
                             <p><strong>Created At:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                             <p><strong>Updated At:</strong> <?= htmlspecialchars($order['updated_at'] ?? 'N/A') ?></p>
                         </div>
                         <div class="col-md-6">
-                            <h5>Order Items</h5>
+                            <h6>Order Items</h6>
                             <?php
                             $details = json_decode($order['order_details'], true);
                             $items = $details['items'] ?? [];
                             if ($items):
                                 foreach ($items as $item): ?>
-                                    <div class="card mb-3">
-                                        <div class="card-header"><strong><?= htmlspecialchars($item['name']) ?></strong> (Quantity: <?= htmlspecialchars($item['quantity']) ?>)</div>
-                                        <div class="card-body">
+                                    <div class="card mb-2">
+                                        <div class="card-header" style="font-size:.9rem;">
+                                            <?= htmlspecialchars($item['name']) ?> (Qty: <?= htmlspecialchars($item['quantity']) ?>)
+                                        </div>
+                                        <div class="card-body" style="font-size:.8rem;">
                                             <div class="row">
                                                 <div class="col-md-4">
                                                     <?php if (!empty($item['image_url'])): ?>
@@ -513,38 +550,38 @@ try {
                             <?php endif; ?>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-dark mt-3" data-bs-toggle="modal" data-bs-target="#invoiceModal"><i class="bi bi-file-earmark-text"></i> View Invoice</button>
-                    <a href="orders.php?action=view" class="btn btn-secondary mt-3">Back</a>
+                    <button type="button" class="btn btn-dark mt-2" data-bs-toggle="modal" data-bs-target="#invoiceModal" style="font-size:.8rem;"><i class="bi bi-file-earmark-text"></i> Invoice</button>
+                    <a href="orders.php?action=view" class="btn btn-secondary mt-2" style="font-size:.8rem;">Back</a>
                 </div>
             </div>
-            <div class="modal fade" id="invoiceModal" tabindex="-1">
-                <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal fade" id="invoiceModal">
+                <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
                     <div class="modal-content">
-                        <div class="modal-header bg-dark text-white">
-                            <h5 class="modal-title">Invoice for Order #<?= htmlspecialchars($order['id']) ?></h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <div class="modal-header bg-dark text-white" style="font-size:.9rem;">
+                            Invoice for Order #<?= htmlspecialchars($order['id']) ?>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
-                        <div class="modal-body">
+                        <div class="modal-body" style="font-size:.8rem;">
                             <?php
                             $invTip = number_format($order['tip_amount'], 2);
                             $invDisc = number_format($order['coupon_discount'] ?? 0, 2);
                             $subtotal = ($order['total_amount'] + (float)$invDisc - (float)$order['tip_amount']);
                             $invSubtotal = number_format($subtotal, 2);
                             ?>
-                            <div class="p-2">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="p-1">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
                                     <img src="store_logo.png" alt="Store Logo" class="invoice-logo">
                                     <h3 class="invoice-title">INVOICE</h3>
                                 </div>
-                                <div class="mb-3">
+                                <div class="mb-2">
                                     <strong>Yumiis Restaurant</strong><br>123 Main St<br>Some City, 12345<br>+1 (555) 123-4567<br>contact@yumiis.com
                                 </div>
-                                <div class="mb-3">
+                                <div class="mb-2">
                                     <p><strong>Bill To:</strong> <?= htmlspecialchars($order['customer_name']) ?><br><?= htmlspecialchars($order['delivery_address']) ?><br><?= htmlspecialchars($order['customer_email']) ?></p>
                                     <p><strong>Order Date:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                                 </div>
-                                <div class="invoice-items mb-3">
-                                    <table>
+                                <div class="invoice-items mb-2">
+                                    <table style="width:100%;border-collapse:collapse;">
                                         <thead>
                                             <tr>
                                                 <th>Item</th>
@@ -574,63 +611,61 @@ try {
                                 <p><strong>Tip:</strong> <?= $invTip ?> €</p>
                                 <p><strong>Coupon Discount:</strong> <?= $invDisc ?> €</p>
                                 <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?> €</p>
-                                <p class="text-center mt-4" style="font-size:.9rem;color:#666;">Thank you for your order!</p>
+                                <p class="text-center mt-2" style="font-size:.7rem;color:#666;">Thank you for your order!</p>
                             </div>
                         </div>
-                        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+                        <div class="modal-footer" style="font-size:.8rem;"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
                     </div>
                 </div>
             </div>
         <?php
         elseif ($action === 'update_status_form' && !empty($order)): ?>
             <div class="card">
-                <div class="card-header bg-warning">
-                    <h4 class="mb-0">Update Status #<?= htmlspecialchars($order['id']) ?></h4>
+                <div class="card-header bg-warning" style="font-size:.9rem;">
+                    Update Status #<?= htmlspecialchars($order['id']) ?>
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="font-size:.8rem;">
                     <form method="POST" action="orders.php?action=update_status&id=<?= htmlspecialchars($order['id']) ?>">
-                        <div class="mb-3">
+                        <div class="mb-2">
                             <label for="status" class="form-label">Status</label>
                             <select name="status" id="status" class="form-select" required>
                                 <option value="">-- Select --</option>
                                 <?php foreach ($statuses as $s): ?>
-                                    <option value="<?= htmlspecialchars($s) ?>" <?= ($order['status'] === $s ? 'selected' : '') ?>>
-                                        <?= htmlspecialchars($s) ?>
-                                    </option>
+                                    <option value="<?= htmlspecialchars($s) ?>" <?= ($order['status'] === $s ? 'selected' : '') ?>><?= htmlspecialchars($s) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <button class="btn btn-primary">Update</button>
-                        <a href="orders.php?action=view" class="btn btn-secondary">Cancel</a>
+                        <button class="btn btn-primary" style="font-size:.8rem;">Update</button>
+                        <a href="orders.php?action=view" class="btn btn-secondary" style="font-size:.8rem;">Cancel</a>
                     </form>
                 </div>
             </div>
         <?php
         elseif ($action === 'view_trash' && isset($trash_orders)): ?>
             <div class="card">
-                <div class="card-header bg-secondary text-white">
-                    <h4 class="mb-0">Trashed Orders</h4>
+                <div class="card-header bg-secondary text-white" style="font-size:.9rem;">
+                    Trashed Orders
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="font-size:.8rem;">
                     <?php if ($trash_orders): ?>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover table-bordered align-middle data-table">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>ID</th>
-                                        <th>Customer Name</th>
+                                        <th>Name</th>
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>Address</th>
                                         <th>Total(€)</th>
                                         <th>Tip</th>
                                         <th>Tip(€)</th>
-                                        <th>Scheduled Date</th>
-                                        <th>Scheduled Time</th>
+                                        <th>Sch.Date</th>
+                                        <th>Sch.Time</th>
                                         <th>Created</th>
                                         <th>Status</th>
-                                        <th>Coupon Code</th>
-                                        <th>Coupon Discount(€)</th>
+                                        <th>Coupon</th>
+                                        <th>C.Discount(€)</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -656,8 +691,8 @@ try {
                                             <td><?= htmlspecialchars($tr['coupon_code'] ?? '') ?></td>
                                             <td><?= number_format(($tr['coupon_discount'] ?? 0), 2) ?></td>
                                             <td>
-                                                <a href="orders.php?action=restore&id=<?= $tr['id'] ?>" class="btn btn-sm btn-success me-1"><i class="bi bi-arrow-counterclockwise"></i></a>
-                                                <a href="orders.php?action=permanent_delete&id=<?= $tr['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to permanently delete?');"><i class="bi bi-trash3-fill"></i></a>
+                                                <a href="orders.php?action=restore&id=<?= $tr['id'] ?>" class="btn btn-sm btn-success me-1" style="font-size:.7rem;"><i class="bi bi-arrow-counterclockwise"></i></a>
+                                                <a href="orders.php?action=permanent_delete&id=<?= $tr['id'] ?>" class="btn btn-sm btn-danger" style="font-size:.7rem;" onclick="return confirm('Are you sure you want to permanently delete?');"><i class="bi bi-trash3-fill"></i></a>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -667,23 +702,23 @@ try {
                     <?php else: ?>
                         <p>No trashed orders.</p>
                     <?php endif; ?>
-                    <a href="orders.php?action=view" class="btn btn-secondary mt-3">Back</a>
+                    <a href="orders.php?action=view" class="btn btn-secondary mt-2" style="font-size:.8rem;">Back</a>
                 </div>
             </div>
         <?php
         elseif ($action === 'top_products' && isset($top_products)): ?>
             <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h4 class="mb-0">Top 10 Products</h4>
+                <div class="card-header bg-info text-white" style="font-size:.9rem;">
+                    Top 10 Products
                 </div>
-                <div class="card-body">
+                <div class="card-body" style="font-size:.8rem;">
                     <?php if ($top_products): ?>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover table-bordered align-middle data-table">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>Rank</th>
-                                        <th>Product Name</th>
+                                        <th>Product</th>
                                         <th>Quantity Sold</th>
                                     </tr>
                                 </thead>
@@ -708,8 +743,8 @@ try {
             <?php
         else:
             foreach ($statuses as $st): ?>
-                <div class="mb-4">
-                    <h4 class="mb-2">
+                <div class="mb-3">
+                    <h6 style="font-size:.9rem;">
                         <?= htmlspecialchars($st) ?> Orders
                         <?php
                         $badge = match ($st) {
@@ -719,10 +754,9 @@ try {
                             'Delivered' => 'badge-delivered',
                             'Canceled' => 'badge-canceled',
                             default => 'badge-secondary',
-                        };
-                        ?>
-                        <span class="badge badge-status <?= $badge ?>"><?= $st ?></span>
-                    </h4>
+                        }; ?>
+                        <span class="badge badge-status <?= $badge ?>" style="font-size:.65rem;"><?= $st ?></span>
+                    </h6>
                     <?php if (!empty($status_orders[$st])): ?>
                         <div class="table-responsive">
                             <table class="table table-striped table-hover table-bordered align-middle data-table">
@@ -736,20 +770,20 @@ try {
                                         <th>Total(€)</th>
                                         <th>Tip</th>
                                         <th>Tip(€)</th>
-                                        <th>Scheduled Date</th>
-                                        <th>Scheduled Time</th>
+                                        <th>Sch.Date</th>
+                                        <th>Sch.Time</th>
                                         <th>Created</th>
                                         <th>Status</th>
                                         <?php if ($user_role === 'admin'): ?>
-                                            <th>Assign Delivery</th>
+                                            <th>Assign</th>
                                         <?php endif; ?>
-                                        <th>Coupon Code</th>
-                                        <th>Coupon Discount(€)</th>
+                                        <th>Coupon</th>
+                                        <th>C.Discount(€)</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($status_orders[$st] as $o):
+                                    <?php foreach ($status_orders[$st] as $o) {
                                         $tipBadge = 'N/A';
                                         if (!empty($o['tip_name'])) {
                                             $val = $o['tip_percentage'] !== null ? htmlspecialchars($o['tip_percentage']) . '%' : number_format($o['tip_fixed_amount'], 2) . '€';
@@ -771,7 +805,7 @@ try {
                                             <?php if ($user_role === 'admin'): ?>
                                                 <td>
                                                     <form method="POST" action="orders.php?action=assign_delivery&id=<?= $o['id'] ?>" class="assign-form">
-                                                        <select name="delivery_user_id" class="form-select form-select-sm me-2" required>
+                                                        <select name="delivery_user_id" class="form-select form-select-sm me-1" required>
                                                             <option value="">Choose</option>
                                                             <?php foreach ($delivery_users as $du): ?>
                                                                 <option value="<?= htmlspecialchars($du['id']) ?>" <?= ($o['delivery_user_id'] == $du['id'] ? 'selected' : '') ?>>
@@ -786,40 +820,40 @@ try {
                                             <td><?= htmlspecialchars($o['coupon_code'] ?? '') ?></td>
                                             <td><?= number_format(($o['coupon_discount'] ?? 0), 2) ?></td>
                                             <td>
-                                                <a href="orders.php?action=view_details&id=<?= $o['id'] ?>" class="btn btn-sm btn-info me-1"><i class="bi bi-eye"></i></a>
-                                                <a href="orders.php?action=update_status_form&id=<?= $o['id'] ?>" class="btn btn-sm btn-warning me-1"><i class="bi bi-pencil"></i></a>
+                                                <a href="orders.php?action=view_details&id=<?= $o['id'] ?>" class="btn btn-sm btn-info me-1" style="font-size:.7rem;"><i class="bi bi-eye"></i></a>
+                                                <a href="orders.php?action=update_status_form&id=<?= $o['id'] ?>" class="btn btn-sm btn-warning me-1" style="font-size:.7rem;"><i class="bi bi-pencil"></i></a>
                                                 <?php if ($user_role === 'admin'): ?>
-                                                    <a href="orders.php?action=delete&id=<?= $o['id'] ?>" class="btn btn-sm btn-danger me-1" onclick="return confirm('Move to trash?');"><i class="bi bi-trash"></i></a>
-                                                    <button type="button" class="btn btn-sm btn-secondary me-1" data-bs-toggle="modal" data-bs-target="#delayModal<?= $o['id'] ?>"><i class="bi bi-clock"></i></button>
+                                                    <a href="orders.php?action=delete&id=<?= $o['id'] ?>" class="btn btn-sm btn-danger me-1" style="font-size:.7rem;" onclick="return confirm('Move to trash?');"><i class="bi bi-trash"></i></a>
+                                                    <button type="button" class="btn btn-sm btn-secondary me-1" style="font-size:.7rem;" data-bs-toggle="modal" data-bs-target="#delayModal<?= $o['id'] ?>"><i class="bi bi-clock"></i></button>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
                                         <?php if ($user_role === 'admin'): ?>
-                                            <div class="modal fade" id="delayModal<?= $o['id'] ?>" tabindex="-1">
-                                                <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal fade" id="delayModal<?= $o['id'] ?>">
+                                                <div class="modal-dialog modal-dialog-centered" style="font-size:.8rem;">
                                                     <div class="modal-content">
-                                                        <div class="modal-header bg-secondary text-white">
-                                                            <h5 class="modal-title">Delay Notification for Order #<?= htmlspecialchars($o['id']) ?></h5>
+                                                        <div class="modal-header bg-secondary text-white" style="padding:.4rem;">
+                                                            Delay Notification #<?= htmlspecialchars($o['id']) ?>
                                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                                         </div>
                                                         <form method="POST" action="orders.php?action=send_delay_notification&id=<?= $o['id'] ?>">
                                                             <div class="modal-body">
-                                                                <div class="mb-3">
+                                                                <div class="mb-2">
                                                                     <label for="additional_time_<?= $o['id'] ?>" class="form-label">Additional Time (hours)</label>
                                                                     <input type="number" class="form-control" id="additional_time_<?= $o['id'] ?>" name="additional_time" min="1" required>
                                                                 </div>
                                                                 <p>Send Delay Notification?</p>
                                                             </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                <button type="submit" class="btn btn-warning">Send</button>
+                                                            <div class="modal-footer" style="padding:.4rem;">
+                                                                <button type="button" class="btn btn-secondary" style="font-size:.7rem;" data-bs-dismiss="modal">Cancel</button>
+                                                                <button type="submit" class="btn btn-warning" style="font-size:.7rem;">Send</button>
                                                             </div>
                                                         </form>
                                                     </div>
                                                 </div>
                                             </div>
                                         <?php endif; ?>
-                                    <?php endforeach; ?>
+                                    <?php } ?>
                                 </tbody>
                             </table>
                         </div>
@@ -857,7 +891,6 @@ try {
                         if (r.status === 'success' && r.new_orders.length > 0) {
                             r.new_orders.forEach(o => {
                                 if (o.id > lastId) lastId = o.id;
-                                console.log('New order found:', o);
                             });
                         }
                     }, 'json').fail(e => console.error('Error:', e));

@@ -533,3 +533,27 @@
 **Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 26
 ---
 
+### [2025-01-06 23:06:48] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 18
+---
+
+### [2025-01-06 23:12:32] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 18
+---
+
+### [2025-01-06 23:12:38] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 18
+---
+
+### [2025-01-06 23:12:54] Error
+
+**Message:** Uncaught Exception: Class &quot;PHPMailer\PHPMailer\PHPMailer&quot; not found
+**Context:** File: C:\xampp\htdocs\arber-dobruna\admin\orders.php Line: 18
+---
+
