@@ -17,7 +17,7 @@ $adminMenuItems = [
     ['dashboard.php', 'fas fa-chart-pie', 'Dashboard'],
     ['categories.php', 'fas fa-th-list', 'Categories'],
     ['products.php', 'fas fa-box', 'Products'],
-    ['settings.php', 'fas fa-sliders-h', 'Settings'],
+    // ['settings.php', 'fas fa-sliders-h', 'Settings'],
     ['orders.php', 'fas fa-receipt', 'Orders'],
     ['drinks.php', 'fas fa-coffee', 'Drinks'],
     ['cupons.php', 'fas fa-tags', 'Coupons'],

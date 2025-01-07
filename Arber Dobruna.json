@@ -1,0 +1,13 @@
+{
+  "application_type": "web",
+  "client_id": "cc_classic_RunP0KKQB65Jwo4nXi5UtwICTesxT",
+  "client_secret": "cc_sk_classic_WjuTHQ9kpwk3xXABsu3w9FnLeO3YvCdFGLAWN9MvvfjmGOd8gy",
+  "cors_uris": [
+    ""
+  ],
+  "id": "CCCQEPAEX",
+  "name": "Arber Dobruna",
+  "redirect_uris": [
+    "http://localhost/arber-dobruna/index.php"
+  ]
+}
