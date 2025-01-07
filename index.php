@@ -1158,8 +1158,8 @@ try {
                         <div class="mb-3">
                             <label class="form-label">Zahlungsmethode <span class="text-danger">*</span></label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="payment_method" value="sumup" required id="paymentSumUp">
-                                <label class="form-check-label" for="paymentSumUp"><i class="bi bi-credit-card-2-front"></i> SumUp</label>
+                                <input class="form-check-input" type="radio" name="payment_method" value="sumup" required id="paymentSumUp" disabled>
+                                <label class="form-check-label" for="paymentSumUp"><i class="bi bi-credit-card-2-front"></i> SumUp (Soon)</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal">
