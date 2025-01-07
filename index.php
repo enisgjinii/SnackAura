@@ -4,7 +4,6 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require 'vendor/autoload.php';
-
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\Amount;
@@ -13,7 +12,6 @@ use PayPal\Api\Payment;
 use PayPal\Api\RedirectUrls;
 use PayPal\Api\Transaction;
 use PayPal\Api\PaymentExecution;
-
 session_start();
 require 'includes/db_connect.php';
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
@@ -39,6 +37,7 @@ set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
+// Initialize PayPal API Context
 $paypal = new ApiContext(new OAuthTokenCredential(
     'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-Ndgpng0NLAiWr',
     'EKbX-h3EwnMlRoAyyGBCFi2370doQi06hO6iOiQJsQ1gDnpvTrwYQIyTG2MxG6H1vVuWpz_Or76JTThi'
@@ -50,11 +49,13 @@ $is_closed = false;
 $notification = [];
 $selected_store_id = $_SESSION['selected_store'] ?? null;
 $main_store = null;
+// Fetch the selected store
 if ($selected_store_id) {
     $st = $pdo->prepare("SELECT * FROM stores WHERE id=? AND is_active=1");
     $st->execute([$selected_store_id]);
     $main_store = $st->fetch(PDO::FETCH_ASSOC);
 }
+// Determine if the store is closed
 if ($main_store) {
     $d = @json_decode($main_store['work_schedule'] ?? '', true);
     if (!is_array($d)) $d = [];
@@ -92,12 +93,14 @@ if ($main_store) {
     $is_closed = true;
     $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
+// Fetch tip options
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
+// Handle tip selection
 if (isset($_GET['select_tip'])) {
     $tid = (int)$_GET['select_tip'];
     $valid = in_array($tid, array_column($tip_options, 'id'), true) || $tid === 0;
@@ -564,101 +567,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $oid = $pdo->lastInsertId();
             if (in_array($pm, ['sumup', 'paypal'])) {
                 // Inside the checkout POST handling
-            if ($pm === 'sumup') {
-                $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([2, $oid]);
-                
-                // Move API credentials to environment variables for security
-                $sumupClientId = 'cc_classic_0RuTRMSwQBFdU729lVbNcUaxlGyGM';
-                $sumupClientSecret = 'cc_sk_classic_1VRCwYiFvv7izqeMdcCaUEw71JTYPezGhvz4yzfJru1uauljMV';
-                
-                if (!$sumupClientId || !$sumupClientSecret) {
-                    throw new Exception("SumUp API credentials are not set.");
-                }
-
-                $authString = base64_encode($sumupClientId . ':' . $sumupClientSecret);
-                $ch = curl_init('https://api.sumup.com/token');
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-                    'grant_type' => 'client_credentials'
-                ]));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    "Authorization: Basic $authString",
-                    "Content-Type: application/x-www-form-urlencoded"
-                ]);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                $result = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
-
-                if (!$result) {
-                    throw new Exception("Could not get SumUp token. CURL Error: " . curl_error($ch));
-                }
-
-                $decoded = json_decode($result, true);
-                if (empty($decoded['access_token'])) {
-                    throw new Exception("SumUp token response invalid: " . $result);
-                }
-                $accessToken = $decoded['access_token'];
-
-                $sumupAmount = number_format($total, 2, '.', '');
-                $checkoutRequest = [
-                    "amount" => $sumupAmount,
-                    "currency" => "GBP",
-                    "checkout_reference" => "Order-$oid",
-                    "description" => "Order #$oid",
-                    "pay_to_email" => "4ccc22b784fd4f6b893266d40e2c0482@developer.sumup.com",
-                    "return_url" => "http://" . $_SERVER['HTTP_HOST'] . "/arber-dobruna/index.php?payment=sumup&success=true&order_id=$oid",
-                    "notify_url" => "http://" . $_SERVER['HTTP_HOST'] . "/sumup-webhook.php"
-                ];
-
-                $ch2 = curl_init('https://api.sumup.com/v0.1/checkouts');
-                curl_setopt($ch2, CURLOPT_POST, true);
-                curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode($checkoutRequest));
-                curl_setopt($ch2, CURLOPT_HTTPHEADER, [
-                    "Authorization: Bearer $accessToken",
-                    "Content-Type: application/json"
-                ]);
-                curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
-                $result2 = curl_exec($ch2);
-                $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-                curl_close($ch2);
-
-                if (!$result2) {
-                    throw new Exception("SumUp checkout creation failed. CURL Error: " . curl_error($ch2));
-                }
-
-                $decoded2 = json_decode($result2, true);
-                
-                if (!$decoded2) {
-                    throw new Exception("Invalid JSON response from SumUp: " . $result2);
-                }
-
-                if (isset($decoded2['status']) && $decoded2['status'] === 'PENDING') {
-                    // Handle PENDING status appropriately
-                    // For example, inform the user to complete payment via webhook
+                if ($pm === 'sumup') {
+                    $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([2, $oid]);
+                    // Move API credentials to environment variables for security
+                    $sumupClientId = 'cc_classic_0RuTRMSwQBFdU729lVbNcUaxlGyGM';
+                    $sumupClientSecret = 'cc_sk_classic_1VRCwYiFvv7izqeMdcCaUEw71JTYPezGhvz4yzfJru1uauljMV';
+                    if (!$sumupClientId || !$sumupClientSecret) {
+                        throw new Exception("SumUp API credentials are not set.");
+                    }
+                    $authString = base64_encode($sumupClientId . ':' . $sumupClientSecret);
+                    $ch = curl_init('https://api.sumup.com/token');
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+                        'grant_type' => 'client_credentials'
+                    ]));
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        "Authorization: Basic $authString",
+                        "Content-Type: application/x-www-form-urlencoded"
+                    ]);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    $result = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    if (!$result) {
+                        throw new Exception("Could not get SumUp token. CURL Error: " . curl_error($ch));
+                    }
+                    $decoded = json_decode($result, true);
+                    if (empty($decoded['access_token'])) {
+                        throw new Exception("SumUp token response invalid: " . $result);
+                    }
+                    $accessToken = $decoded['access_token'];
+                    $sumupAmount = number_format($total, 2, '.', '');
+                    $checkoutRequest = [
+                        "amount" => $sumupAmount,
+                        "currency" => "GBP",
+                        "checkout_reference" => "Order-$oid",
+                        "description" => "Order #$oid",
+                        "pay_to_email" => "4ccc22b784fd4f6b893266d40e2c0482@developer.sumup.com",
+                        "return_url" => "http://" . $_SERVER['HTTP_HOST'] . "/arber-dobruna/index.php?payment=sumup&success=true&order_id=$oid",
+                        "notify_url" => "http://" . $_SERVER['HTTP_HOST'] . "/sumup-webhook.php"
+                    ];
+                    $ch2 = curl_init('https://api.sumup.com/v0.1/checkouts');
+                    curl_setopt($ch2, CURLOPT_POST, true);
+                    curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode($checkoutRequest));
+                    curl_setopt($ch2, CURLOPT_HTTPHEADER, [
+                        "Authorization: Bearer $accessToken",
+                        "Content-Type: application/json"
+                    ]);
+                    curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+                    $result2 = curl_exec($ch2);
+                    $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+                    curl_close($ch2);
+                    if (!$result2) {
+                        throw new Exception("SumUp checkout creation failed. CURL Error: " . curl_error($ch2));
+                    }
+                    $decoded2 = json_decode($result2, true);
+                    if (!$decoded2) {
+                        throw new Exception("Invalid JSON response from SumUp: " . $result2);
+                    }
+                    if (isset($decoded2['status']) && $decoded2['status'] === 'PENDING') {
+                        // Handle PENDING status appropriately
+                        // For example, inform the user to complete payment via webhook
+                        $pdo->commit();
+                        $_SESSION['cart'] = [];
+                        $_SESSION['selected_tip'] = null;
+                        $_SESSION['applied_coupon'] = null;
+                        header("Location: index.php?payment=sumup_pending&order_id=$oid");
+                        exit;
+                    }
+                    if (empty($decoded2['checkout_link'])) {
+                        // Log the full response for debugging
+                        log_error_markdown("Missing checkout_link in SumUp response: " . $result2, "Checkout");
+                        throw new Exception("Payment initiation failed. Please try again later.");
+                    }
+                    $checkoutLink = $decoded2['checkout_link'];
                     $pdo->commit();
                     $_SESSION['cart'] = [];
                     $_SESSION['selected_tip'] = null;
                     $_SESSION['applied_coupon'] = null;
-                    header("Location: index.php?payment=sumup_pending&order_id=$oid");
+                    header("Location: " . $checkoutLink);
                     exit;
-                }
-
-                if (empty($decoded2['checkout_link'])) {
-                    // Log the full response for debugging
-                    log_error_markdown("Missing checkout_link in SumUp response: " . $result2, "Checkout");
-                    throw new Exception("Payment initiation failed. Please try again later.");
-                }
-
-                $checkoutLink = $decoded2['checkout_link'];
-                $pdo->commit();
-                $_SESSION['cart'] = [];
-                $_SESSION['selected_tip'] = null;
-                $_SESSION['applied_coupon'] = null;
-                header("Location: " . $checkoutLink);
-                exit;
-            }
- elseif ($pm === 'paypal') {
+                } elseif ($pm === 'paypal') {
                     $payer = (new Payer())->setPaymentMethod('paypal');
                     $amount = (new Amount())->setTotal(number_format($total, 2, '.', ''))->setCurrency('EUR');
                     $transaction = (new Transaction())->setAmount($amount)->setDescription("Order ID: $oid");
@@ -842,7 +831,6 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="de">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -857,6 +845,7 @@ try {
         <link rel="icon" type="image/png" href="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>">
     <?php endif; ?>
     <style>
+        /* Enhanced and stricter UI styles */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -869,39 +858,32 @@ try {
             justify-content: center;
             align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
-
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
-
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
             cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -909,29 +891,69 @@ try {
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
-
         .store-card.selected {
             border: 2px solid #0d6efd;
             background-color: #e7f1ff;
         }
-
         .store-card .select-store-btn {
             width: 100%;
+        }
+        /* New styles for smaller and stricter store selection UI */
+        .store-card {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            transition: box-shadow 0.3s;
+            height: 100%;
+        }
+        .store-card:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .store-card img {
+            height: 60px;
+            object-fit: contain;
+            margin-bottom: 10px;
+        }
+        .store-card .card-title {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        .store-card .card-text {
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .select-store-btn {
+            margin-top: auto;
+            padding: 8px 0;
+            font-size: 0.9rem;
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
-
 <body>
-    <?php if ($is_closed): ?>
-        <div class="alert alert-danger text-center m-0" role="alert">
-            <strong><?= htmlspecialchars($notification['title'] ?? 'Closed') ?></strong>: <?= htmlspecialchars($notification['message'] ?? 'We are currently closed.') ?>
+    <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
+        <!-- Store Closed Notification Modal -->
+        <div class="modal fade" id="storeClosedModal" tabindex="-1" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><?= htmlspecialchars($notification['title']) ?></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <?= htmlspecialchars($notification['message']) ?>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <a href="?action=change_address" class="btn btn-primary">Change Store</a>
+                    </div>
+                </div>
+            </div>
         </div>
     <?php endif; ?>
     <div class="loading-overlay" id="loading-overlay">
@@ -939,14 +961,18 @@ try {
             <span class="visually-hidden">Loading...</span>
         </div>
     </div>
+    <!-- Store Selection Modal -->
     <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
-        <div class="modal fade" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-xl">
+        <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display: block; background: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
-                            <img src="<?= htmlspecialchars($main_store['cart_logo'] ?? '') ?>" alt="Cart Logo" style="width:100%;height:80px;object-fit:cover" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            <h5 class="modal-title">Select Your Store</h5>
+                            <?php if (!empty($main_store['cart_logo'])): ?>
+                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:60px; height:60px; object-fit:cover;">
+                            <?php endif; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
                             <?php if (isset($error_message)): ?>
@@ -961,25 +987,22 @@ try {
                                         $storesAll = $storesQuery->fetchAll(PDO::FETCH_ASSOC);
                                         foreach ($storesAll as $st):
                                     ?>
-                                            <div class="col-md-4 mb-3">
-                                                <div class="card store-card h-100" data-store-id="<?= htmlspecialchars($st['id']) ?>">
-                                                    <div class="card-body d-flex flex-column">
-                                                        <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
-                                                        <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
-                                                        <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" style="width:100%;height:80px;object-fit:cover" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
-                                                        <div class="mt-auto">
-                                                            <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
-                                                            <button type="button" class="btn btn-outline-primary select-store-btn">
-                                                                <i class="bi bi-pin-map"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
+                                            <div class="col-md-4 col-sm-6 mb-3">
+                                                <div class="store-card d-flex flex-column" data-store-id="<?= htmlspecialchars($st['id']) ?>">
+                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://via.placeholder.com/60?text=Logo';">
+                                                    <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
+                                                    <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
+                                                    <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
+                                                    <button type="button" class="btn btn-outline-primary select-store-btn">
+                                                        <i class="bi bi-pin-map"></i> Select
+                                                    </button>
                                                 </div>
                                             </div>
                                     <?php
                                         endforeach;
                                     } catch (PDOException $e) {
                                         log_error_markdown("Failed to fetch stores: " . $e->getMessage(), "Fetch Stores");
+                                        echo '<div class="col-12"><div class="alert alert-danger">Unable to load stores at this time.</div></div>';
                                     }
                                     ?>
                                 </div>
@@ -1007,11 +1030,13 @@ try {
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
             (function() {
+                // Initialize Bootstrap modal
                 let storeModal = new bootstrap.Modal('#storeModal', {
                     backdrop: 'static',
                     keyboard: false
                 });
                 storeModal.show();
+                // Handle store selection
                 document.querySelectorAll('.select-store-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         document.querySelectorAll('.store-card').forEach(c => {
@@ -1023,6 +1048,7 @@ try {
                         card.querySelector('input[name="store_id"]').checked = true;
                     });
                 });
+                // Initialize Leaflet map
                 let map = L.map('map').setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
@@ -1048,6 +1074,7 @@ try {
                             }
                         });
                 });
+                // Handle address input changes
                 document.getElementById('delivery_address').addEventListener('change', function() {
                     let a = this.value.trim();
                     if (a.length > 5) {
@@ -1066,20 +1093,40 @@ try {
                             });
                     }
                 });
+                // Form submission validation
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
                     if (!document.querySelector('input[name="store_id"]:checked')) {
                         e.preventDefault();
-                        alert('Please select a store.');
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'No Store Selected',
+                            text: 'Please select a store before proceeding.'
+                        });
                         return;
                     }
                     if (!document.getElementById('delivery_address').value.trim() ||
                         !document.getElementById('latitude').value ||
                         !document.getElementById('longitude').value) {
                         e.preventDefault();
-                        alert('Please provide address & map location.');
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Incomplete Address',
+                            text: 'Please provide a complete delivery address and select a location on the map.'
+                        });
                     }
                 });
             })();
+        </script>
+    <?php endif; ?>
+    <?php
+    // Display Store Closed Modal if applicable
+    if ($is_closed && isset($_SESSION['selected_store'])):
+    ?>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var storeClosedModal = new bootstrap.Modal(document.getElementById('storeClosedModal'));
+                storeClosedModal.show();
+            });
         </script>
     <?php endif; ?>
     <?php
@@ -1153,6 +1200,7 @@ try {
                                     sd.required = false;
                                     st.required = false;
                                 }
+                                s
                             });
                         </script>
                         <div class="mb-3">
@@ -1616,7 +1664,6 @@ try {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
-
             function updateEstimatedPrice(form) {
                 let base = parseFloat(form.dataset.baseprice || "0");
                 let pid = form.dataset.productid;
@@ -1636,7 +1683,6 @@ try {
                 let final = (base + sp + totalExtras + dp) * q;
                 if (es) es.textContent = final.toFixed(2) + "€";
             }
-
             function limitSauceQuantities(form) {
                 let sz = form.querySelector('.size-selector');
                 if (!sz || !sz.value) return;
@@ -1657,7 +1703,6 @@ try {
                     }
                 }
             }
-
             function updateSizeSpecificOptions(form, sd) {
                 let se = [],
                     ss = [];
@@ -1707,7 +1752,6 @@ try {
                 }
                 initializeEventListeners(form);
             }
-
             function initializeEventListeners(form) {
                 form.querySelectorAll('.item-quantity').forEach(iq => {
                     iq.addEventListener('change', () => {
@@ -1759,6 +1803,5 @@ try {
         });
     </script>
 </body>
-
 </html>
 <?php ob_end_flush(); ?>
