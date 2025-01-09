@@ -4,6 +4,7 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require 'vendor/autoload.php';
+
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\Amount;
@@ -12,6 +13,7 @@ use PayPal\Api\Payment;
 use PayPal\Api\RedirectUrls;
 use PayPal\Api\Transaction;
 use PayPal\Api\PaymentExecution;
+
 session_start();
 require 'includes/db_connect.php';
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
@@ -37,7 +39,6 @@ set_error_handler(function ($severity, $message, $file, $line) {
     if (!(error_reporting() & $severity)) return;
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
-// Initialize PayPal API Context
 $paypal = new ApiContext(new OAuthTokenCredential(
     'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-Ndgpng0NLAiWr',
     'EKbX-h3EwnMlRoAyyGBCFi2370doQi06hO6iOiQJsQ1gDnpvTrwYQIyTG2MxG6H1vVuWpz_Or76JTThi'
@@ -49,13 +50,11 @@ $is_closed = false;
 $notification = [];
 $selected_store_id = $_SESSION['selected_store'] ?? null;
 $main_store = null;
-// Fetch the selected store
 if ($selected_store_id) {
     $st = $pdo->prepare("SELECT * FROM stores WHERE id=? AND is_active=1");
     $st->execute([$selected_store_id]);
     $main_store = $st->fetch(PDO::FETCH_ASSOC);
 }
-// Determine if the store is closed
 if ($main_store) {
     $d = @json_decode($main_store['work_schedule'] ?? '', true);
     if (!is_array($d)) $d = [];
@@ -93,14 +92,12 @@ if ($main_store) {
     $is_closed = true;
     $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
-// Fetch tip options
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
-// Handle tip selection
 if (isset($_GET['select_tip'])) {
     $tid = (int)$_GET['select_tip'];
     $valid = in_array($tid, array_column($tip_options, 'id'), true) || $tid === 0;
@@ -566,10 +563,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $oid = $pdo->lastInsertId();
             if (in_array($pm, ['sumup', 'paypal'])) {
-                // Inside the checkout POST handling
                 if ($pm === 'sumup') {
                     $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([2, $oid]);
-                    // Move API credentials to environment variables for security
                     $sumupClientId = 'cc_classic_0RuTRMSwQBFdU729lVbNcUaxlGyGM';
                     $sumupClientSecret = 'cc_sk_classic_1VRCwYiFvv7izqeMdcCaUEw71JTYPezGhvz4yzfJru1uauljMV';
                     if (!$sumupClientId || !$sumupClientSecret) {
@@ -626,8 +621,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception("Invalid JSON response from SumUp: " . $result2);
                     }
                     if (isset($decoded2['status']) && $decoded2['status'] === 'PENDING') {
-                        // Handle PENDING status appropriately
-                        // For example, inform the user to complete payment via webhook
                         $pdo->commit();
                         $_SESSION['cart'] = [];
                         $_SESSION['selected_tip'] = null;
@@ -636,7 +629,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit;
                     }
                     if (empty($decoded2['checkout_link'])) {
-                        // Log the full response for debugging
                         log_error_markdown("Missing checkout_link in SumUp response: " . $result2, "Checkout");
                         throw new Exception("Payment initiation failed. Please try again later.");
                     }
@@ -831,6 +823,7 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -845,7 +838,6 @@ try {
         <link rel="icon" type="image/png" href="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>">
     <?php endif; ?>
     <style>
-        /* Enhanced and stricter UI styles */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -858,32 +850,39 @@ try {
             justify-content: center;
             align-items: center;
         }
+
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
+
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
+
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
+
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
+
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
             cursor: not-allowed;
         }
+
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
+
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -891,17 +890,20 @@ try {
             position: sticky;
             top: 20px;
         }
+
         .order-title {
             margin-bottom: 15px;
         }
+
         .store-card.selected {
             border: 2px solid #0d6efd;
             background-color: #e7f1ff;
         }
+
         .store-card .select-store-btn {
             width: 100%;
         }
-        /* New styles for smaller and stricter store selection UI */
+
         .store-card {
             padding: 10px;
             border: 1px solid #ddd;
@@ -909,22 +911,27 @@ try {
             transition: box-shadow 0.3s;
             height: 100%;
         }
+
         .store-card:hover {
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         .store-card img {
             height: 60px;
             object-fit: contain;
             margin-bottom: 10px;
         }
+
         .store-card .card-title {
             font-size: 1.1rem;
             margin-bottom: 5px;
         }
+
         .store-card .card-text {
             font-size: 0.9rem;
             color: #555;
         }
+
         .select-store-btn {
             margin-top: auto;
             padding: 8px 0;
@@ -935,15 +942,15 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
+
 <body>
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
-        <!-- Store Closed Notification Modal -->
         <div class="modal fade" id="storeClosedModal" tabindex="-1" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title"><?= htmlspecialchars($notification['title']) ?></h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <?= htmlspecialchars($notification['message']) ?>
@@ -956,12 +963,13 @@ try {
             </div>
         </div>
     <?php endif; ?>
+
     <div class="loading-overlay" id="loading-overlay">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
     </div>
-    <!-- Store Selection Modal -->
+
     <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
         <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display: block; background: rgba(0,0,0,0.5);">
             <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -972,7 +980,6 @@ try {
                             <?php if (!empty($main_store['cart_logo'])): ?>
                                 <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:60px; height:60px; object-fit:cover;">
                             <?php endif; ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
                             <?php if (isset($error_message)): ?>
@@ -1030,13 +1037,12 @@ try {
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
             (function() {
-                // Initialize Bootstrap modal
                 let storeModal = new bootstrap.Modal('#storeModal', {
                     backdrop: 'static',
                     keyboard: false
                 });
                 storeModal.show();
-                // Handle store selection
+
                 document.querySelectorAll('.select-store-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         document.querySelectorAll('.store-card').forEach(c => {
@@ -1048,7 +1054,7 @@ try {
                         card.querySelector('input[name="store_id"]').checked = true;
                     });
                 });
-                // Initialize Leaflet map
+
                 let map = L.map('map').setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
@@ -1074,7 +1080,7 @@ try {
                             }
                         });
                 });
-                // Handle address input changes
+
                 document.getElementById('delivery_address').addEventListener('change', function() {
                     let a = this.value.trim();
                     if (a.length > 5) {
@@ -1093,7 +1099,7 @@ try {
                             });
                     }
                 });
-                // Form submission validation
+
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
                     if (!document.querySelector('input[name="store_id"]:checked')) {
                         e.preventDefault();
@@ -1118,10 +1124,8 @@ try {
             })();
         </script>
     <?php endif; ?>
-    <?php
-    // Display Store Closed Modal if applicable
-    if ($is_closed && isset($_SESSION['selected_store'])):
-    ?>
+
+    <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
                 var storeClosedModal = new bootstrap.Modal(document.getElementById('storeClosedModal'));
@@ -1129,6 +1133,7 @@ try {
             });
         </script>
     <?php endif; ?>
+
     <?php
     $includes = [
         'edit_cart.php',
@@ -1143,13 +1148,12 @@ try {
         'agb_modal.php',
         'impressum_modal.php',
         'datenschutz_modal.php',
-        'ratings.php',
-        'store_close.php'
     ];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
     }
     ?>
+
     <div class="modal fade" id="checkoutModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
@@ -1200,7 +1204,6 @@ try {
                                     sd.required = false;
                                     st.required = false;
                                 }
-                                s
                             });
                         </script>
                         <div class="mb-3">
@@ -1255,8 +1258,8 @@ try {
                                                     <?php if (!empty($it['extras'])): ?>
                                                         <li><strong>Extras:</strong>
                                                             <ul>
-                                                                <?php foreach ($it['extras'] as $e): ?>
-                                                                    <li><?= htmlspecialchars($e['name']) ?> x<?= htmlspecialchars($e['quantity']) ?> @ <?= number_format($e['price'], 2) ?>€=<?= number_format($e['price'] * $e['quantity'], 2) ?>€</li>
+                                                                <?php foreach ($it['extras'] as $ex): ?>
+                                                                    <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
                                                                 <?php endforeach; ?>
                                                             </ul>
                                                         </li>
@@ -1279,7 +1282,14 @@ try {
                                                 </ul>
                                             <?php endif; ?>
                                         </div>
-                                        <span class="badge bg-primary rounded-pill"><?= number_format($it['total_price'], 2) ?>€</span>
+                                        <div class="text-end">
+                                            <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
+                                            <form action="index.php" method="POST" style="display:inline;">
+                                                <input type="hidden" name="remove" value="<?= $i ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger mt-2" title="Remove"><i class="bi bi-trash"></i></button>
+                                            </form>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit"><i class="bi bi-pencil-square"></i></button>
+                                        </div>
                                     </div>
                                 </li>
                             <?php endforeach; ?>
@@ -1313,6 +1323,7 @@ try {
             </div>
         </div>
     </div>
+
     <ul class="nav nav-tabs justify-content-center my-4">
         <li class="nav-item">
             <a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a>
@@ -1323,6 +1334,7 @@ try {
             </li>
         <?php endforeach; ?>
     </ul>
+
     <main class="container my-5">
         <div class="row">
             <div class="col-lg-9">
@@ -1357,6 +1369,7 @@ try {
                                 </div>
                             </div>
                         </div>
+
                         <div class="modal fade" id="addToCartModal<?= $pd['id'] ?>" tabindex="-1">
                             <div class="modal-dialog modal-xl modal-dialog-centered">
                                 <div class="modal-content">
@@ -1364,7 +1377,7 @@ try {
                                         <div class="modal-body">
                                             <div class="row">
                                                 <div class="col-4">
-                                                    <img src="<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
                                                 </div>
                                                 <div class="col-8">
                                                     <h2 class="text-uppercase"><b><?= htmlspecialchars($pd['name']) ?></b></h2>
@@ -1460,6 +1473,7 @@ try {
                                 </div>
                             </div>
                         </div>
+
                         <?php if ($pd['allergies']): ?>
                             <div class="modal fade" id="allergiesModal<?= $pd['id'] ?>" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
@@ -1605,8 +1619,10 @@ try {
             </div>
         </div>
     </main>
+
     <?php include 'footer.php'; ?>
     <?php include 'rules.php'; ?>
+
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -1664,6 +1680,7 @@ try {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
+
             function updateEstimatedPrice(form) {
                 let base = parseFloat(form.dataset.baseprice || "0");
                 let pid = form.dataset.productid;
@@ -1683,6 +1700,7 @@ try {
                 let final = (base + sp + totalExtras + dp) * q;
                 if (es) es.textContent = final.toFixed(2) + "€";
             }
+
             function limitSauceQuantities(form) {
                 let sz = form.querySelector('.size-selector');
                 if (!sz || !sz.value) return;
@@ -1703,6 +1721,7 @@ try {
                     }
                 }
             }
+
             function updateSizeSpecificOptions(form, sd) {
                 let se = [],
                     ss = [];
@@ -1752,6 +1771,7 @@ try {
                 }
                 initializeEventListeners(form);
             }
+
             function initializeEventListeners(form) {
                 form.querySelectorAll('.item-quantity').forEach(iq => {
                     iq.addEventListener('change', () => {
@@ -1803,5 +1823,6 @@ try {
         });
     </script>
 </body>
+
 </html>
 <?php ob_end_flush(); ?>
