@@ -4,7 +4,6 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require 'vendor/autoload.php';
-
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\Amount;
@@ -13,7 +12,6 @@ use PayPal\Api\Payment;
 use PayPal\Api\RedirectUrls;
 use PayPal\Api\Transaction;
 use PayPal\Api\PaymentExecution;
-
 session_start();
 require 'includes/db_connect.php';
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
@@ -823,7 +821,6 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="de">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -850,39 +847,32 @@ try {
             justify-content: center;
             align-items: center;
         }
-
         .promo-banner .carousel-item img {
             height: 400px;
             object-fit: cover;
         }
-
         .offers-section .card-img-top {
             height: 200px;
             object-fit: cover;
         }
-
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
                 height: 250px;
             }
-
             .offers-section .card-img-top {
                 height: 150px;
             }
         }
-
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
             cursor: not-allowed;
         }
-
         .language-switcher {
             position: absolute;
             top: 10px;
             right: 10px;
         }
-
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
@@ -890,20 +880,16 @@ try {
             position: sticky;
             top: 20px;
         }
-
         .order-title {
             margin-bottom: 15px;
         }
-
         .store-card.selected {
             border: 2px solid #0d6efd;
             background-color: #e7f1ff;
         }
-
         .store-card .select-store-btn {
             width: 100%;
         }
-
         .store-card {
             padding: 10px;
             border: 1px solid #ddd;
@@ -911,27 +897,22 @@ try {
             transition: box-shadow 0.3s;
             height: 100%;
         }
-
         .store-card:hover {
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-
         .store-card img {
             height: 60px;
             object-fit: contain;
             margin-bottom: 10px;
         }
-
         .store-card .card-title {
             font-size: 1.1rem;
             margin-bottom: 5px;
         }
-
         .store-card .card-text {
             font-size: 0.9rem;
             color: #555;
         }
-
         .select-store-btn {
             margin-top: auto;
             padding: 8px 0;
@@ -942,7 +923,6 @@ try {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
-
 <body>
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"  aria-labelledby="storeClosedModalLabel" aria-hidden="true">
@@ -950,7 +930,6 @@ try {
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title"><?= htmlspecialchars($notification['title']) ?></h5>
-                        <!-- <button type="button" class="btn-close" data-bs-dismiss="modal"></button> -->
                     </div>
                     <div class="modal-body">
                         <?= htmlspecialchars($notification['message']) ?>
@@ -963,13 +942,11 @@ try {
             </div>
         </div>
     <?php endif; ?>
-
     <div class="loading-overlay" id="loading-overlay">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
     </div>
-
     <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
         <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display: block; background: rgba(0,0,0,0.5);">
             <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -996,7 +973,7 @@ try {
                                     ?>
                                             <div class="col-md-4 col-sm-6 mb-3">
                                                 <div class="store-card d-flex flex-column" data-store-id="<?= htmlspecialchars($st['id']) ?>">
-                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://via.placeholder.com/60?text=Logo';">
+                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg;">
                                                     <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
                                                     <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
                                                     <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
@@ -1042,7 +1019,6 @@ try {
                     keyboard: false
                 });
                 storeModal.show();
-
                 document.querySelectorAll('.select-store-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         document.querySelectorAll('.store-card').forEach(c => {
@@ -1054,7 +1030,6 @@ try {
                         card.querySelector('input[name="store_id"]').checked = true;
                     });
                 });
-
                 let map = L.map('map').setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
@@ -1080,7 +1055,6 @@ try {
                             }
                         });
                 });
-
                 document.getElementById('delivery_address').addEventListener('change', function() {
                     let a = this.value.trim();
                     if (a.length > 5) {
@@ -1099,7 +1073,6 @@ try {
                             });
                     }
                 });
-
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
                     if (!document.querySelector('input[name="store_id"]:checked')) {
                         e.preventDefault();
@@ -1124,7 +1097,6 @@ try {
             })();
         </script>
     <?php endif; ?>
-
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
@@ -1133,7 +1105,6 @@ try {
             });
         </script>
     <?php endif; ?>
-
     <?php
     $includes = [
         'edit_cart.php',
@@ -1145,15 +1116,12 @@ try {
         'order_success.php',
         'cart_modal.php',
         'toast_notifications.php',
-        'agb_modal.php',
-        'impressum_modal.php',
-        'datenschutz_modal.php',
+        
     ];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
     }
     ?>
-
     <div class="modal fade" id="checkoutModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
@@ -1323,7 +1291,6 @@ try {
             </div>
         </div>
     </div>
-
     <ul class="nav nav-tabs justify-content-center my-4">
         <li class="nav-item">
             <a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a>
@@ -1334,7 +1301,6 @@ try {
             </li>
         <?php endforeach; ?>
     </ul>
-
     <main class="container my-5">
         <div class="row">
             <div class="col-lg-9">
@@ -1343,7 +1309,7 @@ try {
                         <div class="col-md-4 mb-4">
                             <div class="card h-100 shadow-sm">
                                 <div class="position-relative">
-                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                                     <?php if ($pd['is_new'] || $pd['is_offer']): ?>
                                         <span class="badge <?= ($pd['is_new'] ? 'bg-success' : 'bg-warning text-dark') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2">
                                             <?= ($pd['is_new'] ? 'New' : 'Offer') ?>
@@ -1369,7 +1335,6 @@ try {
                                 </div>
                             </div>
                         </div>
-
                         <div class="modal fade" id="addToCartModal<?= $pd['id'] ?>" tabindex="-1">
                             <div class="modal-dialog modal-xl modal-dialog-centered">
                                 <div class="modal-content">
@@ -1473,7 +1438,6 @@ try {
                                 </div>
                             </div>
                         </div>
-
                         <?php if ($pd['allergies']): ?>
                             <div class="modal fade" id="allergiesModal<?= $pd['id'] ?>" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
@@ -1507,7 +1471,7 @@ try {
                     <h2 class="order-title">YOUR ORDER</h2>
                     <?php if (!empty($main_store['logo'])): ?>
                         <div class="mb-3 text-center">
-                            <img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://via.placeholder.com/150?text=Logo';">
+                            <img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                         </div>
                     <?php endif; ?>
                     <?php if (!empty($main_store['cart_description'])): ?>
@@ -1619,10 +1583,8 @@ try {
             </div>
         </div>
     </main>
-
     <?php include 'footer.php'; ?>
     <?php include 'rules.php'; ?>
-
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -1680,7 +1642,6 @@ try {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
-
             function updateEstimatedPrice(form) {
                 let base = parseFloat(form.dataset.baseprice || "0");
                 let pid = form.dataset.productid;
@@ -1700,7 +1661,6 @@ try {
                 let final = (base + sp + totalExtras + dp) * q;
                 if (es) es.textContent = final.toFixed(2) + "€";
             }
-
             function limitSauceQuantities(form) {
                 let sz = form.querySelector('.size-selector');
                 if (!sz || !sz.value) return;
@@ -1721,7 +1681,6 @@ try {
                     }
                 }
             }
-
             function updateSizeSpecificOptions(form, sd) {
                 let se = [],
                     ss = [];
@@ -1771,7 +1730,6 @@ try {
                 }
                 initializeEventListeners(form);
             }
-
             function initializeEventListeners(form) {
                 form.querySelectorAll('.item-quantity').forEach(iq => {
                     iq.addEventListener('change', () => {
@@ -1823,6 +1781,5 @@ try {
         });
     </script>
 </body>
-
 </html>
 <?php ob_end_flush(); ?>
