@@ -4,6 +4,7 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require 'vendor/autoload.php';
+
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\Amount;
@@ -12,34 +13,35 @@ use PayPal\Api\Payment;
 use PayPal\Api\RedirectUrls;
 use PayPal\Api\Transaction;
 use PayPal\Api\PaymentExecution;
+
 session_start();
 require 'includes/db_connect.php';
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
-$showChangeAddressModal = isset($_GET['action']) && $_GET['action'] === 'change_address';
+$showChangeAddressModal = (isset($_GET['action']) && $_GET['action'] === 'change_address');
 $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
-function log_error_markdown($message, $context = '')
+function log_error_markdown($m, $c = '')
 {
     $t = date('Y-m-d H:i:s');
-    $entry = "### [$t] Error\n\n**Message:** " . htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
-    if ($context) {
-        $entry .= "**Context:** " . htmlspecialchars($context, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
+    $e = "### [$t] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
+    if ($c) {
+        $e .= "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
     }
-    $entry .= "---\n\n";
-    file_put_contents(ERROR_LOG_FILE, $entry, FILE_APPEND | LOCK_EX);
+    $e .= "---\n\n";
+    file_put_contents(ERROR_LOG_FILE, $e, FILE_APPEND | LOCK_EX);
 }
 set_exception_handler(function ($e) {
     log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
     header("Location: index.php?error=unknown_error");
     exit;
 });
-set_error_handler(function ($severity, $message, $file, $line) {
-    if (!(error_reporting() & $severity)) return;
-    throw new ErrorException($message, 0, $severity, $file, $line);
+set_error_handler(function ($sev, $msg, $fl, $ln) {
+    if (!(error_reporting() & $sev)) return;
+    throw new ErrorException($msg, 0, $sev, $fl, $ln);
 });
 $paypal = new ApiContext(new OAuthTokenCredential(
-    'AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-Ndgpng0NLAiWr',
-    'EKbX-h3EwnMlRoAyyGBCFi2370doQi06hO6iOiQJsQ1gDnpvTrwYQIyTG2MxG6H1vVuWpz_Or76JTThi'
+    'YOUR_PAYPAL_CLIENT_ID',
+    'YOUR_PAYPAL_CLIENT_SECRET'
 ));
 $paypal->setConfig(['mode' => 'sandbox']);
 include 'settings_fetch.php';
@@ -137,11 +139,8 @@ function applyTip($cartTotal, $tips, $selectedTipId)
     if (!$selectedTipId) return 0;
     foreach ($tips as $tip) {
         if ($tip['id'] == $selectedTipId) {
-            if (!empty($tip['percentage'])) {
-                return $cartTotal * ((float)$tip['percentage'] / 100);
-            } else {
-                return (float)($tip['amount'] ?? 0);
-            }
+            if (!empty($tip['percentage'])) return $cartTotal * ((float)$tip['percentage'] / 100);
+            else return (float)($tip['amount'] ?? 0);
         }
     }
     return 0;
@@ -151,11 +150,7 @@ function haversineDist($lat1, $lon1, $lat2, $lon2)
     $R = 6371;
     $dLat = deg2rad($lat2 - $lat1);
     $dLon = deg2rad($lon2 - $lon1);
-    return $R * 2 * asin(
-        sqrt(
-            sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2
-        )
-    );
+    return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
 }
 function computeShipping($store, $lat, $lon)
 {
@@ -167,16 +162,9 @@ function computeShipping($store, $lat, $lon)
     $postalZones = json_decode($store['postal_code_zones'] ?? '{}', true) ?: [];
     if (in_array($mode, ['postal', 'both'])) {
         $address = $_SESSION['delivery_address'] ?? '';
-        if (isset($postalZones[$address])) {
-            return max((float)$postalZones[$address], 0);
-        }
+        if (isset($postalZones[$address])) return max((float)$postalZones[$address], 0);
     }
-    $distance = haversineDist(
-        (float)$store['store_lat'],
-        (float)$store['store_lng'],
-        (float)$lat,
-        (float)$lon
-    );
+    $distance = haversineDist((float)$store['store_lat'], (float)$store['store_lng'], (float)$lat, (float)$lon);
     if ($distance > $radius && $mode !== 'postal') return 0;
     return max($baseFee + ($distance * $perKmFee), 0);
 }
@@ -199,15 +187,9 @@ function applyCoupon($pdo, $code, $cartTotal)
         $r['error'] = "This coupon has expired.";
         return $r;
     }
-    $discountValue = ($c['discount_type'] === 'percentage')
-        ? $cartTotal * ($c['discount_value'] / 100)
-        : $c['discount_value'];
+    $dv = ($c['discount_type'] === 'percentage') ? ($cartTotal * ($c['discount_value'] / 100)) : $c['discount_value'];
     $r['ok'] = true;
-    $r['coupon'] = [
-        'code' => $c['code'],
-        'discount_type' => $c['discount_type'],
-        'discount_value' => $discountValue
-    ];
+    $r['coupon'] = ['code' => $c['code'], 'discount_type' => $c['discount_type'], 'discount_value' => $dv];
     return $r;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -332,17 +314,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'unit_price' => $unit,
             'total_price' => $total
         ];
-        foreach ($_SESSION['cart'] as $i => $existingItem) {
-            $sameDrink = (($existingItem['drink']['id'] ?? null) == ($cart_item['drink']['id'] ?? null));
-            if (
-                $existingItem['product_id'] == $cart_item['product_id'] &&
-                $existingItem['size'] == $cart_item['size'] &&
-                $sameDrink &&
-                $existingItem['special_instructions'] == $cart_item['special_instructions'] &&
-                $existingItem['extras'] == $cart_item['extras'] &&
-                $existingItem['sauces'] == $cart_item['sauces'] &&
-                $existingItem['dresses'] == $cart_item['dresses']
-            ) {
+        foreach ($_SESSION['cart'] as $i => $exI) {
+            $sameDrink = (($exI['drink']['id'] ?? null) == ($cart_item['drink']['id'] ?? null));
+            if ($exI['product_id'] == $cart_item['product_id'] && $exI['size'] == $cart_item['size'] && $sameDrink && $exI['special_instructions'] == $cart_item['special_instructions'] && $exI['extras'] == $cart_item['extras'] && $exI['sauces'] == $cart_item['sauces'] && $exI['dresses'] == $cart_item['dresses']) {
                 $_SESSION['cart'][$i]['quantity'] += $qty;
                 $_SESSION['cart'][$i]['total_price'] += $total;
                 header("Location: index.php?added=1");
@@ -563,32 +537,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (in_array($pm, ['sumup', 'paypal'])) {
                 if ($pm === 'sumup') {
                     $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([2, $oid]);
-                    $sumupClientId = 'cc_classic_0RuTRMSwQBFdU729lVbNcUaxlGyGM';
-                    $sumupClientSecret = 'cc_sk_classic_1VRCwYiFvv7izqeMdcCaUEw71JTYPezGhvz4yzfJru1uauljMV';
-                    if (!$sumupClientId || !$sumupClientSecret) {
-                        throw new Exception("SumUp API credentials are not set.");
-                    }
+                    $sumupClientId = 'YOUR_SUMUP_CLIENT_ID';
+                    $sumupClientSecret = 'YOUR_SUMUP_CLIENT_SECRET';
+                    if (!$sumupClientId || !$sumupClientSecret) throw new Exception("SumUp API credentials are not set.");
                     $authString = base64_encode($sumupClientId . ':' . $sumupClientSecret);
                     $ch = curl_init('https://api.sumup.com/token');
                     curl_setopt($ch, CURLOPT_POST, true);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-                        'grant_type' => 'client_credentials'
-                    ]));
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        "Authorization: Basic $authString",
-                        "Content-Type: application/x-www-form-urlencoded"
-                    ]);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['grant_type' => 'client_credentials']));
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Basic $authString", "Content-Type: application/x-www-form-urlencoded"]);
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     $result = curl_exec($ch);
                     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                     curl_close($ch);
-                    if (!$result) {
-                        throw new Exception("Could not get SumUp token. CURL Error: " . curl_error($ch));
-                    }
+                    if (!$result) throw new Exception("Could not get SumUp token. CURL Error: " . curl_error($ch));
                     $decoded = json_decode($result, true);
-                    if (empty($decoded['access_token'])) {
-                        throw new Exception("SumUp token response invalid: " . $result);
-                    }
+                    if (empty($decoded['access_token'])) throw new Exception("SumUp token response invalid: " . $result);
                     $accessToken = $decoded['access_token'];
                     $sumupAmount = number_format($total, 2, '.', '');
                     $checkoutRequest = [
@@ -597,27 +560,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "checkout_reference" => "Order-$oid",
                         "description" => "Order #$oid",
                         "pay_to_email" => "4ccc22b784fd4f6b893266d40e2c0482@developer.sumup.com",
-                        "return_url" => "http://" . $_SERVER['HTTP_HOST'] . "/arber-dobruna/index.php?payment=sumup&success=true&order_id=$oid",
+                        "return_url" => "http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=sumup&success=true&order_id=$oid",
                         "notify_url" => "http://" . $_SERVER['HTTP_HOST'] . "/sumup-webhook.php"
                     ];
                     $ch2 = curl_init('https://api.sumup.com/v0.1/checkouts');
                     curl_setopt($ch2, CURLOPT_POST, true);
                     curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode($checkoutRequest));
-                    curl_setopt($ch2, CURLOPT_HTTPHEADER, [
-                        "Authorization: Bearer $accessToken",
-                        "Content-Type: application/json"
-                    ]);
+                    curl_setopt($ch2, CURLOPT_HTTPHEADER, ["Authorization: Bearer $accessToken", "Content-Type: application/json"]);
                     curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
                     $result2 = curl_exec($ch2);
                     $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
                     curl_close($ch2);
-                    if (!$result2) {
-                        throw new Exception("SumUp checkout creation failed. CURL Error: " . curl_error($ch2));
-                    }
+                    if (!$result2) throw new Exception("SumUp checkout creation failed. CURL Error: " . curl_error($ch2));
                     $decoded2 = json_decode($result2, true);
-                    if (!$decoded2) {
-                        throw new Exception("Invalid JSON response from SumUp: " . $result2);
-                    }
+                    if (!$decoded2) throw new Exception("Invalid JSON response from SumUp: " . $result2);
                     if (isset($decoded2['status']) && $decoded2['status'] === 'PENDING') {
                         $pdo->commit();
                         $_SESSION['cart'] = [];
@@ -641,9 +597,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $payer = (new Payer())->setPaymentMethod('paypal');
                     $amount = (new Amount())->setTotal(number_format($total, 2, '.', ''))->setCurrency('EUR');
                     $transaction = (new Transaction())->setAmount($amount)->setDescription("Order ID: $oid");
-                    $redirectUrls = (new RedirectUrls())
-                        ->setReturnUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=true&order_id=$oid")
-                        ->setCancelUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=false&order_id=$oid");
+                    $redirectUrls = (new RedirectUrls())->setReturnUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=true&order_id=$oid")->setCancelUrl("http://" . $_SERVER['HTTP_HOST'] . "/index.php?payment=paypal&success=false&order_id=$oid");
                     $payment = (new Payment())->setIntent('sale')->setPayer($payer)->setTransactions([$transaction])->setRedirectUrls($redirectUrls);
                     $payment->create($paypal);
                     $_SESSION['paypal_payment_id'] = $payment->getId();
@@ -821,6 +775,7 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -845,95 +800,110 @@ try {
             z-index: 9999;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: center
         }
+
         .promo-banner .carousel-item img {
             height: 400px;
-            object-fit: cover;
+            object-fit: cover
         }
+
         .offers-section .card-img-top {
             height: 200px;
-            object-fit: cover;
+            object-fit: cover
         }
+
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
-                height: 250px;
+                height: 250px
             }
+
             .offers-section .card-img-top {
-                height: 150px;
+                height: 150px
             }
         }
+
         .btn.disabled,
         .btn:disabled {
             opacity: .65;
-            cursor: not-allowed;
+            cursor: not-allowed
         }
+
         .language-switcher {
             position: absolute;
             top: 10px;
-            right: 10px;
+            right: 10px
         }
+
         .order-summary {
             background-color: #f8f9fa;
             padding: 20px;
             border-radius: 5px;
             position: sticky;
-            top: 20px;
+            top: 20px
         }
+
         .order-title {
-            margin-bottom: 15px;
+            margin-bottom: 15px
         }
+
         .store-card.selected {
             border: 2px solid #0d6efd;
-            background-color: #e7f1ff;
+            background-color: #e7f1ff
         }
+
         .store-card .select-store-btn {
-            width: 100%;
+            width: 100%
         }
+
         .store-card {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 8px;
-            transition: box-shadow 0.3s;
-            height: 100%;
+            transition: box-shadow .3s;
+            height: 100%
         }
+
         .store-card:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, .1)
         }
+
         .store-card img {
             height: 60px;
             object-fit: contain;
-            margin-bottom: 10px;
+            margin-bottom: 10px
         }
+
         .store-card .card-title {
             font-size: 1.1rem;
-            margin-bottom: 5px;
+            margin-bottom: 5px
         }
+
         .store-card .card-text {
-            font-size: 0.9rem;
-            color: #555;
+            font-size: .9rem;
+            color: #555
         }
+
         .select-store-btn {
             margin-top: auto;
             padding: 8px 0;
-            font-size: 0.9rem;
+            font-size: .9rem
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
+
 <body>
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
-        <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"  aria-labelledby="storeClosedModalLabel" aria-hidden="true">
+        <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title"><?= htmlspecialchars($notification['title']) ?></h5>
                     </div>
-                    <div class="modal-body">
-                        <?= htmlspecialchars($notification['message']) ?>
-                    </div>
+                    <div class="modal-body"><?= htmlspecialchars($notification['message']) ?></div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         <a href="?action=change_address" class="btn btn-primary">Change Store</a>
@@ -943,25 +913,21 @@ try {
         </div>
     <?php endif; ?>
     <div class="loading-overlay" id="loading-overlay">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
     <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
-        <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display: block; background: rgba(0,0,0,0.5);">
+        <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display:block;background:rgba(0,0,0,0.5)">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
                             <h5 class="modal-title">Select Your Store</h5>
                             <?php if (!empty($main_store['cart_logo'])): ?>
-                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:60px; height:60px; object-fit:cover;">
+                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:60px;height:60px;object-fit:cover">
                             <?php endif; ?>
                         </div>
                         <div class="modal-body">
-                            <?php if (isset($error_message)): ?>
-                                <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
-                            <?php endif; ?>
+                            <?php if (isset($error_message)): ?><div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div><?php endif; ?>
                             <div class="mb-4">
                                 <label class="form-label fw-bold">Choose a Store</label>
                                 <div class="row" id="storeCardsContainer">
@@ -973,13 +939,11 @@ try {
                                     ?>
                                             <div class="col-md-4 col-sm-6 mb-3">
                                                 <div class="store-card d-flex flex-column" data-store-id="<?= htmlspecialchars($st['id']) ?>">
-                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg;">
+                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                                                     <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
                                                     <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
                                                     <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
-                                                    <button type="button" class="btn btn-outline-primary select-store-btn">
-                                                        <i class="bi bi-pin-map"></i> Select
-                                                    </button>
+                                                    <button type="button" class="btn btn-outline-primary select-store-btn"><i class="bi bi-pin-map"></i> Select</button>
                                                 </div>
                                             </div>
                                     <?php
@@ -987,14 +951,10 @@ try {
                                     } catch (PDOException $e) {
                                         log_error_markdown("Failed to fetch stores: " . $e->getMessage(), "Fetch Stores");
                                         echo '<div class="col-12"><div class="alert alert-danger">Unable to load stores at this time.</div></div>';
-                                    }
-                                    ?>
+                                    } ?>
                                 </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="delivery_address" class="form-label">Delivery Address</label>
-                                <input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
-                            </div>
+                            <div class="mb-3"><label for="delivery_address" class="form-label">Delivery Address</label><input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>"></div>
                             <div class="mb-3">
                                 <label class="form-label">Select Location on Map</label>
                                 <div id="map" style="height:300px;width:100%"></div>
@@ -1002,11 +962,7 @@ try {
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
                         </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-circle me-1"></i> Confirm
-                            </button>
-                        </div>
+                        <div class="modal-footer"><button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Confirm</button></div>
                     </form>
                 </div>
             </div>
@@ -1047,30 +1003,26 @@ try {
                     marker = L.marker(e.latlng).addTo(map);
                     document.getElementById('latitude').value = e.latlng.lat;
                     document.getElementById('longitude').value = e.latlng.lng;
-                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
-                        .then(r => r.json())
-                        .then(d => {
-                            if (d.display_name) {
-                                document.getElementById('delivery_address').value = d.display_name;
-                            }
-                        });
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`).then(r => r.json()).then(d => {
+                        if (d.display_name) {
+                            document.getElementById('delivery_address').value = d.display_name;
+                        }
+                    });
                 });
                 document.getElementById('delivery_address').addEventListener('change', function() {
                     let a = this.value.trim();
                     if (a.length > 5) {
-                        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(a)}`)
-                            .then(r => r.json())
-                            .then(d => {
-                                if (d && d.length > 0) {
-                                    if (marker) map.removeLayer(marker);
-                                    let lat = parseFloat(d[0].lat),
-                                        lon = parseFloat(d[0].lon);
-                                    marker = L.marker([lat, lon]).addTo(map);
-                                    map.setView([lat, lon], 13);
-                                    document.getElementById('latitude').value = lat;
-                                    document.getElementById('longitude').value = lon;
-                                }
-                            });
+                        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(a)}`).then(r => r.json()).then(d => {
+                            if (d && d.length > 0) {
+                                if (marker) map.removeLayer(marker);
+                                let lat = parseFloat(d[0].lat),
+                                    lon = parseFloat(d[0].lon);
+                                marker = L.marker([lat, lon]).addTo(map);
+                                map.setView([lat, lon], 13);
+                                document.getElementById('latitude').value = lat;
+                                document.getElementById('longitude').value = lon;
+                            }
+                        });
                     }
                 });
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
@@ -1083,9 +1035,7 @@ try {
                         });
                         return;
                     }
-                    if (!document.getElementById('delivery_address').value.trim() ||
-                        !document.getElementById('latitude').value ||
-                        !document.getElementById('longitude').value) {
+                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value) {
                         e.preventDefault();
                         Swal.fire({
                             icon: 'warning',
@@ -1106,18 +1056,7 @@ try {
         </script>
     <?php endif; ?>
     <?php
-    $includes = [
-        'edit_cart.php',
-        'header.php',
-        'reservation.php',
-        'promotional_banners.php',
-        'special_offers.php',
-        'checkout.php',
-        'order_success.php',
-        'cart_modal.php',
-        'toast_notifications.php',
-        
-    ];
+    $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'order_success.php', 'cart_modal.php', 'toast_notifications.php'];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
     }
@@ -1127,42 +1066,20 @@ try {
             <div class="modal-content">
                 <form method="POST" action="index.php" id="checkoutForm">
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" name="customer_name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">E-Mail <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" name="customer_email" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Telefon <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" name="customer_phone" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Lieferadresse <span class="text-danger">*</span></label>
-                            <textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label>
-                                <input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung
-                            </label>
-                        </div>
+                        <div class="mb-3"><label class="form-label">Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="customer_name" required></div>
+                        <div class="mb-3"><label class="form-label">E-Mail <span class="text-danger">*</span></label><input type="email" class="form-control" name="customer_email" required></div>
+                        <div class="mb-3"><label class="form-label">Telefon <span class="text-danger">*</span></label><input type="tel" class="form-control" name="customer_phone" required></div>
+                        <div class="mb-3"><label class="form-label">Lieferadresse <span class="text-danger">*</span></label><textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea></div>
+                        <div class="mb-3"><label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung</label></div>
                         <div id="event_details" style="display:none">
-                            <div class="mb-3">
-                                <label class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" name="scheduled_time">
-                            </div>
+                            <div class="mb-3"><label class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label><input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>"></div>
+                            <div class="mb-3"><label class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label><input type="time" class="form-control" name="scheduled_time"></div>
                         </div>
                         <script>
                             document.getElementById('event_checkbox').addEventListener('change', function() {
-                                let ed = document.getElementById('event_details');
-                                let sd = document.querySelector('[name="scheduled_date"]');
-                                let st = document.querySelector('[name="scheduled_time"]');
+                                let ed = document.getElementById('event_details'),
+                                    sd = document.querySelector('[name="scheduled_date"]'),
+                                    st = document.querySelector('[name="scheduled_time"]');
                                 if (this.checked) {
                                     ed.style.display = 'block';
                                     sd.required = true;
@@ -1176,22 +1093,10 @@ try {
                         </script>
                         <div class="mb-3">
                             <label class="form-label">Zahlungsmethode <span class="text-danger">*</span></label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="payment_method" value="sumup" required id="paymentSumUp" disabled>
-                                <label class="form-check-label" for="paymentSumUp"><i class="bi bi-credit-card-2-front"></i> SumUp (Soon)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal">
-                                <label class="form-check-label" for="paymentPayPal"><i class="bi bi-paypal"></i> PayPal</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup">
-                                <label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Abholung</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash">
-                                <label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Nachnahme</label>
-                            </div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="sumup" required id="paymentSumUp" disabled><label class="form-check-label" for="paymentSumUp"><i class="bi bi-credit-card-2-front"></i> SumUp (Soon)</label></div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal"><label class="form-check-label" for="paymentPayPal"><i class="bi bi-paypal"></i> PayPal</label></div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup"><label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Abholung</label></div>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash"><label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Nachnahme</label></div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Trinkgeld auswählen</label>
@@ -1200,13 +1105,8 @@ try {
                                 <?php foreach ($tip_options as $t): ?>
                                     <option value="<?= htmlspecialchars($t['id']) ?>" <?= ($selT == $t['id'] ? 'selected' : '') ?>>
                                         <?= htmlspecialchars($t['name']) ?>
-                                        <?php
-                                        if (!empty($t['percentage'])) {
-                                            echo " ({$t['percentage']}%)";
-                                        } elseif (!empty($t['amount'])) {
-                                            echo " (+" . number_format($t['amount'], 2) . "€)";
-                                        }
-                                        ?>
+                                        <?php if (!empty($t['percentage'])) echo " ({$t['percentage']}%)";
+                                        elseif (!empty($t['amount'])) echo " (+" . number_format($t['amount'], 2) . "€)"; ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -1217,28 +1117,17 @@ try {
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div class="ms-2 me-auto">
-                                            <div class="fw-bold">
-                                                <?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?>
-                                                <?= isset($it['size']) ? " (Größe: " . htmlspecialchars($it['size']) . ")" : '' ?>
-                                            </div>
+                                            <div class="fw-bold"><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?= isset($it['size']) ? " (Größe: " . htmlspecialchars($it['size']) . ")" : '' ?></div>
                                             <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
                                                 <ul class="mb-1">
                                                     <?php if (!empty($it['extras'])): ?>
                                                         <li><strong>Extras:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['extras'] as $ex): ?>
-                                                                    <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
+                                                            <ul><?php foreach ($it['extras'] as $ex): ?><li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li><?php endforeach; ?></ul>
                                                         </li>
                                                     <?php endif; ?>
                                                     <?php if (!empty($it['sauces'])): ?>
                                                         <li><strong>Saucen:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['sauces'] as $sx): ?>
-                                                                    <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
+                                                            <ul><?php foreach ($it['sauces'] as $sx): ?><li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li><?php endforeach; ?></ul>
                                                         </li>
                                                     <?php endif; ?>
                                                     <?php if (!empty($it['drink'])): ?>
@@ -1262,9 +1151,7 @@ try {
                                 </li>
                             <?php endforeach; ?>
                             <?php if ($tip_amount > 0): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <strong>Trinkgeld</strong><span><?= number_format($tip_amount, 2) ?>€</span>
-                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Trinkgeld</strong><span><?= number_format($tip_amount, 2) ?>€</span></li>
                             <?php endif; ?>
                             <?php if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -1278,27 +1165,19 @@ try {
                             <input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code">
                             <button type="submit" name="apply_coupon" class="btn btn-outline-primary ms-2">Apply</button>
                         </form>
-                        <?php if (isset($_GET['coupon_error'])): ?>
-                            <div class="alert alert-danger p-1 text-center"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
-                        <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
-                            <div class="alert alert-success p-1 text-center">Coupon applied!</div>
+                        <?php if (isset($_GET['coupon_error'])): ?><div class="alert alert-danger p-1 text-center"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
+                        <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?><div class="alert alert-success p-1 text-center">Coupon applied!</div>
                         <?php endif; ?>
-                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-3" <?= ($is_closed ? 'disabled' : '') ?>>
-                            <i class="bi bi-bag-check-fill"></i> Bestellung abschicken
-                        </button>
+                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-3" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     <ul class="nav nav-tabs justify-content-center my-4">
-        <li class="nav-item">
-            <a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a>
-        </li>
+        <li class="nav-item"><a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a></li>
         <?php foreach ($categories as $cItem): ?>
-            <li class="nav-item">
-                <a class="nav-link <?= ($selC === $cItem['id'] ? 'active' : '') ?>" href="index.php?category_id=<?= $cItem['id'] ?>"><?= htmlspecialchars($cItem['name']) ?></a>
-            </li>
+            <li class="nav-item"><a class="nav-link <?= ($selC === $cItem['id'] ? 'active' : '') ?>" href="index.php?category_id=<?= $cItem['id'] ?>"><?= htmlspecialchars($cItem['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
     <main class="container my-5">
@@ -1311,26 +1190,16 @@ try {
                                 <div class="position-relative">
                                     <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                                     <?php if ($pd['is_new'] || $pd['is_offer']): ?>
-                                        <span class="badge <?= ($pd['is_new'] ? 'bg-success' : 'bg-warning text-dark') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2">
-                                            <?= ($pd['is_new'] ? 'New' : 'Offer') ?>
-                                        </span>
+                                        <span class="badge <?= ($pd['is_new'] ? 'bg-success' : 'bg-warning text-dark') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2"><?= ($pd['is_new'] ? 'New' : 'Offer') ?></span>
                                     <?php endif; ?>
                                 </div>
                                 <div class="card-body d-flex flex-column">
                                     <h5 class="card-title"><?= htmlspecialchars($pd['name']) ?></h5>
                                     <p class="card-text"><?= htmlspecialchars($pd['description']) ?></p>
-                                    <?php if ($pd['allergies']): ?>
-                                        <p class="card-text text-danger">
-                                            <strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?>
-                                        </p>
-                                    <?php endif; ?>
+                                    <?php if ($pd['allergies']): ?><p class="card-text text-danger"><strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?></p><?php endif; ?>
                                     <div class="mt-auto">
-                                        <strong>
-                                            <?= !empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€" ?>
-                                        </strong>
-                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?> title="<?= ($is_closed ? 'Store is closed' : '') ?>">
-                                            <i class="bi bi-cart-plus"></i>
-                                        </button>
+                                        <strong><?= !empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€" ?></strong>
+                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?> title="<?= ($is_closed ? 'Store is closed' : '') ?>"><i class="bi bi-cart-plus"></i></button>
                                     </div>
                                 </div>
                             </div>
@@ -1420,10 +1289,7 @@ try {
                                                         <textarea class="form-control" name="special_instructions" rows="2"></textarea>
                                                     </div>
                                                     <div class="bg-light p-2 mb-2 rounded">
-                                                        <strong>Estimated Price: </strong>
-                                                        <span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1.25rem;color:#d3b213">
-                                                            <?= number_format($pd['base_price'], 2) ?>€
-                                                        </span>
+                                                        <strong>Estimated Price: </strong><span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1.25rem;color:#d3b213"><?= number_format($pd['base_price'], 2) ?>€</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1443,22 +1309,17 @@ try {
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content">
                                         <div class="modal-header">
-                                            <h5 class="modal-title">Allergies for <?= htmlspecialchars($pd['name']) ?></h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            <h5 class="modal-title">Allergies for <?= htmlspecialchars($pd['name']) ?></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                         </div>
                                         <div class="modal-body">
                                             <ul class="list-group">
-                                                <?php
-                                                $algArr = array_map('trim', explode(',', $pd['allergies']));
-                                                foreach ($algArr as $alg):
-                                                ?>
+                                                <?php $algArr = array_map('trim', explode(',', $pd['allergies']));
+                                                foreach ($algArr as $alg): ?>
                                                     <li class="list-group-item"><?= htmlspecialchars($alg) ?></li>
                                                 <?php endforeach; ?>
                                             </ul>
                                         </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                        </div>
+                                        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
                                     </div>
                                 </div>
                             </div>
@@ -1470,14 +1331,11 @@ try {
                 <div class="order-summary">
                     <h2 class="order-title">YOUR ORDER</h2>
                     <?php if (!empty($main_store['logo'])): ?>
-                        <div class="mb-3 text-center">
-                            <img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
-                        </div>
+                        <div class="mb-3 text-center"><img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';"></div>
                     <?php endif; ?>
                     <?php if (!empty($main_store['cart_description'])): ?>
                         <div class="mb-4" id="cart-description">
-                            <p><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p>
-                            <?= htmlspecialchars($_SESSION['store_name'] ?? '') ?>
+                            <p><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?>
                         </div>
                     <?php endif; ?>
                     <p class="card-text">
@@ -1485,8 +1343,7 @@ try {
                         <strong>Shipping base fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €<br>
                         <strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €<br>
                     </p>
-                    <?php
-                    if ($main_store) {
+                    <?php if ($main_store) {
                         $wd = @json_decode($main_store['work_schedule'] ?? '', true);
                         if (isset($wd['days'])) {
                             echo "<p><strong>Store Schedule:</strong><br>";
@@ -1497,8 +1354,7 @@ try {
                             }
                             echo "</p>";
                         }
-                    }
-                    ?>
+                    } ?>
                     <?php if (!empty($_SESSION['delivery_address'])): ?>
                         <div class="mb-3">
                             <h5>Delivery Address</h5>
@@ -1518,20 +1374,12 @@ try {
                                                 <ul>
                                                     <?php if (!empty($it['extras'])): ?>
                                                         <li><strong>Extras:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['extras'] as $ex): ?>
-                                                                    <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
+                                                            <ul><?php foreach ($it['extras'] as $ex): ?><li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li><?php endforeach; ?></ul>
                                                         </li>
                                                     <?php endif; ?>
                                                     <?php if (!empty($it['sauces'])): ?>
                                                         <li><strong>Saucen:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['sauces'] as $sx): ?>
-                                                                    <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
+                                                            <ul><?php foreach ($it['sauces'] as $sx): ?><li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li><?php endforeach; ?></ul>
                                                         </li>
                                                     <?php endif; ?>
                                                     <?php if (!empty($it['drink'])): ?>
@@ -1564,87 +1412,52 @@ try {
                             <?php endif; ?>
                             <h4>Total: <?= number_format($cart_total_with_tip, 2) ?>€</h4>
                             <form method="POST" action="index.php" class="mb-3 d-flex">
-                                <input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code" />
+                                <input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code">
                                 <button type="submit" name="apply_coupon" class="btn btn-outline-primary ms-2">Apply</button>
                             </form>
-                            <?php if (isset($_GET['coupon_error'])): ?>
-                                <div class="alert alert-danger p-1 text-center"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
-                            <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
-                                <div class="alert alert-success p-1 text-center">Coupon applied!</div>
+                            <?php if (isset($_GET['coupon_error'])): ?><div class="alert alert-danger p-1 text-center"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
+                            <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?><div class="alert alert-success p-1 text-center">Coupon applied!</div>
                             <?php endif; ?>
-                            <button class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>>
-                                <i class="bi bi-bag-check-fill"></i> Bestellung abschicken
-                            </button>
-                        <?php else: ?>
-                            <p>Your cart is empty.</p>
-                        <?php endif; ?>
+                            <button class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
+                        <?php else: ?><p>Your cart is empty.</p><?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
     </main>
-    <?php include 'footer.php'; ?>
-    <?php include 'rules.php'; ?>
+    <?php include 'footer.php';
+    include 'rules.php'; ?>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(function() {
             $('#loading-overlay').fadeOut('slow');
-            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Added to Cart',
-                    text: 'Item has been added to your cart.',
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            <?php endif; ?>
-            <?php if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Removed',
-                    text: 'Item removed from cart.',
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            <?php endif; ?>
-            <?php if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Updated',
-                    text: 'Cart updated.',
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            <?php endif; ?>
-            <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
-                Swal.fire({
-                        icon: 'success',
-                        title: 'Order Successful',
-                        text: 'Your order has been placed successfully.',
-                        timer: 5000,
-                        showConfirmButton: false
-                    })
-                    .then(() => {
-                        window.location.href = 'index.php';
-                    });
-            <?php endif; ?>
-            <?php if (isset($_GET['error'])): ?>
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: '<?= htmlspecialchars($_GET['error']) ?>'
-                });
-            <?php endif; ?>
+            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>alert("Item has been added to your cart.");
+        <?php endif; ?>
+        <?php if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>alert("Item removed from cart.");
+        <?php endif; ?>
+        <?php if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>alert("Cart updated.");
+        <?php endif; ?>
+        <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
+            alert("Your order has been placed successfully.");
+            window.location.href = 'index.php';
+        <?php endif; ?>
+        <?php if (isset($_GET['error'])): ?>alert("Error: <?= htmlspecialchars($_GET['error']) ?>");
+        <?php endif; ?>
+        <?php if (isset($_GET['empty_cart']) && $_GET['empty_cart'] == 1): ?>alert("Your cart is empty. Please add items before checking out.");
+        <?php endif; ?>
+        <?php if (isset($_GET['out_of_stock']) && $_GET['out_of_stock'] == 1): ?>alert("One or more items in your cart are out of stock. Please adjust your cart.");
+        <?php endif; ?>
         });
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
+
             function updateEstimatedPrice(form) {
-                let base = parseFloat(form.dataset.baseprice || "0");
-                let pid = form.dataset.productid;
+                let base = parseFloat(form.dataset.baseprice || "0"),
+                    pid = form.dataset.productid;
                 let es = document.getElementById("estimated-price-" + pid);
                 let q = parseFloat(form.querySelector('.quantity-selector').value || "1");
                 if (q < 1) q = 1;
@@ -1652,8 +1465,8 @@ try {
                 let sp = (sz && sz.value) ? parseFloat(sz.selectedOptions[0].dataset.sizeprice || "0") : 0;
                 let totalExtras = 0;
                 form.querySelectorAll('.item-quantity').forEach(iq => {
-                    let ip = parseFloat(iq.dataset.price || "0");
-                    let iv = parseFloat(iq.value || "0");
+                    let ip = parseFloat(iq.dataset.price || "0"),
+                        iv = parseFloat(iq.value || "0");
                     if (iv > 0) totalExtras += ip * iv;
                 });
                 let dr = form.querySelector('.drink-selector');
@@ -1661,6 +1474,7 @@ try {
                 let final = (base + sp + totalExtras + dp) * q;
                 if (es) es.textContent = final.toFixed(2) + "€";
             }
+
             function limitSauceQuantities(form) {
                 let sz = form.querySelector('.size-selector');
                 if (!sz || !sz.value) return;
@@ -1674,13 +1488,14 @@ try {
                 if (total > maxS) {
                     alert("Max " + maxS + " sauce(s) allowed for this size!");
                     if (window.lastChangedSauceInput) {
-                        let cval = parseInt(window.lastChangedSauceInput.value || '0', 10);
-                        let diff = total - maxS;
+                        let cval = parseInt(window.lastChangedSauceInput.value || '0', 10),
+                            diff = total - maxS;
                         let revertVal = Math.max(0, cval - diff);
                         window.lastChangedSauceInput.value = revertVal;
                     }
                 }
             }
+
             function updateSizeSpecificOptions(form, sd) {
                 let se = [],
                     ss = [];
@@ -1699,15 +1514,7 @@ try {
                     ec.innerHTML = '';
                     if (se.length > 0) {
                         se.forEach(e => {
-                            ec.innerHTML += `
-                                <div class="mb-2 d-flex align-items-center">
-                                    <input type="number" class="form-control me-2 item-quantity" style="width:80px"
-                                           name="extras[${e.name}]"
-                                           data-price="${parseFloat(e.price).toFixed(2)}"
-                                           data-productid="${form.dataset.productid}"
-                                           value="0" min="0" step="1">
-                                    <span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span>
-                                </div>`;
+                            ec.innerHTML += `<div class="mb-2 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity" style="width:80px" name="extras[${e.name}]" data-price="${parseFloat(e.price).toFixed(2)}" data-productid="${form.dataset.productid}" value="0" min="0" step="1"><span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
                         });
                     }
                 }
@@ -1716,42 +1523,33 @@ try {
                     sc.innerHTML = '';
                     if (ss.length > 0) {
                         ss.forEach(e => {
-                            sc.innerHTML += `
-                                <div class="mb-2 d-flex align-items-center">
-                                    <input type="number" class="form-control me-2 item-quantity sauce-quantity" style="width:80px"
-                                           name="sauces[${e.name}]"
-                                           data-price="${parseFloat(e.price).toFixed(2)}"
-                                           data-productid="${form.dataset.productid}"
-                                           value="0" min="0" step="1">
-                                    <span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span>
-                                </div>`;
+                            sc.innerHTML += `<div class="mb-2 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity sauce-quantity" style="width:80px" name="sauces[${e.name}]" data-price="${parseFloat(e.price).toFixed(2)}" data-productid="${form.dataset.productid}" value="0" min="0" step="1"><span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
                         });
                     }
                 }
                 initializeEventListeners(form);
             }
+
             function initializeEventListeners(form) {
                 form.querySelectorAll('.item-quantity').forEach(iq => {
                     iq.addEventListener('change', () => {
-                        updateEstimatedPrice(form);
                         if (iq.classList.contains('sauce-quantity')) {
                             window.lastChangedSauceInput = iq;
                             limitSauceQuantities(form);
                         }
+                        updateEstimatedPrice(form);
                     });
                 });
                 let sz = form.querySelector('.size-selector');
-                if (sz) {
-                    sz.addEventListener('change', function() {
-                        let sd = {
-                            sizesExtras: this.selectedOptions[0].dataset.sizesExtras || '[]',
-                            sizesSauces: this.selectedOptions[0].dataset.sizesSauces || '[]'
-                        };
-                        updateSizeSpecificOptions(form, sd);
-                        limitSauceQuantities(form);
-                        updateEstimatedPrice(form);
-                    });
-                }
+                if (sz) sz.addEventListener('change', function() {
+                    let sd = {
+                        sizesExtras: this.selectedOptions[0].dataset.sizesExtras || '[]',
+                        sizesSauces: this.selectedOptions[0].dataset.sizesSauces || '[]'
+                    };
+                    updateSizeSpecificOptions(form, sd);
+                    limitSauceQuantities(form);
+                    updateEstimatedPrice(form);
+                });
                 let dr = form.querySelector('.drink-selector');
                 if (dr) dr.addEventListener('change', () => updateEstimatedPrice(form));
                 let qty = form.querySelector('.quantity-selector');
@@ -1761,8 +1559,8 @@ try {
             document.querySelectorAll('.add-to-cart-form').forEach(f => {
                 initializeEventListeners(f);
             });
-            let observer = new MutationObserver(mutations => {
-                mutations.forEach(mu => {
+            let observer = new MutationObserver(muts => {
+                muts.forEach(mu => {
                     if (mu.type === 'childList') {
                         mu.addedNodes.forEach(node => {
                             if (node.nodeType === Node.ELEMENT_NODE) {
@@ -1781,5 +1579,6 @@ try {
         });
     </script>
 </body>
+
 </html>
 <?php ob_end_flush(); ?>
