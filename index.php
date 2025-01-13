@@ -1093,10 +1093,10 @@ try {
                                 <label for="delivery_address" class="form-label">Delivery Address</label>
                                 <input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
                             </div>
-                            <div class="mb-3">
+                            <!-- <div class="mb-3">
                                 <label class="form-label">Select Location on Map</label>
                                 <div id="map" style="height:300px;width:100%"></div>
-                            </div>
+                            </div> -->
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
                         </div>
@@ -1225,21 +1225,28 @@ try {
                 <form method="POST" action="index.php" id="checkoutForm">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <label class="form-label">Vollständiger Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" name="customer_name" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Kontaktnummer <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" name="customer_phone" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">E-Mail <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" name="customer_email" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Telefon <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" name="customer_phone" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Lieferadresse <span class="text-danger">*</span></label>
+                            <label class="form-label">Standort <span class="text-danger">*</span></label>
                             <textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea>
                         </div>
+                        <!-- Postleitzahl -->
+                        <div class="mb-3">
+                            <label class="form-label">Postleitzahl <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="postal_code" required>
+                        </div>
+                        
                         <div class="mb-3">
                             <label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung</label>
                         </div>
