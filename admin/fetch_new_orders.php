@@ -1,46 +1,31 @@
 <?php
-// admin/fetch_new_orders.php
-
-require_once 'includes/db_connect.php';
-
-// Set Content-Type to JSON
+// fetch_new_orders.php
 header('Content-Type: application/json');
+require_once 'includes/db_connect.php'; // adjust path if needed
 
-// Initialize response array
-$response = [];
-
-// Retrieve and validate 'last_order_id' parameter
-$last_order_id = isset($_GET['last_order_id']) ? (int) $_GET['last_order_id'] : 0;
-
-// Validate 'last_order_id'
-if ($last_order_id < 0) {
-    $response['error'] = 'Invalid last_order_id parameter.';
-    echo json_encode($response);
-    exit();
-}
+// Get the last known order ID from the GET parameter
+$last_id = isset($_GET['last_id']) ? (int)$_GET['last_id'] : 0;
 
 try {
-    // Fetch new orders with id > 'last_order_id'
-    $stmt = $pdo->prepare('
-        SELECT orders.*, order_statuses.status 
-        FROM orders 
-        JOIN order_statuses ON orders.status_id = order_statuses.id 
-        WHERE orders.id > ? 
-        ORDER BY orders.created_at ASC
-    ');
-    $stmt->execute([$last_order_id]);
+    // Fetch new orders with status 'New Order' and ID greater than last_id
+    $stmt = $pdo->prepare("
+        SELECT o.* 
+        FROM orders o
+        WHERE o.status = 'New Order'
+          AND o.is_deleted = 0
+          AND o.id > ?
+        ORDER BY o.id ASC
+    ");
+    $stmt->execute([$last_id]);
     $new_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Optionally, you can fetch associated order items, extras, and drinks here
-    // For simplicity, only order details are fetched
-
-    // Populate response
-    $response['new_orders'] = $new_orders;
+    echo json_encode([
+        'status'    => 'success',
+        'newOrders' => $new_orders
+    ]);
 } catch (PDOException $e) {
-    // Log the error and respond with an error message
-    error_log("Error in fetch_new_orders.php: " . $e->getMessage());
-    $response['error'] = 'Failed to fetch new orders.';
+    echo json_encode([
+        'status'  => 'error',
+        'message' => $e->getMessage()
+    ]);
 }
-
-// Return the JSON response
-echo json_encode($response);

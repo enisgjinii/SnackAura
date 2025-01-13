@@ -1,5 +1,8 @@
 <?php
+// orders.php
+
 ob_start();
+session_start(); // Ensure session is started
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require '../vendor/autoload.php';
@@ -151,6 +154,12 @@ function getTopProducts($pdo)
     return array_slice($count, 0, 10, true);
 }
 
+// Define a function to generate a safe table ID based on status
+function generate_table_id($status)
+{
+    return 'table-' . strtolower(str_replace(' ', '_', $status));
+}
+$delivery_users = getDeliveryUsers($pdo);
 try {
     switch ($action) {
         case 'view_details':
@@ -907,7 +916,7 @@ try {
                     </h6>
                     <?php if (!empty($status_orders[$st])): ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover table-bordered align-middle data-table">
+                            <table class="table table-striped table-hover table-bordered align-middle data-table" id="<?= generate_table_id($st) ?>">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>ID</th>
@@ -1027,7 +1036,8 @@ try {
 
     <!-- Notification Script -->
     <script>
-        $(function() {
+        $(document).ready(function() {
+            // Initialize DataTables for all tables
             $('.data-table').DataTable({
                 paging: true,
                 searching: true,
@@ -1040,27 +1050,150 @@ try {
                 }
             });
 
+            // Get the highest order ID in the 'New Order' table on page load
+            let lastOrderId = 0;
+            const newOrderTableId = 'table-new_order'; // Adjust if the table ID format is different
+
+            // Function to find the highest order ID in the 'New Order' table
+            function initializeLastOrderId() {
+                $('#' + newOrderTableId + ' tbody tr').each(function() {
+                    const currentId = parseInt($(this).find('td').eq(0).text(), 10);
+                    if (currentId > lastOrderId) {
+                        lastOrderId = currentId;
+                    }
+                });
+            }
+
+            initializeLastOrderId();
+
             // Notification Sound Handling
             const orderSound = document.getElementById('orderSound');
-            let lastCount = 0;
 
-            // Polling function to check for new orders
+            // Polling function to check for new orders every 5 seconds
             setInterval(() => {
-                $.get('order_notifier.php', function(data) {
-                    if (data.status === 'success') {
-                        const currentCount = parseInt(data.countNew, 10) || 0;
-                        if (currentCount > lastCount) {
-                            // Play notification sound
-                            orderSound.play();
+                $.ajax({
+                    url: 'fetch_new_orders.php',
+                    method: 'GET',
+                    data: {
+                        last_id: lastOrderId
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            const newOrders = response.newOrders;
+                            if (newOrders.length > 0) {
+                                const table = $('#' + newOrderTableId).DataTable();
+                                newOrders.forEach(order => {
+                                    // Prepare Tip Badge
+                                    let tipBadge = 'N/A';
+                                    if (order.tip_name) {
+                                        const tipValue = order.tip_percentage !== null ? htmlspecialchars(order.tip_percentage) + '%' : parseFloat(order.tip_fixed_amount).toFixed(2) + '€';
+                                        tipBadge = `<span class='badge bg-info'>${htmlspecialchars(order.tip_name)}</span> (${tipValue})`;
+                                    }
+
+                                    // Prepare Assign Form if Admin
+                                    let assignForm = '';
+                                    <?php if ($user_role === 'admin'): ?>
+                                        assignForm = `<form method="POST" action="orders.php?action=assign_delivery&id=${order.id}" class="assign-form">
+                                                        <select name="delivery_user_id" class="form-select form-select-sm me-1" required>
+                                                            <option value="">Choose</option>
+                                                            <?php foreach ($delivery_users as $du): ?>
+                                                                <option value="<?= htmlspecialchars($du['id']) ?>"><?= htmlspecialchars($du['username']) ?></option>
+                                                            <?php endforeach; ?>
+                                                        </select>
+                                                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-person-check"></i></button>
+                                                    </form>`;
+                                    <?php endif; ?>
+
+                                    // Prepare Actions Buttons
+                                    let actions = `<a href="orders.php?action=view_details&id=${order.id}" class="btn btn-sm btn-info me-1" style="font-size:.7rem;"><i class="bi bi-eye"></i></a>
+                                                   <a href="orders.php?action=update_status_form&id=${order.id}" class="btn btn-sm btn-warning me-1" style="font-size:.7rem;"><i class="bi bi-pencil"></i></a>`;
+                                    <?php if ($user_role === 'admin'): ?>
+                                        actions += `<a href="orders.php?action=delete&id=${order.id}" class="btn btn-sm btn-danger me-1" style="font-size:.7rem;" onclick="return confirm('Move to trash?');"><i class="bi bi-trash"></i></a>
+                                                    <button type="button" class="btn btn-sm btn-secondary me-1" style="font-size:.7rem;" data-bs-toggle="modal" data-bs-target="#delayModal${order.id}"><i class="bi bi-clock"></i></button>`;
+                                    <?php endif; ?>
+
+                                    // Append the new order to the 'New Order' table
+                                    table.row.add([
+                                        order.id,
+                                        htmlspecialchars(order.customer_name),
+                                        htmlspecialchars(order.customer_email),
+                                        htmlspecialchars(order.customer_phone),
+                                        htmlspecialchars(order.delivery_address),
+                                        parseFloat(order.total_amount).toFixed(2),
+                                        tipBadge,
+                                        parseFloat(order.tip_amount).toFixed(2),
+                                        htmlspecialchars(order.scheduled_date || 'N/A'),
+                                        htmlspecialchars(order.scheduled_time || 'N/A'),
+                                        htmlspecialchars(order.created_at),
+                                        htmlspecialchars(order.status),
+                                        <?php if ($user_role === 'admin'): ?>
+                                            assignForm,
+                                        <?php endif; ?>(order.coupon_code || ''),
+                                        parseFloat(order.coupon_discount || 0).toFixed(2),
+                                        actions
+                                    ]).draw(false);
+
+                                    // Update lastOrderId
+                                    if (order.id > lastOrderId) {
+                                        lastOrderId = order.id;
+                                    }
+
+                                    // Optionally, add Delay Modal for Admin
+                                    <?php if ($user_role === 'admin'): ?>
+                                        const delayModal = `
+                                            <div class="modal fade" id="delayModal${order.id}">
+                                                <div class="modal-dialog modal-dialog-centered" style="font-size:.8rem;">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-secondary text-white" style="padding:.4rem;">
+                                                            Delay Notification #${order.id}
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <form method="POST" action="orders.php?action=send_delay_notification&id=${order.id}">
+                                                            <div class="modal-body">
+                                                                <div class="mb-2">
+                                                                    <label for="additional_time_${order.id}" class="form-label">Additional Time (hours)</label>
+                                                                    <input type="number" class="form-control" id="additional_time_${order.id}" name="additional_time" min="1" required>
+                                                                </div>
+                                                                <p>Send Delay Notification?</p>
+                                                            </div>
+                                                            <div class="modal-footer" style="padding:.4rem;">
+                                                                <button type="button" class="btn btn-secondary" style="font-size:.7rem;" data-bs-dismiss="modal">Cancel</button>
+                                                                <button type="submit" class="btn btn-warning" style="font-size:.7rem;">Send</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `;
+                                        $('body').append(delayModal);
+                                    <?php endif; ?>
+                                });
+
+                                // Play notification sound
+                                orderSound.play();
+                            }
+                        } else {
+                            console.error('Fetch New Orders Error:', response.message);
                         }
-                        lastCount = currentCount;
-                    } else {
-                        console.error('Notifier error:', data.message);
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        console.error('AJAX Error:', textStatus, errorThrown);
                     }
-                }, 'json').fail(function(jqXHR, textStatus, errorThrown) {
-                    console.error('Notifier AJAX error:', textStatus, errorThrown);
                 });
             }, 5000); // Poll every 5 seconds
+
+            // Function to escape HTML to prevent XSS
+            function htmlspecialchars(str) {
+                if (typeof str !== 'string') {
+                    return str;
+                }
+                return str.replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
         });
     </script>
     <?php ob_end_flush(); ?>

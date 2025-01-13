@@ -58,40 +58,6 @@
         $(window).resize(toggleSidebar);
     });
 </script>
-<script>
-    // Adjust the path to your MP3 or WAV file:
-    const orderSound = new Audio("alert.mp3");
-
-    // Keep track of the last known count:
-    let lastCount = 0;
-
-    // Poll the server every X seconds (e.g., 5 seconds)
-    setInterval(() => {
-        fetch("./order_notifier.php")
-            .then(response => response.json())
-            .then(data => {
-                // data.countNew is the number of orders with "New Order" status
-                const currentCount = data.countNew ?? 0;
-
-                // If there are *more* new orders than before, we can play a sound:
-                // if (currentCount > lastCount) {
-                //     // Play the notification sound:
-                //     orderSound.play();
-                // }
-
-                // If you want the sound to play *continuously* as long as there's *any* "New Order",
-                // you can do this check:
-                if (currentCount > 0) {
-                  orderSound.play();
-                }
-
-                lastCount = currentCount;
-            })
-            .catch(err => {
-                console.error("Notifier error:", err);
-            });
-    }, 5000);
-</script>
 
 
 </body>
