@@ -7,34 +7,42 @@ require '../vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// Error Logging
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
 function log_error($m, $c = '')
 {
     $t = date('Y-m-d H:i:s');
     file_put_contents(ERROR_LOG_FILE, "### [$t] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES, 'UTF-8') . "\n" . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES, 'UTF-8') . "\n" : '') . "---\n\n", FILE_APPEND | LOCK_EX);
 }
+
+// Email Functions
 function sendEmail($to, $toName, $sub, $body)
 {
     $mail = new PHPMailer(true);
     try {
+        // SMTP Configuration
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'egjini17@gmail.com';
-        $mail->Password = 'axnjsldfudhohipv';
+        $mail->Password = 'axnjsldfudhohipv'; // **Important:** Store passwords securely!
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
+
+        // Email Headers
         $mail->setFrom('egjini17@gmail.com', 'Yumiis');
         $mail->addAddress($to, $toName);
         $mail->isHTML(true);
         $mail->CharSet = 'UTF-8';
         $mail->Subject = $sub;
         $mail->Body = $body;
+
         $mail->send();
     } catch (Exception $e) {
         log_error("Mail Error: " . $mail->ErrorInfo, "Sending Email to: $to");
     }
 }
+
 function sendStatusUpdateEmail($e, $n, $oid, $st, $sd = null, $stm = null)
 {
     $sub = "Order #$oid Status Updated";
@@ -42,18 +50,22 @@ function sendStatusUpdateEmail($e, $n, $oid, $st, $sd = null, $stm = null)
     $b = "<html><body><h2>Hello, $n</h2><p>Your order #$oid status is now <strong>$st</strong>.</p>$i<p>Thank you for choosing Yumiis!</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
+
 function sendDelayNotificationEmail($e, $n, $oid, $t)
 {
     $sub = "Delay Notification for Order #$oid";
     $b = "<html><body><h2>Hello, $n</h2><p>Your order #$oid may be delayed by $t hour(s).</p><p>Please let us know if this is acceptable.</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
+
 function notifyDeliveryPerson($e, $n, $oid, $st)
 {
     $sub = "New Order Assigned - Order #$oid";
     $b = "<html><body><h2>Hello, $n</h2><p>You have been assigned to order #$oid with status $st.</p><p>Please proceed as required.</p></body></html>";
     sendEmail($e, $n, $sub, $b);
 }
+
+// Exception and Error Handlers
 set_exception_handler(function ($e) {
     log_error("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
     header("Location: orders.php?action=view&message=unknown_error");
@@ -63,17 +75,23 @@ set_error_handler(function ($sv, $m, $f, $l) {
     if (!(error_reporting() & $sv)) return;
     throw new ErrorException($m, 0, $sv, $f, $l);
 });
+
+// Fetch Delivery Users (for Admin)
 function getDeliveryUsers($pdo)
 {
     $q = $pdo->prepare("SELECT id,username,email FROM users WHERE role='delivery' AND is_active=1");
     $q->execute();
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// User and Action Setup
 $user_role = $_SESSION['role'] ?? 'admin';
 $user_id = $_SESSION['user_id'] ?? 1;
 $action = $_GET['action'] ?? 'view';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
+
+// Define Allowed Actions Based on Role
 $allowed_actions = [
     'admin' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'delete', 'assign_delivery', 'update_status_form', 'update_status', 'view_trash', 'restore', 'permanent_delete', 'top_products'],
     'delivery' => ['view', 'view_details', 'send_notification', 'send_delay_notification', 'update_status_form', 'update_status']
@@ -84,19 +102,35 @@ if (!isset($allowed_actions[$user_role]) || !in_array($action, $allowed_actions[
     require_once 'includes/footer.php';
     exit;
 }
+
+// Define Order Statuses
 $statuses = ['New Order', 'Kitchen', 'On the Way', 'Delivered', 'Canceled'];
+
+// Fetch All Orders
 function getAllOrders($pdo)
 {
-    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.is_deleted=0 ORDER BY o.created_at DESC");
+    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount 
+                        FROM orders o 
+                        LEFT JOIN tips t ON o.tip_id=t.id 
+                        WHERE o.is_deleted=0 
+                        ORDER BY o.created_at DESC");
     $q->execute();
     return $q->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Fetch Single Order by ID
 function getOrderById($pdo, $id)
 {
-    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.id=? AND o.is_deleted=0 LIMIT 1");
+    $q = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount 
+                        FROM orders o 
+                        LEFT JOIN tips t ON o.tip_id=t.id 
+                        WHERE o.id=? AND o.is_deleted=0 
+                        LIMIT 1");
     $q->execute([$id]);
     return $q->fetch(PDO::FETCH_ASSOC);
 }
+
+// Fetch Top 10 Products
 function getTopProducts($pdo)
 {
     $q = $pdo->prepare("SELECT order_details FROM orders WHERE is_deleted=0");
@@ -116,6 +150,7 @@ function getTopProducts($pdo)
     arsort($count);
     return array_slice($count, 0, 10, true);
 }
+
 try {
     switch ($action) {
         case 'view_details':
@@ -129,6 +164,7 @@ try {
                 exit;
             }
             break;
+
         case 'update_status_form':
             if ($id <= 0) {
                 header("Location: orders.php?action=view&message=Invalid Order ID");
@@ -140,6 +176,7 @@ try {
                 exit;
             }
             break;
+
         case 'update_status':
             if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
                 $newStatus = $_POST['status'] ?? '';
@@ -149,7 +186,7 @@ try {
                         header("Location: orders.php?action=view&message=Order not found");
                         exit;
                     }
-                    $s = $pdo->prepare("UPDATE orders SET status=?,updated_at=NOW() WHERE id=?");
+                    $s = $pdo->prepare("UPDATE orders SET status=?, updated_at=NOW() WHERE id=?");
                     if ($s->execute([$newStatus, $id])) {
                         sendStatusUpdateEmail($order['customer_email'], $order['customer_name'], $id, $newStatus, $order['scheduled_date'], $order['scheduled_time']);
                         header("Location: orders.php?action=view&message=Order status updated");
@@ -164,12 +201,13 @@ try {
             }
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
+
         case 'delete':
             if ($id <= 0) {
                 header("Location: orders.php?action=view&message=Invalid ID");
                 exit;
             }
-            $s = $pdo->prepare("UPDATE orders SET is_deleted=1,updated_at=NOW() WHERE id=?");
+            $s = $pdo->prepare("UPDATE orders SET is_deleted=1, updated_at=NOW() WHERE id=?");
             if ($s->execute([$id])) {
                 header("Location: orders.php?action=view&message=Order moved to Trash");
                 exit;
@@ -177,15 +215,21 @@ try {
                 header("Location: orders.php?action=view&message=Could not move to Trash");
                 exit;
             }
+
         case 'view_trash':
             if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
-            $t = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount FROM orders o LEFT JOIN tips t ON o.tip_id=t.id WHERE o.is_deleted=1 ORDER BY o.updated_at DESC");
+            $t = $pdo->prepare("SELECT o.*,t.name AS tip_name,t.percentage AS tip_percentage,t.amount AS tip_fixed_amount 
+                                FROM orders o 
+                                LEFT JOIN tips t ON o.tip_id=t.id 
+                                WHERE o.is_deleted=1 
+                                ORDER BY o.updated_at DESC");
             $t->execute();
             $trash_orders = $t->fetchAll(PDO::FETCH_ASSOC);
             break;
+
         case 'restore':
             if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
@@ -195,7 +239,7 @@ try {
                 header("Location: orders.php?action=view_trash&message=Invalid ID");
                 exit;
             }
-            $r = $pdo->prepare("UPDATE orders SET is_deleted=0,updated_at=NOW() WHERE id=?");
+            $r = $pdo->prepare("UPDATE orders SET is_deleted=0, updated_at=NOW() WHERE id=?");
             if ($r->execute([$id])) {
                 header("Location: orders.php?action=view_trash&message=Order restored");
                 exit;
@@ -203,6 +247,7 @@ try {
                 header("Location: orders.php?action=view_trash&message=Restore failed");
                 exit;
             }
+
         case 'permanent_delete':
             if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
@@ -220,6 +265,7 @@ try {
                 header("Location: orders.php?action=view_trash&message=Permanent delete failed");
                 exit;
             }
+
         case 'send_delay_notification':
             if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
                 $time = (int)($_POST['additional_time'] ?? 0);
@@ -240,6 +286,7 @@ try {
             }
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
+
         case 'assign_delivery':
             if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
@@ -269,6 +316,7 @@ try {
             }
             header("Location: orders.php?action=view&message=Invalid request");
             exit;
+
         case 'top_products':
             if ($user_role !== 'admin') {
                 header('HTTP/1.1 403 Forbidden');
@@ -276,6 +324,7 @@ try {
             }
             $top_products = getTopProducts($pdo);
             break;
+
         case 'view':
         default:
             $all_orders = getAllOrders($pdo);
@@ -439,17 +488,29 @@ try {
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
             </div>
         <?php elseif (!empty($message)): ?>
-            <?= $message ?>
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <?= htmlspecialchars($message) ?>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+            </div>
         <?php endif; ?>
         <h5 class="mb-3">Orders Management (Role: <?= htmlspecialchars($user_role) ?>)</h5>
         <?php
-        if ($action === 'view_details' && !empty($order)): ?>
+        if ($action === 'view_details' && !empty($order)):
+            // 1) Fetch store data based on store_id
+            $storeData = null;
+            if (!empty($order['store_id'])) {
+                $stmtStore = $pdo->prepare("SELECT * FROM stores WHERE id=? LIMIT 1");
+                $stmtStore->execute([$order['store_id']]);
+                $storeData = $stmtStore->fetch(PDO::FETCH_ASSOC);
+            }
+        ?>
             <div class="card mb-3">
                 <div class="card-header bg-primary text-white">
                     Order #<?= htmlspecialchars($order['id']) ?> Details
                 </div>
                 <div class="card-body">
                     <div class="row">
+                        <!-- Left Column: Customer and Order Info -->
                         <div class="col-md-6">
                             <p><strong>Customer Name:</strong> <?= htmlspecialchars($order['customer_name']) ?></p>
                             <p><strong>Email:</strong> <?= htmlspecialchars($order['customer_email']) ?></p>
@@ -463,7 +524,9 @@ try {
                                     echo "<span class='badge bg-info'>" . htmlspecialchars($order['tip_name']) . "</span> ($ti)";
                                 } else {
                                     echo "N/A";
-                                } ?></p>
+                                }
+                                ?>
+                            </p>
                             <p><strong>Tip Amount:</strong> <?= number_format($order['tip_amount'], 2) ?>€</p>
                             <p><strong>Coupon Code:</strong> <?= htmlspecialchars($order['coupon_code'] ?? 'N/A') ?></p>
                             <p><strong>Coupon Discount:</strong> <?= number_format(($order['coupon_discount'] ?? 0), 2) ?>€</p>
@@ -481,17 +544,21 @@ try {
                                     echo $du ? htmlspecialchars($du['username']) : "Unassigned";
                                 } else {
                                     echo "Unassigned";
-                                } ?></p>
+                                }
+                                ?>
+                            </p>
                             <p><strong>Created At:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                             <p><strong>Updated At:</strong> <?= htmlspecialchars($order['updated_at'] ?? 'N/A') ?></p>
                         </div>
+                        <!-- Right Column: Order Items -->
                         <div class="col-md-6">
                             <h6>Order Items</h6>
                             <?php
                             $details = json_decode($order['order_details'], true);
                             $items = $details['items'] ?? [];
                             if ($items):
-                                foreach ($items as $item): ?>
+                                foreach ($items as $item):
+                            ?>
                                     <div class="card mb-2">
                                         <div class="card-header" style="font-size:.9rem;">
                                             <?= htmlspecialchars($item['name']) ?> (Qty: <?= htmlspecialchars($item['quantity']) ?>)
@@ -544,16 +611,24 @@ try {
                                             </div>
                                         </div>
                                     </div>
-                                <?php endforeach;
-                            else: ?>
+                                <?php
+                                endforeach;
+                            else:
+                                ?>
                                 <p>No items in this order.</p>
-                            <?php endif; ?>
+                            <?php
+                            endif;
+                            ?>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-dark mt-2" data-bs-toggle="modal" data-bs-target="#invoiceModal" style="font-size:.8rem;"><i class="bi bi-file-earmark-text"></i> Invoice</button>
+                    <!-- Invoice Button & Modal Trigger -->
+                    <button type="button" class="btn btn-dark mt-2" data-bs-toggle="modal" data-bs-target="#invoiceModal" style="font-size:.8rem;">
+                        <i class="bi bi-file-earmark-text"></i> Invoice
+                    </button>
                     <a href="orders.php?action=view" class="btn btn-secondary mt-2" style="font-size:.8rem;">Back</a>
                 </div>
             </div>
+            <!-- Invoice Modal -->
             <div class="modal fade" id="invoiceModal">
                 <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
                     <div class="modal-content">
@@ -563,23 +638,76 @@ try {
                         </div>
                         <div class="modal-body" style="font-size:.8rem;">
                             <?php
-                            $invTip = number_format($order['tip_amount'], 2);
-                            $invDisc = number_format($order['coupon_discount'] ?? 0, 2);
-                            $subtotal = ($order['total_amount'] + (float)$invDisc - (float)$order['tip_amount']);
-                            $invSubtotal = number_format($subtotal, 2);
+                            // Decode the JSON details to find shipping_fee, items, etc.
+                            $details = json_decode($order['order_details'], true);
+                            $items = $details['items'] ?? [];
+
+                            // Shipping Fee from order_details
+                            $shipping = isset($details['shipping_fee']) ? (float)$details['shipping_fee'] : 0;
+
+                            // Basic amounts (already in DB columns)
+                            $invTip   = isset($order['tip_amount']) ? (float)$order['tip_amount'] : 0;
+                            $invDisc  = isset($order['coupon_discount']) ? (float)$order['coupon_discount'] : 0;
+                            $totalAmt = isset($order['total_amount']) ? (float)$order['total_amount'] : 0;
+
+                            // Compute Items Subtotal
+                            $itemsSubtotal = 0;
+                            foreach ($items as $it) {
+                                $itemsSubtotal += isset($it['total_price']) ? (float)$it['total_price'] : 0;
+                            }
+
+                            // Taxes (if any) - Assuming a tax rate, e.g., 10%
+                            $taxRate = 0.10; // 10%
+                            $taxAmount = ($itemsSubtotal + $shipping - $invDisc) * $taxRate;
+
+                            // Final Total Calculation
+                            $calculatedTotal = $itemsSubtotal + $shipping + $invTip - $invDisc + $taxAmount;
                             ?>
                             <div class="p-1">
+                                <!-- Store Info -->
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <img src="store_logo.png" alt="Store Logo" class="invoice-logo">
+                                    <?php if ($storeData && !empty($storeData['cart_logo'])): ?>
+                                        <img src="../admin/<?= htmlspecialchars($storeData['cart_logo']) ?>" alt="Store Logo" class="invoice-logo">
+                                    <?php endif; ?>
                                     <h3 class="invoice-title">INVOICE</h3>
                                 </div>
+
+                                <!-- Detailed Store Info -->
+                                <?php if ($storeData): ?>
+                                    <div class="mb-2">
+                                        <strong><?= htmlspecialchars($storeData['name']) ?></strong><br>
+                                        <?= htmlspecialchars($storeData['address']) ?><br>
+                                        <?php if (!empty($storeData['phone'])): ?>
+                                            Tel: <?= htmlspecialchars($storeData['phone']) ?><br>
+                                        <?php endif; ?>
+                                        <?php if (!empty($storeData['email'])): ?>
+                                            <?= htmlspecialchars($storeData['email']) ?><br>
+                                        <?php endif; ?>
+                                        <?php if (!empty($storeData['tax_id'])): ?>
+                                            VAT/Tax ID: <?= htmlspecialchars($storeData['tax_id']) ?><br>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="mb-2">
+                                        <strong>Yumiis Restaurant</strong><br>
+                                        123 Main St<br>
+                                        Some City, 12345<br>
+                                        +1 (555) 123-4567<br>
+                                        contact@yumiis.com
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Customer Info -->
                                 <div class="mb-2">
-                                    <strong>Yumiis Restaurant</strong><br>123 Main St<br>Some City, 12345<br>+1 (555) 123-4567<br>contact@yumiis.com
-                                </div>
-                                <div class="mb-2">
-                                    <p><strong>Bill To:</strong> <?= htmlspecialchars($order['customer_name']) ?><br><?= htmlspecialchars($order['delivery_address']) ?><br><?= htmlspecialchars($order['customer_email']) ?></p>
+                                    <p>
+                                        <strong>Bill To:</strong> <?= htmlspecialchars($order['customer_name']) ?><br>
+                                        <?= htmlspecialchars($order['delivery_address']) ?><br>
+                                        <?= htmlspecialchars($order['customer_email']) ?>
+                                    </p>
                                     <p><strong>Order Date:</strong> <?= htmlspecialchars($order['created_at']) ?></p>
                                 </div>
+
+                                <!-- Itemized List -->
                                 <div class="invoice-items mb-2">
                                     <table style="width:100%;border-collapse:collapse;">
                                         <thead>
@@ -591,30 +719,47 @@ try {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php
-                                            if (!empty($items)) {
-                                                foreach ($items as $it) {
-                                                    $nm = htmlspecialchars($it['name'] ?? 'Item');
-                                                    $qty = intval($it['quantity'] ?? 1);
-                                                    $uni = number_format($it['unit_price'] ?? 0, 2);
-                                                    $tpr = number_format($it['total_price'] ?? 0, 2);
-                                                    echo "<tr><td>$nm</td><td>$qty</td><td>$uni</td><td>$tpr</td></tr>";
-                                                }
-                                            } else {
-                                                echo "<tr><td colspan='4'>No items</td></tr>";
-                                            }
-                                            ?>
+                                            <?php if (!empty($items)): ?>
+                                                <?php foreach ($items as $it):
+                                                    $nm   = htmlspecialchars($it['name'] ?? 'Item');
+                                                    $qty  = intval($it['quantity'] ?? 1);
+                                                    $unit = isset($it['unit_price']) ? number_format((float)$it['unit_price'], 2) : '0.00';
+                                                    $tpr  = isset($it['total_price']) ? number_format((float)$it['total_price'], 2) : '0.00';
+                                                ?>
+                                                    <tr>
+                                                        <td><?= $nm ?></td>
+                                                        <td><?= $qty ?></td>
+                                                        <td><?= $unit ?></td>
+                                                        <td><?= $tpr ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <tr>
+                                                    <td colspan="4">No items</td>
+                                                </tr>
+                                            <?php endif; ?>
                                         </tbody>
                                     </table>
                                 </div>
-                                <p><strong>Subtotal:</strong> <?= $invSubtotal ?> €</p>
-                                <p><strong>Tip:</strong> <?= $invTip ?> €</p>
-                                <p><strong>Coupon Discount:</strong> <?= $invDisc ?> €</p>
-                                <p><strong>Total Amount:</strong> <?= number_format($order['total_amount'], 2) ?> €</p>
-                                <p class="text-center mt-2" style="font-size:.7rem;color:#666;">Thank you for your order!</p>
+
+                                <!-- Detailed Breakdown -->
+                                <p><strong>Items Subtotal:</strong> <?= number_format($itemsSubtotal, 2) ?> €</p>
+                                <p><strong>Shipping Fee:</strong> <?= number_format($shipping, 2) ?> €</p>
+                                <p><strong>Tax (<?= ($taxRate * 100) ?>%):</strong> <?= number_format($taxAmount, 2) ?> €</p>
+                                <p><strong>Tip:</strong> <?= number_format($invTip, 2) ?> €</p>
+                                <p><strong>Coupon Discount:</strong> <?= number_format($invDisc, 2) ?> €</p>
+                                <hr>
+                                <p><strong>Total Amount:</strong> <?= number_format($calculatedTotal, 2) ?> €</p>
+                                <p class="text-center mt-2" style="font-size:.7rem;color:#666;">
+                                    Thank you for your order!
+                                </p>
                             </div>
                         </div>
-                        <div class="modal-footer" style="font-size:.8rem;"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+                        <div class="modal-footer" style="font-size:.8rem;">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <!-- Optionally, you can add a print button -->
+                            <button type="button" class="btn btn-primary" onclick="window.print();">Print Invoice</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -678,11 +823,14 @@ try {
                                             <td><?= htmlspecialchars($tr['customer_phone']) ?></td>
                                             <td><?= htmlspecialchars($tr['delivery_address']) ?></td>
                                             <td><?= number_format($tr['total_amount'], 2) ?></td>
-                                            <td><?php
+                                            <td>
+                                                <?php
                                                 if (!empty($tr['tip_name'])) {
                                                     $xx = $tr['tip_percentage'] !== null ? htmlspecialchars($tr['tip_percentage']) . '%' : number_format($tr['tip_fixed_amount'], 2) . '€';
                                                     echo "<span class='badge bg-info'>" . htmlspecialchars($tr['tip_name']) . "</span> ($xx)";
-                                                } else echo 'N/A'; ?></td>
+                                                } else echo 'N/A';
+                                                ?>
+                                            </td>
                                             <td><?= number_format($tr['tip_amount'], 2) ?></td>
                                             <td><?= htmlspecialchars($tr['scheduled_date'] ?? 'N/A') ?></td>
                                             <td><?= htmlspecialchars($tr['scheduled_time'] ?? 'N/A') ?></td>
@@ -783,12 +931,13 @@ try {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($status_orders[$st] as $o) {
+                                    <?php foreach ($status_orders[$st] as $o):
                                         $tipBadge = 'N/A';
                                         if (!empty($o['tip_name'])) {
                                             $val = $o['tip_percentage'] !== null ? htmlspecialchars($o['tip_percentage']) . '%' : number_format($o['tip_fixed_amount'], 2) . '€';
                                             $tipBadge = "<span class='badge bg-info'>" . htmlspecialchars($o['tip_name']) . "</span> ($val)";
-                                        } ?>
+                                        }
+                                    ?>
                                         <tr>
                                             <td><?= htmlspecialchars($o['id']) ?></td>
                                             <td><?= htmlspecialchars($o['customer_name']) ?></td>
@@ -829,6 +978,7 @@ try {
                                             </td>
                                         </tr>
                                         <?php if ($user_role === 'admin'): ?>
+                                            <!-- Delay Notification Modal -->
                                             <div class="modal fade" id="delayModal<?= $o['id'] ?>">
                                                 <div class="modal-dialog modal-dialog-centered" style="font-size:.8rem;">
                                                     <div class="modal-content">
@@ -853,7 +1003,7 @@ try {
                                                 </div>
                                             </div>
                                         <?php endif; ?>
-                                    <?php } ?>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -864,11 +1014,18 @@ try {
         <?php endforeach;
         endif; ?>
     </div>
+
+    <!-- Notification Sound (Hidden) -->
+    <audio id="orderSound" src="alert.mp3" preload="auto"></audio>
+
+    <!-- JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/datetime/1.4.0/js/dataTables.dateTime.min.js"></script>
+
+    <!-- Notification Script -->
     <script>
         $(function() {
             $('.data-table').DataTable({
@@ -882,20 +1039,28 @@ try {
                     search: "Search:"
                 }
             });
-            <?php if (!empty($all_orders)): ?>
-                let lastId = <?= max(array_column($all_orders, 'id')) ?>;
-                setInterval(() => {
-                    $.get('get_new_orders.php', {
-                        last_order_id: lastId
-                    }, r => {
-                        if (r.status === 'success' && r.new_orders.length > 0) {
-                            r.new_orders.forEach(o => {
-                                if (o.id > lastId) lastId = o.id;
-                            });
+
+            // Notification Sound Handling
+            const orderSound = document.getElementById('orderSound');
+            let lastCount = 0;
+
+            // Polling function to check for new orders
+            setInterval(() => {
+                $.get('order_notifier.php', function(data) {
+                    if (data.status === 'success') {
+                        const currentCount = parseInt(data.countNew, 10) || 0;
+                        if (currentCount > lastCount) {
+                            // Play notification sound
+                            orderSound.play();
                         }
-                    }, 'json').fail(e => console.error('Error:', e));
-                }, 5000);
-            <?php endif; ?>
+                        lastCount = currentCount;
+                    } else {
+                        console.error('Notifier error:', data.message);
+                    }
+                }, 'json').fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error('Notifier AJAX error:', textStatus, errorThrown);
+                });
+            }, 5000); // Poll every 5 seconds
         });
     </script>
     <?php ob_end_flush(); ?>

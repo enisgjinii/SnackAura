@@ -1213,7 +1213,7 @@ try {
     <?php endif; ?>
 
     <?php
-    $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'order_success.php', 'cart_modal.php', 'toast_notifications.php'];
+    $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'cart_modal.php', 'toast_notifications.php'];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
     }
