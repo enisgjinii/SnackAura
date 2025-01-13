@@ -899,6 +899,7 @@ try {
         });
     </script>
     <?php ob_end_flush(); ?>
+    <?php include 'includes/footer.php'; ?>
 </body>
 
 </html>
