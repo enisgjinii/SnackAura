@@ -11,13 +11,7 @@ $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
 function log_error_markdown($m, $c = '')
 {
-    $t = date('Y-m-d H:i:s');
-    $e = "### [$t] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
-    if ($c) {
-        $e .= "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n";
-    }
-    $e .= "---\n\n";
-    file_put_contents(ERROR_LOG_FILE, $e, FILE_APPEND | LOCK_EX);
+    file_put_contents(ERROR_LOG_FILE, "### [" . date('Y-m-d H:i:s') . "] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" : '') . "---\n\n", FILE_APPEND | LOCK_EX);
 }
 set_exception_handler(function ($e) {
     log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
@@ -76,9 +70,9 @@ if ($main_store) {
     $is_closed = true;
     $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
-function logdb($msg)
+function logdb($m)
 {
-    file_put_contents('errors.md', $msg . "\n", FILE_APPEND);
+    file_put_contents('errors.md', $m . "\n", FILE_APPEND);
 }
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -104,23 +98,12 @@ function fetchProduct($pdo, $pid)
     $p = $s->fetch(PDO::FETCH_ASSOC);
     if (!$p) return null;
     $props = json_decode($p['properties'] ?? '{}', true) ?: [];
-    return [
-        'sizes' => $props['sizes'] ?? [],
-        'extras' => $props['extras'] ?? [],
-        'sauces' => $props['sauces'] ?? [],
-        'dresses' => $props['dresses'] ?? [],
-        'base_price' => (float)($props['base_price'] ?? $p['base_price']),
-        'name' => $p['name'],
-        'description' => $p['description'],
-        'image_url' => $p['image_url'],
-        'properties' => $p['properties'] ?? '',
-        'id' => $p['id']
-    ];
+    return ['sizes' => $props['sizes'] ?? [], 'extras' => $props['extras'] ?? [], 'sauces' => $props['sauces'] ?? [], 'dresses' => $props['dresses'] ?? [], 'base_price' => (float)($props['base_price'] ?? $p['base_price']), 'name' => $p['name'], 'description' => $p['description'], 'image_url' => $p['image_url'], 'properties' => $p['properties'] ?? '', 'id' => $p['id']];
 }
 function calculateCartTotal($cart)
 {
-    return array_reduce($cart, function ($acc, $item) {
-        return $acc + ($item['total_price'] ?? 0);
+    return array_reduce($cart, function ($a, $i) {
+        return $a + ($i['total_price'] ?? 0);
     }, 0);
 }
 function applyTip($cartTotal, $tips, $selectedTipId)
@@ -178,11 +161,7 @@ function applyCoupon($pdo, $code, $cartTotal)
     }
     $dv = ($c['discount_type'] === 'percentage') ? ($cartTotal * ($c['discount_value'] / 100)) : $c['discount_value'];
     $r['ok'] = true;
-    $r['coupon'] = [
-        'code' => $c['code'],
-        'discount_type' => $c['discount_type'],
-        'discount_value' => $dv
-    ];
+    $r['coupon'] = ['code' => $c['code'], 'discount_type' => $c['discount_type'], 'discount_value' => $dv];
     return $r;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -234,41 +213,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         $total = max($cart_total + $tip_amount + $shipping - $coupon_discount, 0);
-        $order_details = json_encode([
-            'items' => $_SESSION['cart'],
-            'latitude' => $_SESSION['latitude'] ?? null,
-            'longitude' => $_SESSION['longitude'] ?? null,
-            'tip_id' => $stid,
-            'tip_amount' => $tip_amount,
-            'store_id' => $store_id,
-            'is_event' => $ev,
-            'scheduled_date' => $sd,
-            'scheduled_time' => $st_time,
-            'shipping_fee' => $shipping,
-            'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null,
-            'coupon_discount' => $coupon_discount
-        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         try {
             $pdo->beginTransaction();
             $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([
-                null,
-                $cn,
-                $ce,
-                $cp,
-                $da,
-                $total,
-                2,
-                $stid,
-                $tip_amount,
-                $sd,
-                $st_time,
-                $pm,
-                $store_id,
-                $order_details,
-                $_SESSION['applied_coupon']['code'] ?? null,
-                $coupon_discount
-            ]);
+            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount]);
             $oid = $pdo->lastInsertId();
             if ($pm === 'paypal') {
                 $pdo->commit();
@@ -362,11 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $qx = (int)($pEx[$e['name']] ?? 0);
             if ($qx > 0) {
                 $et += $e['price'] * $qx;
-                $exs[] = [
-                    'name' => $e['name'],
-                    'price' => $e['price'],
-                    'quantity' => $qx
-                ];
+                $exs[] = ['name' => $e['name'], 'price' => $e['price'], 'quantity' => $qx];
             }
         }
         $st = 0;
@@ -376,11 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $qx = (int)($pSa[$sa['name']] ?? 0);
             if ($qx > 0) {
                 $st += $sa['price'] * $qx;
-                $sas[] = [
-                    'name' => $sa['name'],
-                    'price' => $sa['price'],
-                    'quantity' => $qx
-                ];
+                $sas[] = ['name' => $sa['name'], 'price' => $sa['price'], 'quantity' => $qx];
             }
         }
         $dt = 0;
@@ -389,11 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $qx = (int)($pDr[$d['name']] ?? 0);
             if ($qx > 0) {
                 $dt += $d['price'] * $qx;
-                $drs[] = [
-                    'name' => $d['name'],
-                    'price' => $d['price'],
-                    'quantity' => $qx
-                ];
+                $drs[] = ['name' => $d['name'], 'price' => $d['price'], 'quantity' => $qx];
             }
         }
         $drt = 0;
@@ -408,33 +345,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $unit = $bp + $et + $st + $dt + $drt;
         $total = $unit * $qty;
-        $cart_item = [
-            'product_id' => $pid,
-            'name' => $pr['name'],
-            'description' => $pr['description'],
-            'image_url' => $pr['image_url'],
-            'size' => $sz,
-            'size_price' => $sel_size['price'] ?? 0,
-            'extras' => $exs,
-            'sauces' => $sas,
-            'dresses' => $drs,
-            'drink' => $drnk,
-            'special_instructions' => $spec,
-            'quantity' => $qty,
-            'unit_price' => $unit,
-            'total_price' => $total
-        ];
+        $cart_item = ['product_id' => $pid, 'name' => $pr['name'], 'description' => $pr['description'], 'image_url' => $pr['image_url'], 'size' => $sz, 'size_price' => $sel_size['price'] ?? 0, 'extras' => $exs, 'sauces' => $sas, 'dresses' => $drs, 'drink' => $drnk, 'special_instructions' => $spec, 'quantity' => $qty, 'unit_price' => $unit, 'total_price' => $total];
         foreach ($_SESSION['cart'] as $i => $exI) {
             $sameDrink = (($exI['drink']['id'] ?? null) == ($cart_item['drink']['id'] ?? null));
-            if (
-                $exI['product_id'] == $cart_item['product_id'] &&
-                $exI['size'] == $cart_item['size'] &&
-                $sameDrink &&
-                $exI['special_instructions'] == $cart_item['special_instructions'] &&
-                $exI['extras'] == $cart_item['extras'] &&
-                $exI['sauces'] == $cart_item['sauces'] &&
-                $exI['dresses'] == $cart_item['dresses']
-            ) {
+            if ($exI['product_id'] == $cart_item['product_id'] && $exI['size'] == $cart_item['size'] && $sameDrink && $exI['special_instructions'] == $cart_item['special_instructions'] && $exI['extras'] == $cart_item['extras'] && $exI['sauces'] == $cart_item['sauces'] && $exI['dresses'] == $cart_item['dresses']) {
                 $_SESSION['cart'][$i]['quantity'] += $qty;
                 $_SESSION['cart'][$i]['total_price'] += $total;
                 header("Location:index.php?added=1");
@@ -510,11 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $qx = (int)$pEx[$nm];
                 if ($qx > 0) {
                     $exTot += $prc * $qx;
-                    $sel_ex[] = [
-                        'name' => $nm,
-                        'price' => $prc,
-                        'quantity' => $qx
-                    ];
+                    $sel_ex[] = ['name' => $nm, 'price' => $prc, 'quantity' => $qx];
                 }
             }
         }
@@ -527,11 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $qx = (int)$pSa[$nm];
                 if ($qx > 0) {
                     $saTot += $sx['price'] * $qx;
-                    $sel_sa[] = [
-                        'name' => $nm,
-                        'price' => $prc,
-                        'quantity' => $qx
-                    ];
+                    $sel_sa[] = ['name' => $nm, 'price' => $prc, 'quantity' => $qx];
                 }
             }
         }
@@ -544,11 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $qx = (int)$pDr[$nm];
                 if ($qx > 0) {
                     $drTot += $dx['price'] * $qx;
-                    $sel_dr[] = [
-                        'name' => $nm,
-                        'price' => $prc,
-                        'quantity' => $qx
-                    ];
+                    $sel_dr[] = ['name' => $nm, 'price' => $prc, 'quantity' => $qx];
                 }
             }
         }
@@ -564,22 +466,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $u = $base + $szp + $exTot + $saTot + $drTot + $drinkTot;
         $tp = $u * $qty;
-        $_SESSION['cart'][$ii] = [
-            'product_id' => $pr['id'],
-            'name' => $pr['name'],
-            'description' => $pr['description'],
-            'image_url' => $pr['image_url'],
-            'size' => $sel_size['size'] ?? null,
-            'size_price' => $szp,
-            'extras' => $sel_ex,
-            'sauces' => $sel_sa,
-            'dresses' => $sel_dr,
-            'drink' => $drink_details,
-            'special_instructions' => $spec,
-            'quantity' => $qty,
-            'unit_price' => $u,
-            'total_price' => $tp
-        ];
+        $_SESSION['cart'][$ii] = ['product_id' => $pr['id'], 'name' => $pr['name'], 'description' => $pr['description'], 'image_url' => $pr['image_url'], 'size' => $sel_size['size'] ?? null, 'size_price' => $szp, 'extras' => $sel_ex, 'sauces' => $sel_sa, 'dresses' => $sel_dr, 'drink' => $drink_details, 'special_instructions' => $spec, 'quantity' => $qty, 'unit_price' => $u, 'total_price' => $tp];
         header("Location:index.php?updated=1");
         exit;
     }
@@ -592,14 +479,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['paypal_success'])) {
         $paypalCaptureId = $data['paypalCaptureId'];
         try {
             $stmt = $pdo->prepare("UPDATE orders SET status_id=?,payment_info=? WHERE id=?");
-            $stmt->execute([
-                5,
-                json_encode([
-                    'paypalOrderId' => $paypalOrderId,
-                    'paypalCaptureId' => $paypalCaptureId
-                ]),
-                $orderId
-            ]);
+            $stmt->execute([5, json_encode(['paypalOrderId' => $paypalOrderId, 'paypalCaptureId' => $paypalCaptureId]), $orderId]);
             echo json_encode(['status' => 'ok']);
             exit;
         } catch (Exception $e) {
@@ -636,27 +516,7 @@ $products = array_map(function ($r) {
     $sz = $pp['sizes'] ?? [];
     $baseP = (float)($pp['base_price'] ?? $r['base_price']);
     $dp = $baseP + (count($sz) ? min(array_map(fn($s) => (float)($s['price'] ?? 0), $sz)) : 0);
-    return [
-        'id' => $r['product_id'],
-        'product_code' => $r['product_code'],
-        'name' => $r['product_name'],
-        'category' => $r['category'],
-        'description' => $r['description'],
-        'allergies' => $r['allergies'],
-        'image_url' => $r['image_url'],
-        'is_new' => $r['is_new'],
-        'is_offer' => $r['is_offer'],
-        'is_active' => $r['is_active'],
-        'base_price' => $baseP,
-        'created_at' => $r['created_at'],
-        'updated_at' => $r['updated_at'],
-        'category_id' => $r['category_id'],
-        'extras' => $pp['extras'] ?? [],
-        'sauces' => $pp['sauces'] ?? [],
-        'sizes' => $sz,
-        'dresses' => $pp['dresses'] ?? [],
-        'display_price' => $dp
-    ];
+    return ['id' => $r['product_id'], 'product_code' => $r['product_code'], 'name' => $r['product_name'], 'category' => $r['category'], 'description' => $r['description'], 'allergies' => $r['allergies'], 'image_url' => $r['image_url'], 'is_new' => $r['is_new'], 'is_offer' => $r['is_offer'], 'is_active' => $r['is_active'], 'base_price' => $baseP, 'created_at' => $r['created_at'], 'updated_at' => $r['updated_at'], 'category_id' => $r['category_id'], 'extras' => $pp['extras'] ?? [], 'sauces' => $pp['sauces'] ?? [], 'sizes' => $sz, 'dresses' => $pp['dresses'] ?? [], 'display_price' => $dp];
 }, $rawProducts);
 try {
     $drinks = $pdo->query("SELECT * FROM drinks ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -707,16 +567,19 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Restaurant Delivery</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <?php if (!empty($main_store['cart_logo'])): ?>
         <link rel="icon" type="image/png" href="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>">
     <?php endif; ?>
     <style>
+        body {
+            font-size: 0.9rem;
+        }
+
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -731,22 +594,22 @@ try {
         }
 
         .promo-banner .carousel-item img {
-            height: 400px;
+            height: 300px;
             object-fit: cover
         }
 
         .offers-section .card-img-top {
-            height: 200px;
+            height: 170px;
             object-fit: cover
         }
 
         @media(max-width:768px) {
             .promo-banner .carousel-item img {
-                height: 250px
+                height: 200px
             }
 
             .offers-section .card-img-top {
-                height: 150px
+                height: 130px
             }
         }
 
@@ -756,22 +619,17 @@ try {
             cursor: not-allowed
         }
 
-        .language-switcher {
-            position: absolute;
-            top: 10px;
-            right: 10px
-        }
-
         .order-summary {
             background-color: #f8f9fa;
-            padding: 20px;
+            padding: 10px;
             border-radius: 5px;
             position: sticky;
             top: 20px
         }
 
         .order-title {
-            margin-bottom: 15px
+            margin-bottom: 10px;
+            font-size: 1rem
         }
 
         .store-card.selected {
@@ -784,9 +642,9 @@ try {
         }
 
         .store-card {
-            padding: 10px;
+            padding: 6px;
             border: 1px solid #ddd;
-            border-radius: 8px;
+            border-radius: 6px;
             transition: box-shadow .3s;
             height: 100%
         }
@@ -796,25 +654,25 @@ try {
         }
 
         .store-card img {
-            height: 60px;
+            height: 50px;
             object-fit: contain;
-            margin-bottom: 10px
-        }
-
-        .store-card .card-title {
-            font-size: 1.1rem;
             margin-bottom: 5px
         }
 
+        .store-card .card-title {
+            font-size: 1rem;
+            margin-bottom: 3px
+        }
+
         .store-card .card-text {
-            font-size: .9rem;
+            font-size: .8rem;
             color: #555
         }
 
         .select-store-btn {
             margin-top: auto;
-            padding: 8px 0;
-            font-size: .9rem
+            padding: 6px 0;
+            font-size: .8rem
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
@@ -824,7 +682,7 @@ try {
 
 <body>
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
-        <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="storeClosedModalLabel" aria-hidden="true">
+        <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -840,32 +698,31 @@ try {
         <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
     </div>
     <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
-        <div class="modal fade show" id="storeModal" tabindex="-1" aria-labelledby="storeModalLabel" aria-hidden="true" style="display:block;background:rgba(0,0,0,0.5)">
+        <div class="modal fade show" id="storeModal" tabindex="-1" style="display:block;background:rgba(0,0,0,0.5)">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
                             <h5 class="modal-title">Select Your Store</h5>
                             <?php if (!empty($main_store['cart_logo'])): ?>
-                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:60px;height:60px;object-fit:cover">
+                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:50px;height:50px;object-fit:cover;margin-left:10px">
                             <?php endif; ?>
                         </div>
                         <div class="modal-body">
                             <?php if (isset($error_message)): ?>
                                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
                             <?php endif; ?>
-                            <div class="mb-4">
-                                <label class="form-label fw-bold">Choose a Store</label>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold" style="font-size:.95rem">Choose a Store</label>
                                 <div class="row" id="storeCardsContainer">
                                     <?php
                                     try {
                                         $storesQuery = $pdo->query("SELECT * FROM stores WHERE is_active=1 ORDER BY name ASC");
                                         $storesAll = $storesQuery->fetchAll(PDO::FETCH_ASSOC);
-                                        foreach ($storesAll as $st):
-                                    ?>
+                                        foreach ($storesAll as $st): ?>
                                             <div class="col-md-4 col-sm-6 mb-3">
                                                 <div class="store-card d-flex flex-column" data-store-id="<?= htmlspecialchars($st['id']) ?>">
-                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
+                                                    <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg'">
                                                     <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
                                                     <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
                                                     <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
@@ -876,8 +733,7 @@ try {
                                     } catch (PDOException $e) {
                                         log_error_markdown("Failed to fetch stores: " . $e->getMessage(), "Fetch Stores");
                                         echo '<div class="col-12"><div class="alert alert-danger">Unable to load stores at this time.</div></div>';
-                                    }
-                                    ?>
+                                    } ?>
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -886,14 +742,29 @@ try {
                             </div>
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
+                            <div id="map" style="width:100%;height:300px"></div>
                         </div>
-                        <div class="modal-footer"><button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Confirm</button></div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Confirm</button>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
+            function showBootstrapAlert(m, t = 'info') {
+                let a = document.getElementById('alert_placeholder');
+                if (!a) {
+                    let c = document.createElement('div');
+                    c.id = 'alert_placeholder';
+                    document.body.prepend(c);
+                    a = c;
+                }
+                let w = document.createElement('div');
+                w.innerHTML = `<div class="alert alert-${t} alert-dismissible fade show" role="alert">${m}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
+                a.append(w);
+            }
             (function() {
                 let storeModal = new bootstrap.Modal('#storeModal', {
                     backdrop: 'static',
@@ -917,11 +788,11 @@ try {
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
                 let marker = null;
-                let storedLat = parseFloat(document.getElementById('latitude').value) || null;
-                let storedLng = parseFloat(document.getElementById('longitude').value) || null;
-                if (storedLat && storedLng) {
-                    marker = L.marker([storedLat, storedLng]).addTo(map);
-                    map.setView([storedLat, storedLng], 13);
+                let slt = parseFloat(document.getElementById('latitude').value) || null;
+                let sln = parseFloat(document.getElementById('longitude').value) || null;
+                if (slt && sln) {
+                    marker = L.marker([slt, sln]).addTo(map);
+                    map.setView([slt, sln], 13);
                 }
                 map.on('click', function(e) {
                     if (marker) map.removeLayer(marker);
@@ -953,20 +824,12 @@ try {
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
                     if (!document.querySelector('input[name="store_id"]:checked')) {
                         e.preventDefault();
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'No Store Selected',
-                            text: 'Please select a store before proceeding.'
-                        });
+                        showBootstrapAlert('No store selected.', 'warning');
                         return;
                     }
                     if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value) {
                         e.preventDefault();
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Incomplete Address',
-                            text: 'Please provide a complete delivery address and select a location on the map.'
-                        });
+                        showBootstrapAlert('Please provide a complete address and location.', 'warning');
                     }
                 });
             })();
@@ -975,8 +838,7 @@ try {
     if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                var storeClosedModal = new bootstrap.Modal(document.getElementById('storeClosedModal'));
-                storeClosedModal.show();
+                new bootstrap.Modal(document.getElementById('storeClosedModal')).show();
             });
         </script>
     <?php endif;
@@ -989,62 +851,67 @@ try {
             <div class="modal-content">
                 <form method="POST" action="index.php" id="checkoutForm">
                     <div class="modal-body">
-                        <div class="mb-3"><label class="form-label">Vollständiger Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="customer_name" required></div>
-                        <div class="mb-3"><label class="form-label">Kontaktnummer <span class="text-danger">*</span></label><input type="tel" class="form-control" name="customer_phone" required></div>
-                        <div class="mb-3"><label class="form-label">E-Mail <span class="text-danger">*</span></label><input type="email" class="form-control" name="customer_email" required></div>
-                        <div class="mb-3"><label class="form-label">Standort <span class="text-danger">*</span></label><textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea></div>
-                        <div class="mb-3"><label class="form-label">Postleitzahl <span class="text-danger">*</span></label><input type="text" class="form-control" name="postal_code" required></div>
-                        <div class="mb-3"><label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung</label></div>
+                        <div class="mb-2"><label class="form-label">Vollständiger Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="customer_name" required></div>
+                        <div class="mb-2"><label class="form-label">Kontaktnummer <span class="text-danger">*</span></label><input type="tel" class="form-control" name="customer_phone" required></div>
+                        <div class="mb-2"><label class="form-label">E-Mail <span class="text-danger">*</span></label><input type="email" class="form-control" name="customer_email" required></div>
+                        <div class="mb-2"><label class="form-label">Standort <span class="text-danger">*</span></label><textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea></div>
+                        <div class="mb-2"><label class="form-label">Postleitzahl <span class="text-danger">*</span></label><input type="text" class="form-control" name="postal_code" required></div>
+                        <div class="mb-2"><label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung</label></div>
                         <div id="event_details" style="display:none">
-                            <div class="mb-3"><label class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label><input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>"></div>
-                            <div class="mb-3"><label class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label><input type="time" class="form-control" name="scheduled_time"></div>
+                            <div class="mb-2"><label class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label><input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>"></div>
+                            <div class="mb-2"><label class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label><input type="time" class="form-control" name="scheduled_time"></div>
                         </div>
                         <script>
                             document.getElementById('event_checkbox').addEventListener('change', function() {
-                                let ed = document.getElementById('event_details'),
+                                let e = document.getElementById('event_details'),
                                     sd = document.querySelector('[name="scheduled_date"]'),
                                     st = document.querySelector('[name="scheduled_time"]');
                                 if (this.checked) {
-                                    ed.style.display = 'block';
+                                    e.style.display = 'block';
                                     sd.required = true;
                                     st.required = true;
                                 } else {
-                                    ed.style.display = 'none';
+                                    e.style.display = 'none';
                                     sd.required = false;
                                     st.required = false;
                                 }
                             });
                         </script>
-                        <div class="mb-3">
+                        <div class="mb-2">
                             <label class="form-label">Zahlungsmethode <span class="text-danger">*</span></label>
                             <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal"><label class="form-check-label" for="paymentPayPal"><i class="bi bi-paypal"></i> PayPal</label></div>
                             <div id="paypal-button-container"></div>
                             <?php if (isset($_GET['pending_paypal_order_id'])): ?>
-                                <h4 class="mt-5">Complete PayPal Payment</h4>
+                                <h6 class="mt-3">Complete PayPal Payment</h6>
                                 <div id="paypal-button-container"></div>
                                 <script>
+                                    console.log("Initializing PayPal Buttons for existing pending order...");
                                     paypal.Buttons({
                                         createOrder: function(data, actions) {
                                             const urlParams = new URLSearchParams(window.location.search);
-                                            const pendingOrderId = urlParams.get('pending_paypal_order_id');
-                                            if (!pendingOrderId) {
-                                                Swal.fire("No pending PayPal order ID found!");
+                                            const pId = urlParams.get('pending_paypal_order_id');
+                                            if (!pId) {
+                                                alert("No pending PayPal order ID found!");
+                                                console.error("No ID in URL.");
                                                 return;
                                             }
-                                            let total = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                                            console.log("Creating order for pendingOrderId:", pId);
+                                            let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                                            console.log("PayPal Order total:", t);
                                             return actions.order.create({
                                                 purchase_units: [{
-                                                    description: "Order #123",
+                                                    description: "Order #" + pId,
                                                     amount: {
                                                         currency_code: "EUR",
-                                                        value: "10.00"
+                                                        value: t
                                                     }
                                                 }]
                                             });
-
                                         },
-                                        onApprove: function(data, actions) {
-                                            return actions.order.capture().then(function(details) {
+                                        onApprove: function(d, a) {
+                                            console.log("onApprove triggered. data:", d);
+                                            return a.order.capture().then(function(det) {
+                                                console.log("PayPal capture:", det);
                                                 fetch('index.php', {
                                                     method: 'POST',
                                                     headers: {
@@ -1053,27 +920,30 @@ try {
                                                     body: JSON.stringify({
                                                         paypal_success: true,
                                                         orderId: <?= json_encode((int)($_GET['pending_paypal_order_id'] ?? 0)) ?>,
-                                                        paypalOrderId: data.orderID,
-                                                        paypalCaptureId: details.purchase_units[0].payments.captures[0].id
+                                                        paypalOrderId: d.orderID,
+                                                        paypalCaptureId: det.purchase_units[0].payments.captures[0].id
                                                     })
-                                                }).then(response => response.json()).then(res => {
+                                                }).then(r => r.json()).then(res => {
+                                                    console.log("Server response:", res);
                                                     if (res.status === 'ok') {
-                                                        Swal.fire("Payment successful!").then(() => {
-                                                            window.location.href = 'index.php?order=success';
-                                                        });
+                                                        alert("Payment successful!");
+                                                        window.location.href = 'index.php?order=success';
                                                     } else {
-                                                        Swal.fire("Payment captured, but server error occurred. Please contact support.");
+                                                        alert("Payment captured, but server error occurred.");
                                                     }
                                                 }).catch(err => {
-                                                    Swal.fire("Payment captured, but there was a server error. Please contact support.");
+                                                    console.error("Error updating order:", err);
+                                                    alert("Server error after capture.");
                                                 });
                                             });
                                         },
-                                        onCancel: function(data) {
-                                            Swal.fire("Payment was canceled by the user.");
+                                        onCancel: function(d) {
+                                            console.log("Payment canceled by user:", d);
+                                            alert("Payment was canceled.");
                                         },
-                                        onError: function(err) {
-                                            Swal.fire("An error occurred during the payment process. Please try again or contact support.");
+                                        onError: function(e) {
+                                            console.error("PayPal onError:", e);
+                                            alert("Error in PayPal process.");
                                         }
                                     }).render('#paypal-button-container');
                                 </script>
@@ -1081,20 +951,20 @@ try {
                             <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup"><label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Abholung</label></div>
                             <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash"><label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Nachnahme</label></div>
                         </div>
-                        <div class="mb-3"><label class="form-label">Trinkgeld auswählen</label><select class="form-select" name="selected_tip" id="tip_selection">
+                        <div class="mb-2"><label class="form-label">Trinkgeld auswählen</label><select class="form-select" name="selected_tip" id="tip_selection">
                                 <option value="">Kein Trinkgeld</option>
                                 <?php foreach ($tip_options as $t): ?>
                                     <option value="<?= htmlspecialchars($t['id']) ?>" <?= ($selT == $t['id'] ? 'selected' : '') ?>><?= htmlspecialchars($t['name']) ?><?php if (!empty($t['percentage'])) echo " (" . $t['percentage'] . "%)";
                                                                                                                                                                         elseif (!empty($t['amount'])) echo " (+" . number_format($t['amount'], 2) . "€)"; ?></option>
                                 <?php endforeach; ?>
                             </select></div>
-                        <h5>Bestellübersicht</h5>
-                        <ul class="list-group mb-3">
+                        <h6>Bestellübersicht</h6>
+                        <ul class="list-group mb-2">
                             <?php foreach ($_SESSION['cart'] as $i => $it): ?>
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div class="ms-2 me-auto">
-                                            <div class="fw-bold"><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?php if (isset($it['size'])): ?> (Größe:<?= htmlspecialchars($it['size']) ?>)<?php endif; ?></div>
+                                            <div class="fw-bold"><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?></div>
                                             <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
                                                 <ul class="mb-1">
                                                     <?php if (!empty($it['extras'])): ?>
@@ -1124,9 +994,10 @@ try {
                                                 </ul>
                                             <?php endif; ?>
                                         </div>
-                                        <div class="text-end"><strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-2" title="Remove"><i class="bi bi-trash"></i></button></form>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit"><i class="bi bi-pencil-square"></i></button>
+                                        <div class="text-end">
+                                            <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
+                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove"><i class="bi bi-trash"></i></button></form>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit"><i class="bi bi-pencil-square"></i></button>
                                         </div>
                                     </div>
                                 </li>
@@ -1138,28 +1009,29 @@ try {
                                 <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</strong><span>-<?= number_format($coupon_discount, 2) ?>€</span></li>
                             <?php endif; ?>
                         </ul>
-                        <h4>Subtotal: <?= number_format($cart_total_with_tip, 2) ?> €</h4>
-                        <h5>Shipping: <?= number_format($shipping_for_display, 2) ?> €</h5>
+                        <p><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €<br>
+                            <strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €
+                        </p>
                         <hr>
-                        <h4>Total: <?= number_format($total_with_shipping, 2) ?> €</h4>
-                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-3" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
+                        <h6>Total: <?= number_format($total_with_shipping, 2) ?> €</h6>
+                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-2" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
-    <ul class="nav nav-tabs justify-content-center my-4">
+    <ul class="nav nav-tabs justify-content-center my-3">
         <li class="nav-item"><a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a></li>
         <?php foreach ($categories as $cItem): ?>
             <li class="nav-item"><a class="nav-link <?= ($selC === $cItem['id'] ? 'active' : '') ?>" href="index.php?category_id=<?= $cItem['id'] ?>"><?= htmlspecialchars($cItem['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
-    <main class="container my-5">
+    <main class="container my-3">
         <div class="row">
             <div class="col-lg-9">
-                <div class="row g-4">
+                <div class="row g-3">
                     <?php if ($products) foreach ($products as $pd): ?>
-                        <div class="col-md-4 mb-4">
+                        <div class="col-md-4">
                             <div class="card h-100 shadow-sm">
                                 <div class="position-relative">
                                     <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
@@ -1167,14 +1039,15 @@ try {
                                         <span class="badge <?= ($pd['is_new'] ? 'bg-success' : 'bg-warning text-dark') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2"><?= ($pd['is_new'] ? 'New' : 'Offer') ?></span>
                                     <?php endif; ?>
                                 </div>
-                                <div class="card-body d-flex flex-column">
-                                    <h5 class="card-title"><?= htmlspecialchars($pd['name']) ?></h5>
-                                    <p class="card-text"><?= htmlspecialchars($pd['description']) ?></p>
+                                <div class="card-body d-flex flex-column" style="gap:4px">
+                                    <h6 class="card-title" style="font-size:.95rem"><?= htmlspecialchars($pd['name']) ?></h6>
+                                    <p class="card-text" style="font-size:.8rem;line-height:1.2"><?= htmlspecialchars($pd['description']) ?></p>
                                     <?php if ($pd['allergies']): ?>
-                                        <p class="card-text text-danger"><strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?></p>
+                                        <p class="card-text text-danger" style="font-size:.8rem"><strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?></p>
                                     <?php endif; ?>
-                                    <div class="mt-auto"><strong><?= !empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€" ?></strong>
-                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?>title="<?= ($is_closed ? 'Store is closed' : '') ?>"><i class="bi bi-cart-plus"></i></button>
+                                    <div class="mt-auto">
+                                        <small><strong><?= !empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€" ?></strong></small>
+                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?> style="font-size:.8rem"><i class="bi bi-cart-plus"></i></button>
                                     </div>
                                 </div>
                             </div>
@@ -1185,51 +1058,61 @@ try {
                                     <form method="POST" action="index.php" class="add-to-cart-form" data-baseprice="<?= number_format($pd['base_price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>">
                                         <div class="modal-body">
                                             <div class="row">
-                                                <div class="col-4"><img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';"></div>
+                                                <div class="col-4">
+                                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                                </div>
                                                 <div class="col-8">
-                                                    <h2 class="text-uppercase"><b><?= htmlspecialchars($pd['name']) ?></b></h2>
+                                                    <h6 style="font-size:1rem"><b><?= htmlspecialchars($pd['name']) ?></b></h6>
                                                     <hr style="width:10%;border:2px solid black;border-radius:5px;">
                                                     <?php if (empty($pd['sizes'])): ?>
-                                                        <h5>Base Price: <span id="base-price-<?= $pd['id'] ?>"><?= number_format($pd['base_price'], 2) ?>€</span></h5>
+                                                        <p style="font-size:.9rem">Base Price: <span id="base-price-<?= $pd['id'] ?>"><?= number_format($pd['base_price'], 2) ?>€</span></p>
                                                         <input type="hidden" name="size" value="">
                                                     <?php else: ?>
-                                                        <div class="mb-3">
+                                                        <div class="mb-2">
                                                             <label class="form-label">Select Size:</label>
                                                             <select class="form-select size-selector" name="size" data-productid="<?= $pd['id'] ?>">
                                                                 <option value="">Choose a size</option>
-                                                                <?php foreach ($pd['sizes'] as $sz):
-                                                                    $maxS = isset($sz['max_sauces']) ? (int)$sz['max_sauces'] : 0; ?>
-                                                                    <option value="<?= htmlspecialchars($sz['size']) ?>" data-sizeprice="<?= number_format($sz['price'], 2, '.', '') ?>" data-sizes-extras='<?= json_encode($sz['extras'] ?? []) ?>' data-sizes-sauces='<?= json_encode($sz['sauces'] ?? []) ?>' data-maxsauces="<?= $maxS ?>"><?= htmlspecialchars($sz['size']) ?> (<?= number_format($pd['base_price'] + $sz['price'], 2) ?>€)<?php if ($maxS > 0): ?> - Max <?= $maxS ?> sauces<?php endif; ?></option>
+                                                                <?php foreach ($pd['sizes'] as $sz): $maxS = isset($sz['max_sauces']) ? (int)$sz['max_sauces'] : 0; ?>
+                                                                    <option value="<?= htmlspecialchars($sz['size']) ?>" data-sizeprice="<?= number_format($sz['price'], 2, '.', '') ?>" data-sizes-extras='<?= json_encode($sz['extras'] ?? []) ?>' data-sizes-sauces='<?= json_encode($sz['sauces'] ?? []) ?>' data-maxsauces="<?= $maxS ?>"><?= htmlspecialchars($sz['size']) ?> (<?= number_format($pd['base_price'] + $sz['price'], 2) ?>€)<?php if ($maxS > 0) echo " - Max $maxS sauces"; ?></option>
                                                                 <?php endforeach; ?>
                                                             </select>
                                                         </div>
                                                     <?php endif; ?>
-                                                    <div class="mb-3">
+                                                    <div class="mb-2">
                                                         <label class="form-label">Extras</label>
                                                         <div class="extras-container">
                                                             <?php foreach ($pd['extras'] as $extra): ?>
-                                                                <div class="mb-2 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity" style="width:80px" name="extras[<?= htmlspecialchars($extra['name']) ?>]" data-price="<?= number_format($extra['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1"><span><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</span></div>
+                                                                <div class="mb-1 d-flex align-items-center">
+                                                                    <input type="number" class="form-control me-2 item-quantity" style="width:60px" name="extras[<?= htmlspecialchars($extra['name']) ?>]" data-price="<?= number_format($extra['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1" style="font-size:.8rem">
+                                                                    <span style="font-size:.8rem"><?= htmlspecialchars($extra['name']) ?> (+<?= number_format($extra['price'], 2) ?>€)</span>
+                                                                </div>
                                                             <?php endforeach; ?>
                                                         </div>
                                                     </div>
-                                                    <div class="mb-3">
+                                                    <div class="mb-2">
                                                         <label class="form-label">Sauces</label>
                                                         <div class="sauces-container">
                                                             <?php foreach ($pd['sauces'] as $sauce): ?>
-                                                                <div class="mb-2 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity sauce-quantity" style="width:80px" name="sauces[<?= htmlspecialchars($sauce['name']) ?>]" data-price="<?= number_format($sauce['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1"><span><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</span></div>
+                                                                <div class="mb-1 d-flex align-items-center">
+                                                                    <input type="number" class="form-control me-2 item-quantity sauce-quantity" style="width:60px" name="sauces[<?= htmlspecialchars($sauce['name']) ?>]" data-price="<?= number_format($sauce['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1">
+                                                                    <span style="font-size:.8rem"><?= htmlspecialchars($sauce['name']) ?> (+<?= number_format($sauce['price'], 2) ?>€)</span>
+                                                                </div>
                                                             <?php endforeach; ?>
                                                         </div>
                                                     </div>
-                                                    <div class="mb-3">
+                                                    <div class="mb-2">
                                                         <label class="form-label">Dresses</label>
                                                         <div class="dresses-container">
                                                             <?php foreach ($pd['dresses'] as $dress): ?>
-                                                                <div class="mb-2 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity" style="width:80px" name="dresses[<?= htmlspecialchars($dress['name']) ?>]" data-price="<?= number_format($dress['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1"><span><?= htmlspecialchars($dress['name']) ?> (+<?= number_format($dress['price'], 2) ?>€)</span></div>
+                                                                <div class="mb-1 d-flex align-items-center">
+                                                                    <input type="number" class="form-control me-2 item-quantity" style="width:60px" name="dresses[<?= htmlspecialchars($dress['name']) ?>]" data-price="<?= number_format($dress['price'], 2, '.', '') ?>" data-productid="<?= $pd['id'] ?>" value="0" min="0" step="1">
+                                                                    <span style="font-size:.8rem"><?= htmlspecialchars($dress['name']) ?> (+<?= number_format($dress['price'], 2) ?>€)</span>
+                                                                </div>
                                                             <?php endforeach; ?>
                                                         </div>
                                                     </div>
                                                     <?php if (!empty($drinks)): ?>
-                                                        <div class="mb-3">
+                                                        <div class="mb-2">
                                                             <label class="form-label">Drinks</label>
                                                             <select class="form-select drink-selector" name="drink" data-productid="<?= $pd['id'] ?>">
                                                                 <option value="">Choose a drink</option>
@@ -1239,13 +1122,21 @@ try {
                                                             </select>
                                                         </div>
                                                     <?php endif; ?>
-                                                    <div class="mb-3"><label class="form-label">Quantity</label><input type="number" class="form-control quantity-selector" name="quantity" data-productid="<?= $pd['id'] ?>" value="1" min="1" max="99" required></div>
-                                                    <div class="mb-3"><label class="form-label">Special Instructions</label><textarea class="form-control" name="special_instructions" rows="2"></textarea></div>
-                                                    <div class="bg-light p-2 mb-2 rounded"><strong>Estimated Price: </strong><span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1.25rem;color:#d3b213"><?= number_format($pd['base_price'], 2) ?>€</span></div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label">Quantity</label>
+                                                        <input type="number" class="form-control quantity-selector" name="quantity" data-productid="<?= $pd['id'] ?>" value="1" min="1" max="99" required>
+                                                    </div>
+                                                    <div class="mb-2"><label class="form-label">Special Instructions</label><textarea class="form-control" name="special_instructions" rows="2" style="font-size:.8rem"></textarea></div>
+                                                    <div class="bg-light p-2 mb-2 rounded"><small><strong>Estimated Price: </strong></small><span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1rem;color:#d3b213"><?= number_format($pd['base_price'], 2) ?>€</span></div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="modal-footer"><input type="hidden" name="product_id" value="<?= $pd['id'] ?>"><input type="hidden" name="add_to_cart" value="1"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i></button><button type="submit" class="btn btn-primary" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-cart-plus"></i></button></div>
+                                        <div class="modal-footer">
+                                            <input type="hidden" name="product_id" value="<?= $pd['id'] ?>">
+                                            <input type="hidden" name="add_to_cart" value="1">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i></button>
+                                            <button type="submit" class="btn btn-primary" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-cart-plus"></i></button>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -1275,50 +1166,40 @@ try {
             </div>
             <div class="col-lg-3">
                 <div class="order-summary">
-                    <h2 class="order-title">YOUR ORDER</h2>
+                    <h6 class="order-title">YOUR ORDER</h6>
                     <?php if (!empty($main_store['logo'])): ?>
-                        <div class="mb-3 text-center"><img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';"></div>
+                        <div class="mb-2 text-center"><img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" style="max-height:80px" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';"></div>
                     <?php endif;
                     if (!empty($main_store['cart_description'])): ?>
-                        <div class="mb-4" id="cart-description">
-                            <p><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?>
+                        <div class="mb-2" id="cart-description">
+                            <p style="font-size:.8rem"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?>
                         </div>
                     <?php endif; ?>
-                    <p class="card-text"><strong>Minimum order:</strong> <?= htmlspecialchars($_SESSION['minimum_order'] ?? '5.00') ?> €<br><strong>Shipping base fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €<br><strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €<br></p>
-                    <?php
-                    if ($main_store) {
-                        $wd = @json_decode($main_store['work_schedule'] ?? '', true);
-                        if (isset($wd['days'])) {
-                            echo "<p><strong>Store Schedule:</strong><br>";
-                            foreach ($wd['days'] as $day => $hours) {
-                                $stt = $hours['start'] ?? '--';
-                                $enn = $hours['end'] ?? '--';
-                                echo htmlspecialchars("$day: $stt - $enn") . "<br>";
-                            }
-                            echo "</p>";
-                        }
-                    }
-                    if (!empty($_SESSION['delivery_address'])): ?>
-                        <div class="mb-3">
-                            <h5>Delivery Address</h5>
-                            <p><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
-                            <a href="?action=change_address" class="btn btn-sm btn-outline-primary" title="Change Address"><i class="bi bi-geo-alt"></i></a>
-                            <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="View on Map"><i class="bi bi-map"></i></a>
+                    <p style="font-size:.8rem">
+                        <strong>Min. order:</strong> <?= htmlspecialchars($_SESSION['minimum_order'] ?? '5.00') ?> €<br>
+                        <strong>Shipping base fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €<br>
+                        <strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €
+                    </p>
+                    <?php if (!empty($_SESSION['delivery_address'])): ?>
+                        <div class="mb-2">
+                            <h6 style="font-size:.9rem">Delivery Address</h6>
+                            <p style="font-size:.8rem"><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
+                            <a href="?action=change_address" class="btn btn-sm btn-outline-primary" style="font-size:.7rem" title="Change Address"><i class="bi bi-geo-alt"></i></a>
+                            <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem" title="View on Map"><i class="bi bi-map"></i></a>
                         </div>
                     <?php endif; ?>
                     <div id="cart-items">
                         <?php if (!empty($_SESSION['cart'])): ?>
-                            <ul class="list-group mb-3">
+                            <ul class="list-group mb-2">
                                 <?php foreach ($_SESSION['cart'] as $i => $it): ?>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center" style="font-size:.85rem">
                                         <div>
-                                            <h6><?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " ({$it['size']})"; ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
+                                            <h6 style="font-size:.9rem"><?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " ({$it['size']})"; ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
                                             <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
-                                                <ul>
+                                                <ul style="padding-left:16px;font-size:.75rem">
                                                     <?php if (!empty($it['extras'])): ?>
                                                         <li><strong>Extras:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['extras'] as $ex): ?>
+                                                            <ul><?php foreach ($it['extras'] as $ex): ?>
                                                                     <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
                                                                 <?php endforeach; ?>
                                                             </ul>
@@ -1326,8 +1207,7 @@ try {
                                                     <?php endif;
                                                     if (!empty($it['sauces'])): ?>
                                                         <li><strong>Saucen:</strong>
-                                                            <ul>
-                                                                <?php foreach ($it['sauces'] as $sx): ?>
+                                                            <ul><?php foreach ($it['sauces'] as $sx): ?>
                                                                     <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
                                                                 <?php endforeach; ?>
                                                             </ul>
@@ -1343,34 +1223,30 @@ try {
                                             <?php endif; ?>
                                         </div>
                                         <div class="text-end"><strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-2" title="Remove"><i class="bi bi-trash"></i></button></form>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit"><i class="bi bi-pencil-square"></i></button>
+                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove" style="font-size:.7rem"><i class="bi bi-trash"></i></button></form>
+                                            <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" style="font-size:.7rem" title="Edit"><i class="bi bi-pencil-square"></i></button>
                                         </div>
                                     </li>
                                 <?php endforeach; ?>
                             </ul>
                             <?php if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
-                                <ul class="list-group mb-3">
+                                <ul class="list-group mb-2">
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         <div>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</div>
                                         <div>-<?= number_format($coupon_discount, 2) ?>€</div>
                                     </li>
                                 </ul>
                             <?php endif; ?>
-                            <h4>Subtotal: <?= number_format($cart_total_with_tip, 2) ?> €</h4>
-                            <h5>Shipping: <?= number_format($shipping_for_display, 2) ?> €</h5>
+                            <p style="font-size:.85rem"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €<br><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
                             <hr>
-                            <h4>Total: <?= number_format($total_with_shipping, 2) ?> €</h4>
-                            <form method="POST" action="index.php" class="mb-3 d-flex">
-                                <input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code">
-                                <button type="submit" name="apply_coupon" class="btn btn-outline-primary ms-2">Apply</button>
-                            </form>
+                            <p style="font-size:.9rem"><strong>Total:</strong> <?= number_format($total_with_shipping, 2) ?> €</p>
+                            <form method="POST" action="index.php" class="mb-2 d-flex"><input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code" style="font-size:.8rem"><button type="submit" name="apply_coupon" class="btn btn-outline-primary ms-2" style="font-size:.8rem">Apply</button></form>
                             <?php if (isset($_GET['coupon_error'])): ?>
-                                <div class="alert alert-danger p-1 text-center"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
+                                <div class="alert alert-danger p-1 text-center" style="font-size:.75rem"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
                             <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
-                                <div class="alert alert-success p-1 text-center">Coupon applied!</div>
+                                <div class="alert alert-success p-1 text-center" style="font-size:.75rem">Coupon applied!</div>
                             <?php endif; ?>
-                            <button class="btn btn-success w-100 mt-3" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
+                            <button class="btn btn-success w-100 mt-2" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?> style="font-size:.8rem"><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
                         <?php else: ?>
                             <p>Your cart is empty.</p>
                         <?php endif; ?>
@@ -1381,30 +1257,37 @@ try {
     </main>
     <?php include 'footer.php';
     include 'rules.php'; ?>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://www.paypal.com/sdk/js?client-id=AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-NDgpng0NLAiWr&currency=EUR"></script>
-
-
     <script>
+        function showBootstrapAlert(m, t = 'info') {
+            let a = document.getElementById('alert_placeholder');
+            if (!a) {
+                let c = document.createElement('div');
+                c.id = 'alert_placeholder';
+                document.body.prepend(c);
+                a = c;
+            }
+            let w = document.createElement('div');
+            w.innerHTML = `<div class="alert alert-${t} alert-dismissible fade show" role="alert">${m}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
+            a.append(w);
+        }
         $(function() {
             $('#loading-overlay').fadeOut('slow');
-            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>Swal.fire("Item has been added to your cart.");
+            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>showBootstrapAlert("Item added to cart.", "success");
             <?php endif;
-            if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>Swal.fire("Item removed from cart.");
+            if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>showBootstrapAlert("Item removed from cart.", "warning");
             <?php endif;
-            if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>Swal.fire("Cart updated.");
+            if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>showBootstrapAlert("Cart updated.", "info");
             <?php endif;
-            if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>Swal.fire("Your order has been placed successfully.").then(() => {
-                window.location.href = 'index.php';
-            });
+            if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>showBootstrapAlert("Order placed successfully.", "success");
             <?php endif;
-            if (isset($_GET['error'])): ?>Swal.fire("Error: <?= htmlspecialchars($_GET['error']) ?>");
+            if (isset($_GET['error'])): ?>showBootstrapAlert("Error: <?= htmlspecialchars($_GET['error']) ?>", "danger");
             <?php endif;
-            if (isset($_GET['empty_cart']) && $_GET['empty_cart'] == 1): ?>Swal.fire("Your cart is empty. Please add items before checking out.");
+            if (isset($_GET['empty_cart']) && $_GET['empty_cart'] == 1): ?>showBootstrapAlert("Cart is empty.", "warning");
             <?php endif;
-            if (isset($_GET['out_of_stock']) && $_GET['out_of_stock'] == 1): ?>Swal.fire("One or more items in your cart are out of stock. Please adjust your cart.");
+            if (isset($_GET['out_of_stock']) && $_GET['out_of_stock'] == 1): ?>showBootstrapAlert("Some items are out of stock.", "warning");
         <?php endif; ?>
         });
         document.addEventListener('DOMContentLoaded', function() {
@@ -1427,9 +1310,7 @@ try {
                 let dr = form.querySelector('.drink-selector');
                 let dp = (dr && dr.value) ? parseFloat(dr.selectedOptions[0].dataset.drinkprice || "0") : 0;
                 let final = (base + sp + totalExtras + dp) * q;
-                if (es) {
-                    es.textContent = final.toFixed(2) + "€";
-                }
+                if (es) es.textContent = final.toFixed(2) + "€";
             }
 
             function limitSauceQuantities(form) {
@@ -1443,7 +1324,7 @@ try {
                     total += parseInt(inp.value || '0', 10);
                 });
                 if (total > maxS) {
-                    Swal.fire("Max " + maxS + " sauce(s) allowed for this size!");
+                    alert("Max " + maxS + " sauce(s) allowed!");
                     if (window.lastChangedSauceInput) {
                         let cval = parseInt(window.lastChangedSauceInput.value || '0', 10),
                             diff = total - maxS;
@@ -1471,7 +1352,7 @@ try {
                     ec.innerHTML = '';
                     if (se.length > 0) {
                         se.forEach(e => {
-                            ec.innerHTML += `<div class="mb-2 d-flex align-items-center"><input type="number"class="form-control me-2 item-quantity"style="width:80px"name="extras[${e.name}]"data-price="${parseFloat(e.price).toFixed(2)}"data-productid="${form.dataset.productid}"value="0"min="0"step="1"><span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
+                            ec.innerHTML += `<div class="mb-1 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity" style="width:60px" name="extras[${e.name}]" data-price="${parseFloat(e.price).toFixed(2)}" data-productid="${form.dataset.productid}" value="0" min="0" step="1"><span style="font-size:.8rem">${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
                         });
                     }
                 }
@@ -1480,7 +1361,7 @@ try {
                     sc.innerHTML = '';
                     if (ss.length > 0) {
                         ss.forEach(e => {
-                            sc.innerHTML += `<div class="mb-2 d-flex align-items-center"><input type="number"class="form-control me-2 item-quantity sauce-quantity"style="width:80px"name="sauces[${e.name}]"data-price="${parseFloat(e.price).toFixed(2)}"data-productid="${form.dataset.productid}"value="0"min="0"step="1"><span>${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
+                            sc.innerHTML += `<div class="mb-1 d-flex align-items-center"><input type="number" class="form-control me-2 item-quantity sauce-quantity" style="width:60px" name="sauces[${e.name}]" data-price="${parseFloat(e.price).toFixed(2)}" data-productid="${form.dataset.productid}" value="0" min="0" step="1"><span style="font-size:.8rem">${e.name} (+${parseFloat(e.price).toFixed(2)}€)</span></div>`;
                         });
                     }
                     initializeEventListeners(form);
@@ -1525,9 +1406,9 @@ try {
             let observer = new MutationObserver(muts => {
                 muts.forEach(mu => {
                     if (mu.type === 'childList') {
-                        mu.addedNodes.forEach(node => {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                node.querySelectorAll('.add-to-cart-form').forEach(ff => {
+                        mu.addedNodes.forEach(n => {
+                            if (n.nodeType === Node.ELEMENT_NODE) {
+                                n.querySelectorAll('.add-to-cart-form').forEach(ff => {
                                     initializeEventListeners(ff);
                                 });
                             }
@@ -1541,66 +1422,38 @@ try {
             });
         });
         paypal.Buttons({
-            createOrder: function(data, actions) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const pendingOrderId = urlParams.get('pending_paypal_order_id');
-                if (!pendingOrderId) {
-                    // If no pending PayPal order ID, show error or simply return
-                    Swal.fire("No pending PayPal order ID found!");
-                    return;
+            createOrder: function(d, a) {
+                console.log("PayPal createOrder triggered (no existing order).");
+                let pId = new URLSearchParams(window.location.search).get('pending_paypal_order_id');
+                if (!pId) {
+                    console.log("No pending order ID found in URL, might be initial checkout...");
                 }
-
-                // This total is coming from your server in PHP:
-                let total = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
-
-                // Return the created order
-                return actions.order.create({
+                let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                console.log("PayPal total from server:", t);
+                return a.order.create({
                     purchase_units: [{
-                        description: "Order #" + pendingOrderId,
+                        description: "Order (no pending ID)",
                         amount: {
                             currency_code: "EUR",
-                            value: total
+                            value: t
                         }
                     }]
                 });
             },
-
-            onApprove: function(data, actions) {
-                return actions.order.capture().then(function(details) {
-                    fetch('index.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                paypal_success: true,
-                                orderId: <?= json_encode((int)($_GET['pending_paypal_order_id'] ?? 0)) ?>,
-                                paypalOrderId: data.orderID,
-                                paypalCaptureId: details.purchase_units[0].payments.captures[0].id
-                            })
-                        })
-                        .then(r => r.json())
-                        .then(d => {
-                            if (d.status === 'ok') {
-                                Swal.fire("Payment successful!").then(() => {
-                                    window.location.href = 'index.php?order=success';
-                                });
-                            } else {
-                                Swal.fire("Payment captured, but server error occurred.");
-                            }
-                        })
-                        .catch(err => {
-                            Swal.fire("Payment captured, but server error occurred.");
-                        });
+            onApprove: function(d, a) {
+                console.log("PayPal onApprove:", d);
+                return a.order.capture().then(function(det) {
+                    console.log("Capture:", det);
+                    alert("Payment success (no pending order ID). Server needs to handle capture info.");
                 });
             },
-
-            onCancel: function(data) {
-                Swal.fire("Payment was canceled by the user.");
+            onCancel: function(d) {
+                console.log("User canceled:", d);
+                alert("Payment canceled.");
             },
-
-            onError: function(err) {
-                Swal.fire("An error occurred during the payment process.");
+            onError: function(e) {
+                console.error("PayPal error:", e);
+                alert("PayPal error occurred.");
             }
         }).render('#paypal-button-container');
     </script>
