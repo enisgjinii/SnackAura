@@ -156,7 +156,7 @@ try {
         #sidebar {
             min-width: 250px;
             max-width: 250px;
-            height: 100vh;
+            height: fit-content;
             background-color: var(--sidebar-bg);
             color: var(--sidebar-text);
             transition: all 0.3s;
