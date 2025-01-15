@@ -2,7 +2,6 @@
 // orders.php
 
 ob_start();
-session_start(); // Ensure session is started
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 require '../vendor/autoload.php';
