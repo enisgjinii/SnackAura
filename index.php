@@ -132,48 +132,28 @@ function applyTip($cartTotal, $tips, $selectedTipId)
 
 function haversineDist($lat1, $lon1, $lat2, $lon2)
 {
-    $R = 6371;
+    $R = 6371; // Earth radius in kilometers
     $dLat = deg2rad($lat2 - $lat1);
     $dLon = deg2rad($lon2 - $lon1);
-    return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
+    return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 +
+        cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
 }
 
 function computeShipping($store, $lat, $lon)
 {
-    if (empty($lat) || empty($lon)) return 0;
-
+    if (empty($lat) || empty($lon) || ($store['shipping_calculation_mode'] === 'pickup')) return 0;
     $mode = $store['shipping_calculation_mode'] ?? 'radius';
     $baseFee = (float)($store['shipping_fee_base'] ?? 0);
     $perKmFee = (float)($store['shipping_fee_per_km'] ?? 0);
     $radius = (float)($store['shipping_distance_radius'] ?? 0);
     $postalZones = json_decode($store['postal_code_zones'] ?? '{}', true) ?: [];
-
+    if (in_array($mode, ['postal', 'both'])) {
+        $address = $_SESSION['delivery_address'] ?? '';
+        if (isset($postalZones[$address])) return max((float)$postalZones[$address], 0);
+    }
     $distance = haversineDist((float)$store['store_lat'], (float)$store['store_lng'], (float)$lat, (float)$lon);
-
-    $shipping = 0;
-
-    if ($mode === 'radius' || $mode === 'both') {
-        if ($distance <= $radius) {
-            $shipping += $baseFee + ($distance * $perKmFee);
-        } else {
-            if ($mode === 'radius') {
-                return 0;
-            }
-        }
-    }
-
-    if (($mode === 'postal' || $mode === 'both') && isset($_SESSION['postal_code'])) {
-        $postalCode = $_SESSION['postal_code'];
-        if (isset($postalZones[$postalCode])) {
-            $shipping += max((float)$postalZones[$postalCode], 0);
-        } else {
-            if ($mode === 'postal') {
-                return 0;
-            }
-        }
-    }
-
-    return max($shipping, 0);
+    if ($distance > $radius && $mode !== 'postal') return 0;
+    return max($baseFee + ($distance * $perKmFee), 0);
 }
 
 function applyCoupon($pdo, $code, $cartTotal)
@@ -212,7 +192,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ce = trim($_POST['customer_email'] ?? '');
         $cp = trim($_POST['customer_phone'] ?? '');
         $da = trim($_POST['delivery_address'] ?? '');
-        $pc = trim($_POST['postal_code'] ?? '');
         $stid = $_POST['selected_tip'] ?? null;
         $ev = (isset($_POST['is_event']) && $_POST['is_event'] == '1');
         $sd = $_POST['scheduled_date'] ?? null;
@@ -229,11 +208,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location:index.php?error=invalid_payment_method");
             exit;
         }
-        if (!$cn || !$ce || !$cp || !$da || !$pc) {
+        if (!$cn || !$ce || !$cp || !$da) {
             header("Location:index.php?error=invalid_order_details");
             exit;
         }
-        $_SESSION['postal_code'] = $pc;
         $cart_total = calculateCartTotal($_SESSION['cart']);
         $tip_amount = applyTip($cart_total, $tip_options, $stid);
         $shipping = 0;
@@ -251,16 +229,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $coupon_discount = $cart_total;
             }
         }
-        $tax_amount = 0;
-        if (isset($main_store['shipping_vat_percentage']) && $main_store['shipping_vat_percentage'] > 0) {
-            $tax_amount = ($cart_total + $tip_amount + $shipping - $coupon_discount) * ((float)$main_store['shipping_vat_percentage'] / 100);
-        }
-        $total = max($cart_total + $tip_amount + $shipping + $tax_amount - $coupon_discount, 0);
-        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount, 'tax_amount' => $tax_amount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $total = max($cart_total + $tip_amount + $shipping - $coupon_discount, 0);
+        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         try {
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount,tax_amount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount, $tax_amount]);
+            $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount]);
             $oid = $pdo->lastInsertId();
             if ($pm === 'paypal') {
                 $pdo->commit();
@@ -302,11 +276,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->execute([$sid]);
         if ($store = $st->fetch(PDO::FETCH_ASSOC)) {
             $da = trim($_POST['delivery_address'] ?? '');
-            $pc = trim($_POST['postal_code'] ?? '');
             $la = trim($_POST['latitude'] ?? '');
             $lo = trim($_POST['longitude'] ?? '');
-            if (!$da || !$pc) {
-                $error_message = "Please provide a valid delivery address, location, and postal code.";
+            if (!$da) {
+                $error_message = "Please provide a valid delivery address & location.";
             } else {
                 $_SESSION['selected_store'] = $sid;
                 $_SESSION['store_name'] = $store['name'];
@@ -316,7 +289,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['latitude'] = $la;
                 $_SESSION['longitude'] = $lo;
                 $_SESSION['minimum_order'] = $store['minimum_order'];
-                $_SESSION['postal_code'] = $pc;
                 header("Location:index.php");
                 exit;
             }
@@ -664,19 +636,32 @@ try {
     $active_offers = [];
 }
 
+// Calculate Distance
 function calculateDistance($lat1, $lon1, $lat2, $lon2)
 {
-    $earthRadius = 6371;
+    $earthRadius = 6371; // in kilometers
     $dLat = deg2rad($lat2 - $lat1);
     $dLon = deg2rad($lon2 - $lon1);
-    $a = sin($dLat / 2) * sin($dLat / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) * sin($dLon / 2);
+    $a = sin($dLat / 2) * sin($dLat / 2) +
+        cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+        sin($dLon / 2) * sin($dLon / 2);
     $c = 2 * asin(sqrt($a));
     return $earthRadius * $c;
 }
 
 $distance_km = null;
-if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !empty($_SESSION['latitude']) && !empty($_SESSION['longitude'])) {
-    $distance_km = calculateDistance((float)$main_store['store_lat'], (float)$main_store['store_lng'], (float)$_SESSION['latitude'], (float)$_SESSION['longitude']);
+if (
+    !empty($main_store['store_lat']) &&
+    !empty($main_store['store_lng']) &&
+    !empty($_SESSION['latitude']) &&
+    !empty($_SESSION['longitude'])
+) {
+    $distance_km = calculateDistance(
+        $main_store['store_lat'],
+        $main_store['store_lng'],
+        $_SESSION['latitude'],
+        $_SESSION['longitude']
+    );
 }
 ?>
 <!DOCTYPE html>
@@ -865,10 +850,6 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                 <label for="delivery_address" class="form-label">Delivery Address</label>
                                 <input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
                             </div>
-                            <div class="mb-3">
-                                <label for="postal_code" class="form-label">Postal Code <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="postal_code" name="postal_code" required value="<?= htmlspecialchars($_SESSION['postal_code'] ?? '') ?>">
-                            </div>
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
                             <div id="map" style="width:100%;height:300px"></div>
@@ -929,7 +910,7 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                     marker = L.marker(e.latlng).addTo(map);
                     document.getElementById('latitude').value = e.latlng.lat;
                     document.getElementById('longitude').value = e.latlng.lng;
-                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lon}`).then(r => r.json()).then(d => {
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`).then(r => r.json()).then(d => {
                         if (d.display_name) {
                             document.getElementById('delivery_address').value = d.display_name;
                         }
@@ -957,9 +938,9 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                         showBootstrapAlert('No store selected.', 'warning');
                         return;
                     }
-                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value || !document.getElementById('postal_code').value.trim()) {
+                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value) {
                         e.preventDefault();
-                        showBootstrapAlert('Please provide a complete address, postal code, and location.', 'warning');
+                        showBootstrapAlert('Please provide a complete address and location.', 'warning');
                     }
                 });
             })();
@@ -1015,11 +996,19 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                 <h6 class="mt-3">Complete PayPal Payment</h6>
                                 <div id="paypal-button-container"></div>
                                 <script>
+                                    console.log("Initializing PayPal Buttons for existing pending order...");
                                     paypal.Buttons({
                                         createOrder: function(data, actions) {
                                             const urlParams = new URLSearchParams(window.location.search);
                                             const pId = urlParams.get('pending_paypal_order_id');
+                                            if (!pId) {
+                                                alert("No pending PayPal order ID found!");
+                                                console.error("No ID in URL.");
+                                                return;
+                                            }
+                                            console.log("Creating order for pendingOrderId:", pId);
                                             let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                                            console.log("PayPal Order total:", t);
                                             return actions.order.create({
                                                 purchase_units: [{
                                                     description: "Order #" + pId,
@@ -1031,7 +1020,9 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                             });
                                         },
                                         onApprove: function(d, a) {
+                                            console.log("onApprove triggered. data:", d);
                                             return a.order.capture().then(function(det) {
+                                                console.log("PayPal capture:", det);
                                                 fetch('index.php', {
                                                     method: 'POST',
                                                     headers: {
@@ -1044,6 +1035,7 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                                         paypalCaptureId: det.purchase_units[0].payments.captures[0].id
                                                     })
                                                 }).then(r => r.json()).then(res => {
+                                                    console.log("Server response:", res);
                                                     if (res.status === 'ok') {
                                                         alert("Payment successful!");
                                                         window.location.href = 'index.php?order=success';
@@ -1057,10 +1049,12 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                             });
                                         },
                                         onCancel: function(d) {
+                                            console.log("Payment canceled by user:", d);
                                             alert("Payment was canceled.");
                                         },
                                         onError: function(e) {
-                                            alert("PayPal error occurred.");
+                                            console.error("PayPal onError:", e);
+                                            alert("Error in PayPal process.");
                                         }
                                     }).render('#paypal-button-container');
                                 </script>
@@ -1121,8 +1115,8 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                         </div>
                                     </div>
                                 </li>
-                            <?php endforeach; ?>
-                            <?php if ($tip_amount > 0): ?>
+                            <?php endforeach;
+                            if ($tip_amount > 0): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Trinkgeld</strong><span><?= number_format($tip_amount, 2) ?>€</span></li>
                             <?php endif;
                             if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
@@ -1287,6 +1281,9 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                     endforeach; ?>
                 </div>
             </div>
+            <?php
+            // Order Summary Enhancements
+            ?>
             <div class="col-lg-3">
                 <div class="order-summary card shadow-sm">
                     <div class="card-body p-4">
@@ -1327,14 +1324,6 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                     <p class="mb-1 text-success"><strong>Congratulations!</strong> You qualify for free shipping.</p>
                                 <?php endif; ?>
                             <?php endif; ?>
-                            <?php if (isset($tax_amount) && $tax_amount > 0): ?>
-                                <p class="mb-1"><strong>Tax (<?= number_format($main_store['shipping_vat_percentage'], 2) ?>%):</strong> <?= number_format($tax_amount, 2) ?> €</p>
-                            <?php endif; ?>
-                            <?php if (isset($main_store['shipping_fee_base']) && isset($main_store['shipping_fee_per_km']) && $distance_km !== null):
-                                $calculated_shipping = $main_store['shipping_fee_base'] + ($main_store['shipping_fee_per_km'] * $distance_km);
-                            ?>
-                                <p class="mb-1"><strong>Shipping Calculation:</strong> <?= number_format($main_store['shipping_fee_base'], 2) ?> € + (<?= number_format($main_store['shipping_fee_per_km'], 2) ?> €/km * <?= number_format($distance_km, 2) ?> km) = <?= number_format($calculated_shipping, 2) ?> €</p>
-                            <?php endif; ?>
                         </div>
                         <?php if (!empty($_SESSION['delivery_address'])): ?>
                             <div class="mb-4">
@@ -1362,8 +1351,6 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                         <i class="bi bi-map"></i>
                                     </a>
                                 </div>
-
-                                <div id="order-summary-map" style="width: 100%; height: 200px;"></div>
                             </div>
                         <?php endif; ?>
                         <div id="cart-items">
@@ -1406,9 +1393,18 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                                     <?php endif; ?>
                                                 </div>
                                                 <div class="text-end">
-                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                                    <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove Item"><i class="bi bi-trash"></i></button></form>
-                                                    <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit Item"><i class="bi bi-pencil-square"></i></button>
+                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong>
+                                                    <div class="mt-2 d-flex flex-column gap-1">
+                                                        <form action="index.php" method="POST">
+                                                            <input type="hidden" name="remove" value="<?= $i ?>">
+                                                            <button type="submit" class="btn btn-sm btn-danger" title="Remove Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Remove Item">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Edit Item">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </li>
@@ -1422,8 +1418,10 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                 <?php endif; ?>
                                 <div class="mb-4">
                                     <p class="mb-1"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €</p>
-                                    <?php if (isset($tax_amount) && $tax_amount > 0): ?>
-                                        <p class="mb-1"><strong>Tax (<?= number_format($main_store['shipping_vat_percentage'], 2) ?>%):</strong> <?= number_format($tax_amount, 2) ?> €</p>
+                                    <?php if (isset($main_store['tax_rate']) && $main_store['tax_rate'] > 0):
+                                        $tax_amount = $cart_total_with_tip * ($main_store['tax_rate'] / 100);
+                                    ?>
+                                        <p class="mb-1"><strong>Tax (<?= number_format($main_store['tax_rate'], 2) ?>%):</strong> <?= number_format($tax_amount, 2) ?> €</p>
                                     <?php endif; ?>
                                     <p class="mb-1"><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
                                     <?php if ($distance_km !== null): ?>
@@ -1434,7 +1432,7 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                     ?>
                                         <p class="mb-1"><strong>Shipping Calculation:</strong> <?= number_format($main_store['shipping_fee_base'], 2) ?> € + (<?= number_format($main_store['shipping_fee_per_km'], 2) ?> €/km * <?= number_format($distance_km, 2) ?> km) = <?= number_format($calculated_shipping, 2) ?> €</p>
                                     <?php endif; ?>
-                                    <?php if (!empty($main_store['shipping_free_threshold'])):
+                                    <?php if (isset($main_store['shipping_free_threshold'])):
                                         if ($cart_total_with_tip < $main_store['shipping_free_threshold']):
                                             $remaining = $main_store['shipping_free_threshold'] - $cart_total_with_tip;
                                     ?>
@@ -1442,6 +1440,9 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                         <?php else: ?>
                                             <p class="mb-1 text-success"><strong>Free Shipping:</strong> You qualify for free shipping!</p>
                                         <?php endif; ?>
+                                    <?php endif; ?>
+                                    <?php if (isset($tax_amount)): ?>
+                                        <p class="mb-1"><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
                                     <?php endif; ?>
                                     <hr class="my-2">
                                     <?php
@@ -1469,6 +1470,8 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                         </div>
                     </div>
                 </div>
+            </div>
+
     </main>
     <?php include 'footer.php';
     include 'rules.php'; ?>
@@ -1636,10 +1639,16 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                 subtree: true
             });
 
+            // Initialize PayPal Buttons
             paypal.Buttons({
                 createOrder: function(d, a) {
+                    console.log("PayPal createOrder triggered (no existing order).");
                     let pId = new URLSearchParams(window.location.search).get('pending_paypal_order_id');
+                    if (!pId) {
+                        console.log("No pending order ID found in URL, might be initial checkout...");
+                    }
                     let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                    console.log("PayPal Order total from server:", t);
                     return a.order.create({
                         purchase_units: [{
                             description: "Order (no pending ID)",
@@ -1651,14 +1660,18 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                     });
                 },
                 onApprove: function(d, a) {
+                    console.log("PayPal onApprove:", d);
                     return a.order.capture().then(function(det) {
+                        console.log("Capture:", det);
                         alert("Payment success (no pending order ID). Server needs to handle capture info.");
                     });
                 },
                 onCancel: function(d) {
+                    console.log("User canceled:", d);
                     alert("Payment canceled.");
                 },
                 onError: function(e) {
+                    console.error("PayPal error:", e);
                     alert("PayPal error occurred.");
                 }
             }).render('#paypal-button-container');
