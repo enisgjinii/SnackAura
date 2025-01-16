@@ -9,30 +9,36 @@ $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
 $showChangeAddressModal = (isset($_GET['action']) && $_GET['action'] === 'change_address');
 $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+
 function log_error_markdown($m, $c = '')
 {
     file_put_contents(ERROR_LOG_FILE, "### [" . date('Y-m-d H:i:s') . "] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" : '') . "---\n\n", FILE_APPEND | LOCK_EX);
 }
+
 set_exception_handler(function ($e) {
     log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
     header("Location: index.php?error=unknown_error");
     exit;
 });
+
 set_error_handler(function ($sev, $msg, $fl, $ln) {
     if (!(error_reporting() & $sev)) return;
     throw new ErrorException($msg, 0, $sev, $fl, $ln);
 });
+
 include 'settings_fetch.php';
 $_SESSION['cart'] = $_SESSION['cart'] ?? [];
 $is_closed = false;
 $notification = [];
 $selected_store_id = $_SESSION['selected_store'] ?? null;
 $main_store = null;
+
 if ($selected_store_id) {
     $st = $pdo->prepare("SELECT * FROM stores WHERE id=? AND is_active=1");
     $st->execute([$selected_store_id]);
     $main_store = $st->fetch(PDO::FETCH_ASSOC);
 }
+
 if ($main_store) {
     $d = @json_decode($main_store['work_schedule'] ?? '', true);
     if (!is_array($d)) $d = [];
@@ -70,16 +76,19 @@ if ($main_store) {
     $is_closed = true;
     $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
+
 function logdb($m)
 {
     file_put_contents('errors.md', $m . "\n", FILE_APPEND);
 }
+
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch tips: " . $e->getMessage(), "Fetching Tips");
     $tip_options = [];
 }
+
 if (isset($_GET['select_tip'])) {
     $tid = (int)$_GET['select_tip'];
     $valid = in_array($tid, array_column($tip_options, 'id'), true) || $tid === 0;
@@ -91,6 +100,7 @@ if (isset($_GET['select_tip'])) {
     header("Location:index.php?error=invalid_tip");
     exit;
 }
+
 function fetchProduct($pdo, $pid)
 {
     $s = $pdo->prepare("SELECT * FROM products WHERE id=:p AND is_active=1");
@@ -100,12 +110,14 @@ function fetchProduct($pdo, $pid)
     $props = json_decode($p['properties'] ?? '{}', true) ?: [];
     return ['sizes' => $props['sizes'] ?? [], 'extras' => $props['extras'] ?? [], 'sauces' => $props['sauces'] ?? [], 'dresses' => $props['dresses'] ?? [], 'base_price' => (float)($props['base_price'] ?? $p['base_price']), 'name' => $p['name'], 'description' => $p['description'], 'image_url' => $p['image_url'], 'properties' => $p['properties'] ?? '', 'id' => $p['id']];
 }
+
 function calculateCartTotal($cart)
 {
     return array_reduce($cart, function ($a, $i) {
         return $a + ($i['total_price'] ?? 0);
     }, 0);
 }
+
 function applyTip($cartTotal, $tips, $selectedTipId)
 {
     if (!$selectedTipId) return 0;
@@ -117,6 +129,7 @@ function applyTip($cartTotal, $tips, $selectedTipId)
     }
     return 0;
 }
+
 function haversineDist($lat1, $lon1, $lat2, $lon2)
 {
     $R = 6371;
@@ -124,22 +137,45 @@ function haversineDist($lat1, $lon1, $lat2, $lon2)
     $dLon = deg2rad($lon2 - $lon1);
     return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
 }
+
 function computeShipping($store, $lat, $lon)
 {
-    if (empty($lat) || empty($lon) || ($store['shipping_calculation_mode'] === 'pickup')) return 0;
+    if (empty($lat) || empty($lon)) return 0;
+
     $mode = $store['shipping_calculation_mode'] ?? 'radius';
     $baseFee = (float)($store['shipping_fee_base'] ?? 0);
     $perKmFee = (float)($store['shipping_fee_per_km'] ?? 0);
     $radius = (float)($store['shipping_distance_radius'] ?? 0);
     $postalZones = json_decode($store['postal_code_zones'] ?? '{}', true) ?: [];
-    if (in_array($mode, ['postal', 'both'])) {
-        $address = $_SESSION['delivery_address'] ?? '';
-        if (isset($postalZones[$address])) return max((float)$postalZones[$address], 0);
-    }
+
     $distance = haversineDist((float)$store['store_lat'], (float)$store['store_lng'], (float)$lat, (float)$lon);
-    if ($distance > $radius && $mode !== 'postal') return 0;
-    return max($baseFee + ($distance * $perKmFee), 0);
+
+    $shipping = 0;
+
+    if ($mode === 'radius' || $mode === 'both') {
+        if ($distance <= $radius) {
+            $shipping += $baseFee + ($distance * $perKmFee);
+        } else {
+            if ($mode === 'radius') {
+                return 0;
+            }
+        }
+    }
+
+    if (($mode === 'postal' || $mode === 'both') && isset($_SESSION['postal_code'])) {
+        $postalCode = $_SESSION['postal_code'];
+        if (isset($postalZones[$postalCode])) {
+            $shipping += max((float)$postalZones[$postalCode], 0);
+        } else {
+            if ($mode === 'postal') {
+                return 0;
+            }
+        }
+    }
+
+    return max($shipping, 0);
 }
+
 function applyCoupon($pdo, $code, $cartTotal)
 {
     $r = ['ok' => false, 'error' => '', 'coupon' => null];
@@ -164,6 +200,7 @@ function applyCoupon($pdo, $code, $cartTotal)
     $r['coupon'] = ['code' => $c['code'], 'discount_type' => $c['discount_type'], 'discount_value' => $dv];
     return $r;
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['checkout'])) {
         if (empty($_SESSION['cart'])) {
@@ -175,6 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ce = trim($_POST['customer_email'] ?? '');
         $cp = trim($_POST['customer_phone'] ?? '');
         $da = trim($_POST['delivery_address'] ?? '');
+        $pc = trim($_POST['postal_code'] ?? '');
         $stid = $_POST['selected_tip'] ?? null;
         $ev = (isset($_POST['is_event']) && $_POST['is_event'] == '1');
         $sd = $_POST['scheduled_date'] ?? null;
@@ -191,10 +229,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location:index.php?error=invalid_payment_method");
             exit;
         }
-        if (!$cn || !$ce || !$cp || !$da) {
+        if (!$cn || !$ce || !$cp || !$da || !$pc) {
             header("Location:index.php?error=invalid_order_details");
             exit;
         }
+        $_SESSION['postal_code'] = $pc;
         $cart_total = calculateCartTotal($_SESSION['cart']);
         $tip_amount = applyTip($cart_total, $tip_options, $stid);
         $shipping = 0;
@@ -212,12 +251,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $coupon_discount = $cart_total;
             }
         }
-        $total = max($cart_total + $tip_amount + $shipping - $coupon_discount, 0);
-        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        $tax_amount = 0;
+        if (isset($main_store['shipping_vat_percentage']) && $main_store['shipping_vat_percentage'] > 0) {
+            $tax_amount = ($cart_total + $tip_amount + $shipping - $coupon_discount) * ((float)$main_store['shipping_vat_percentage'] / 100);
+        }
+        $total = max($cart_total + $tip_amount + $shipping + $tax_amount - $coupon_discount, 0);
+        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount, 'tax_amount' => $tax_amount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         try {
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount]);
+            $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount,tax_amount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount, $tax_amount]);
             $oid = $pdo->lastInsertId();
             if ($pm === 'paypal') {
                 $pdo->commit();
@@ -259,10 +302,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->execute([$sid]);
         if ($store = $st->fetch(PDO::FETCH_ASSOC)) {
             $da = trim($_POST['delivery_address'] ?? '');
+            $pc = trim($_POST['postal_code'] ?? '');
             $la = trim($_POST['latitude'] ?? '');
             $lo = trim($_POST['longitude'] ?? '');
-            if (!$da) {
-                $error_message = "Please provide a valid delivery address & location.";
+            if (!$da || !$pc) {
+                $error_message = "Please provide a valid delivery address, location, and postal code.";
             } else {
                 $_SESSION['selected_store'] = $sid;
                 $_SESSION['store_name'] = $store['name'];
@@ -272,6 +316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['latitude'] = $la;
                 $_SESSION['longitude'] = $lo;
                 $_SESSION['minimum_order'] = $store['minimum_order'];
+                $_SESSION['postal_code'] = $pc;
                 header("Location:index.php");
                 exit;
             }
@@ -347,7 +392,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $unit = $bp + $et + $st + $dt + $drt;
         $total = $unit * $qty;
-        $cart_item = ['product_id' => $pid, 'name' => $pr['name'], 'description' => $pr['description'], 'image_url' => $pr['image_url'], 'size' => $sz, 'size_price' => $sel_size['price'] ?? 0, 'extras' => $exs, 'sauces' => $sas, 'dresses' => $drs, 'drink' => $drnk, 'special_instructions' => $spec, 'quantity' => $qty, 'unit_price' => $unit, 'total_price' => $total];
+        $cart_item = [
+            'product_id' => $pid,
+            'name' => $pr['name'],
+            'description' => $pr['description'],
+            'image_url' => $pr['image_url'],
+            'size' => $sz,
+            'size_price' => $sel_size['price'] ?? 0,
+            'extras' => $exs,
+            'sauces' => $sas,
+            'dresses' => $drs,
+            'drink' => $drnk,
+            'special_instructions' => $spec,
+            'quantity' => $qty,
+            'unit_price' => $unit,
+            'total_price' => $total
+        ];
         foreach ($_SESSION['cart'] as $i => $exI) {
             $sameDrink = (($exI['drink']['id'] ?? null) == ($cart_item['drink']['id'] ?? null));
             if ($exI['product_id'] == $cart_item['product_id'] && $exI['size'] == $cart_item['size'] && $sameDrink && $exI['special_instructions'] == $cart_item['special_instructions'] && $exI['extras'] == $cart_item['extras'] && $exI['sauces'] == $cart_item['sauces'] && $exI['dresses'] == $cart_item['dresses']) {
@@ -468,11 +528,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $u = $base + $szp + $exTot + $saTot + $drTot + $drinkTot;
         $tp = $u * $qty;
-        $_SESSION['cart'][$ii] = ['product_id' => $pr['id'], 'name' => $pr['name'], 'description' => $pr['description'], 'image_url' => $pr['image_url'], 'size' => $sel_size['size'] ?? null, 'size_price' => $szp, 'extras' => $sel_ex, 'sauces' => $sel_sa, 'dresses' => $sel_dr, 'drink' => $drink_details, 'special_instructions' => $spec, 'quantity' => $qty, 'unit_price' => $u, 'total_price' => $tp];
+        $_SESSION['cart'][$ii] = [
+            'product_id' => $pr['id'],
+            'name' => $pr['name'],
+            'description' => $pr['description'],
+            'image_url' => $pr['image_url'],
+            'size' => $sel_size['size'] ?? null,
+            'size_price' => $szp,
+            'extras' => $sel_ex,
+            'sauces' => $sel_sa,
+            'dresses' => $sel_dr,
+            'drink' => $drink_details,
+            'special_instructions' => $spec,
+            'quantity' => $qty,
+            'unit_price' => $u,
+            'total_price' => $tp
+        ];
         header("Location:index.php?updated=1");
         exit;
     }
 }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['paypal_success'])) {
     $data = json_decode(file_get_contents('php://input'), true);
     if ($data && isset($data['orderId']) && isset($data['paypalOrderId']) && isset($data['paypalCaptureId'])) {
@@ -493,6 +569,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['paypal_success'])) {
     echo json_encode(['status' => 'invalid']);
     exit;
 }
+
 try {
     $catStmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC,name ASC");
     $catStmt->execute();
@@ -501,6 +578,7 @@ try {
     log_error_markdown("Failed to fetch categories: " . $e->getMessage(), "Categories");
     $categories = [];
 }
+
 $selC = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
 $q = "SELECT p.id AS product_id,p.product_code,p.name AS product_name,p.category,p.description,p.allergies,p.image_url,p.is_new,p.is_offer,p.is_active,p.properties,p.base_price,p.created_at,p.updated_at,p.category_id FROM products p WHERE p.is_active=1";
 if ($selC > 0) {
@@ -518,14 +596,36 @@ $products = array_map(function ($r) {
     $sz = $pp['sizes'] ?? [];
     $baseP = (float)($pp['base_price'] ?? $r['base_price']);
     $dp = $baseP + (count($sz) ? min(array_map(fn($s) => (float)($s['price'] ?? 0), $sz)) : 0);
-    return ['id' => $r['product_id'], 'product_code' => $r['product_code'], 'name' => $r['product_name'], 'category' => $r['category'], 'description' => $r['description'], 'allergies' => $r['allergies'], 'image_url' => $r['image_url'], 'is_new' => $r['is_new'], 'is_offer' => $r['is_offer'], 'is_active' => $r['is_active'], 'base_price' => $baseP, 'created_at' => $r['created_at'], 'updated_at' => $r['updated_at'], 'category_id' => $r['category_id'], 'extras' => $pp['extras'] ?? [], 'sauces' => $pp['sauces'] ?? [], 'sizes' => $sz, 'dresses' => $pp['dresses'] ?? [], 'display_price' => $dp];
+    return [
+        'id' => $r['product_id'],
+        'product_code' => $r['product_code'],
+        'name' => $r['product_name'],
+        'category' => $r['category'],
+        'description' => $r['description'],
+        'allergies' => $r['allergies'],
+        'image_url' => $r['image_url'],
+        'is_new' => $r['is_new'],
+        'is_offer' => $r['is_offer'],
+        'is_active' => $r['is_active'],
+        'base_price' => $baseP,
+        'created_at' => $r['created_at'],
+        'updated_at' => $r['updated_at'],
+        'category_id' => $r['category_id'],
+        'extras' => $pp['extras'] ?? [],
+        'sauces' => $pp['sauces'] ?? [],
+        'sizes' => $sz,
+        'dresses' => $pp['dresses'] ?? [],
+        'display_price' => $dp
+    ];
 }, $rawProducts);
+
 try {
     $drinks = $pdo->query("SELECT * FROM drinks ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch drinks: " . $e->getMessage(), "Drinks");
     $drinks = [];
 }
+
 $cart_total = calculateCartTotal($_SESSION['cart']);
 $selT = $_SESSION['selected_tip'] ?? null;
 $tip_amount = applyTip($cart_total, $tip_options, $selT);
@@ -544,6 +644,7 @@ if (!empty($main_store) && (!isset($_GET['payment_method']) || $_GET['payment_me
     }
 }
 $total_with_shipping = $cart_total_with_tip + $shipping_for_display;
+
 try {
     $bannersStmt = $pdo->prepare("SELECT * FROM banners WHERE is_active=1 ORDER BY created_at DESC");
     $bannersStmt->execute();
@@ -552,6 +653,7 @@ try {
     log_error_markdown("Failed to fetch banners: " . $e->getMessage(), "Banners");
     $banners = [];
 }
+
 try {
     $d0 = date('Y-m-d');
     $offersStmt = $pdo->prepare("SELECT * FROM offers WHERE is_active=1 AND (start_date IS NULL OR start_date<=?) AND (end_date IS NULL OR end_date>=?) ORDER BY created_at DESC");
@@ -560,6 +662,21 @@ try {
 } catch (PDOException $e) {
     log_error_markdown("Failed to fetch offers: " . $e->getMessage(), "Offers");
     $active_offers = [];
+}
+
+function calculateDistance($lat1, $lon1, $lat2, $lon2)
+{
+    $earthRadius = 6371;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    $a = sin($dLat / 2) * sin($dLat / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) * sin($dLon / 2);
+    $c = 2 * asin(sqrt($a));
+    return $earthRadius * $c;
+}
+
+$distance_km = null;
+if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !empty($_SESSION['latitude']) && !empty($_SESSION['longitude'])) {
+    $distance_km = calculateDistance((float)$main_store['store_lat'], (float)$main_store['store_lng'], (float)$_SESSION['latitude'], (float)$_SESSION['longitude']);
 }
 ?>
 <!DOCTYPE html>
@@ -748,6 +865,10 @@ try {
                                 <label for="delivery_address" class="form-label">Delivery Address</label>
                                 <input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
                             </div>
+                            <div class="mb-3">
+                                <label for="postal_code" class="form-label">Postal Code <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="postal_code" name="postal_code" required value="<?= htmlspecialchars($_SESSION['postal_code'] ?? '') ?>">
+                            </div>
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
                             <div id="map" style="width:100%;height:300px"></div>
@@ -808,7 +929,7 @@ try {
                     marker = L.marker(e.latlng).addTo(map);
                     document.getElementById('latitude').value = e.latlng.lat;
                     document.getElementById('longitude').value = e.latlng.lng;
-                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`).then(r => r.json()).then(d => {
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lon}`).then(r => r.json()).then(d => {
                         if (d.display_name) {
                             document.getElementById('delivery_address').value = d.display_name;
                         }
@@ -836,9 +957,9 @@ try {
                         showBootstrapAlert('No store selected.', 'warning');
                         return;
                     }
-                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value) {
+                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value || !document.getElementById('postal_code').value.trim()) {
                         e.preventDefault();
-                        showBootstrapAlert('Please provide a complete address and location.', 'warning');
+                        showBootstrapAlert('Please provide a complete address, postal code, and location.', 'warning');
                     }
                 });
             })();
@@ -894,19 +1015,11 @@ try {
                                 <h6 class="mt-3">Complete PayPal Payment</h6>
                                 <div id="paypal-button-container"></div>
                                 <script>
-                                    console.log("Initializing PayPal Buttons for existing pending order...");
                                     paypal.Buttons({
                                         createOrder: function(data, actions) {
                                             const urlParams = new URLSearchParams(window.location.search);
                                             const pId = urlParams.get('pending_paypal_order_id');
-                                            if (!pId) {
-                                                alert("No pending PayPal order ID found!");
-                                                console.error("No ID in URL.");
-                                                return;
-                                            }
-                                            console.log("Creating order for pendingOrderId:", pId);
                                             let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
-                                            console.log("PayPal Order total:", t);
                                             return actions.order.create({
                                                 purchase_units: [{
                                                     description: "Order #" + pId,
@@ -918,9 +1031,7 @@ try {
                                             });
                                         },
                                         onApprove: function(d, a) {
-                                            console.log("onApprove triggered. data:", d);
                                             return a.order.capture().then(function(det) {
-                                                console.log("PayPal capture:", det);
                                                 fetch('index.php', {
                                                     method: 'POST',
                                                     headers: {
@@ -933,7 +1044,6 @@ try {
                                                         paypalCaptureId: det.purchase_units[0].payments.captures[0].id
                                                     })
                                                 }).then(r => r.json()).then(res => {
-                                                    console.log("Server response:", res);
                                                     if (res.status === 'ok') {
                                                         alert("Payment successful!");
                                                         window.location.href = 'index.php?order=success';
@@ -947,12 +1057,10 @@ try {
                                             });
                                         },
                                         onCancel: function(d) {
-                                            console.log("Payment canceled by user:", d);
                                             alert("Payment was canceled.");
                                         },
                                         onError: function(e) {
-                                            console.error("PayPal onError:", e);
-                                            alert("Error in PayPal process.");
+                                            alert("PayPal error occurred.");
                                         }
                                     }).render('#paypal-button-container');
                                 </script>
@@ -1013,8 +1121,8 @@ try {
                                         </div>
                                     </div>
                                 </li>
-                            <?php endforeach;
-                            if ($tip_amount > 0): ?>
+                            <?php endforeach; ?>
+                            <?php if ($tip_amount > 0): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Trinkgeld</strong><span><?= number_format($tip_amount, 2) ?>€</span></li>
                             <?php endif;
                             if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
@@ -1024,6 +1132,9 @@ try {
                         <p><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €<br>
                             <strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €
                         </p>
+                        <?php if ($distance_km !== null): ?>
+                            <p><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
+                        <?php endif; ?>
                         <hr>
                         <h6>Total: <?= number_format($total_with_shipping, 2) ?> €</h6>
                         <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-2" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
@@ -1176,37 +1287,6 @@ try {
                     endforeach; ?>
                 </div>
             </div>
-            <?php
-            function calculateDistance($lat1, $lon1, $lat2, $lon2)
-            {
-                $earthRadius = 6371;
-                $lat1Rad = deg2rad($lat1);
-                $lon1Rad = deg2rad($lon1);
-                $lat2Rad = deg2rad($lat2);
-                $lon2Rad = deg2rad($lon2);
-                $dlat = $lat2Rad - $lat1Rad;
-                $dlon = $lon2Rad - $lon1Rad;
-                $a = sin($dlat / 2) * sin($dlat / 2) +
-                    cos($lat1Rad) * cos($lat2Rad) *
-                    sin($dlon / 2) * sin($dlon / 2);
-                $c = 2 * asin(sqrt($a));
-                return $earthRadius * $c;
-            }
-            $distance_km = null;
-            if (
-                !empty($main_store['latitude']) &&
-                !empty($main_store['longitude']) &&
-                !empty($_SESSION['latitude']) &&
-                !empty($_SESSION['longitude'])
-            ) {
-                $distance_km = calculateDistance(
-                    $main_store['latitude'],
-                    $main_store['longitude'],
-                    $_SESSION['latitude'],
-                    $_SESSION['longitude']
-                );
-            }
-            ?>
             <div class="col-lg-3">
                 <div class="order-summary card shadow-sm">
                     <div class="card-body p-4">
@@ -1226,16 +1306,34 @@ try {
                                 <p class="text-muted small mb-1"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p>
                                 <p class="text-muted small mb-3"><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?></p>
                                 <p>
-                                    <?php echo $_SESSION['store_lat'] ?? '' ?> , <?php echo $_SESSION['store_lng'] ?? ''  ?>
+                                    <?= htmlspecialchars($_SESSION['store_lat'] ?? '') ?> , <?= htmlspecialchars($_SESSION['store_lng'] ?? '') ?>
                                 </p>
                             </div>
                         <?php endif; ?>
                         <div class="mb-4">
                             <p class="mb-1"><strong>Min. Order:</strong> <?= htmlspecialchars($_SESSION['minimum_order'] ?? '5.00') ?> €</p>
-                            <p class="mb-1"><strong>Shipping Base Fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €</p>
-                            <p class="mb-1"><strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €</p>
+                            <p class="mb-1"><strong>Shipping Base Fee:</strong> <?= number_format($main_store['shipping_fee_base'] ?? 0, 2) ?> €</p>
+                            <p class="mb-1"><strong>Fee per km:</strong> <?= number_format($main_store['shipping_fee_per_km'] ?? 0.50, 2) ?> €</p>
                             <?php if ($distance_km !== null): ?>
-                                <p class="mb-0"><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
+                                <p class="mb-1"><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
+                            <?php endif; ?>
+                            <?php if (!empty($main_store['shipping_free_threshold'])): ?>
+                                <p class="mb-1"><strong>Free Shipping Threshold:</strong> <?= number_format($main_store['shipping_free_threshold'], 2) ?> €</p>
+                                <?php if ($cart_total_with_tip < $main_store['shipping_free_threshold']):
+                                    $remaining = $main_store['shipping_free_threshold'] - $cart_total_with_tip;
+                                ?>
+                                    <p class="mb-1 text-warning"><strong>Add:</strong> <?= number_format($remaining, 2) ?> € more to qualify for free shipping.</p>
+                                <?php else: ?>
+                                    <p class="mb-1 text-success"><strong>Congratulations!</strong> You qualify for free shipping.</p>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if (isset($tax_amount) && $tax_amount > 0): ?>
+                                <p class="mb-1"><strong>Tax (<?= number_format($main_store['shipping_vat_percentage'], 2) ?>%):</strong> <?= number_format($tax_amount, 2) ?> €</p>
+                            <?php endif; ?>
+                            <?php if (isset($main_store['shipping_fee_base']) && isset($main_store['shipping_fee_per_km']) && $distance_km !== null):
+                                $calculated_shipping = $main_store['shipping_fee_base'] + ($main_store['shipping_fee_per_km'] * $distance_km);
+                            ?>
+                                <p class="mb-1"><strong>Shipping Calculation:</strong> <?= number_format($main_store['shipping_fee_base'], 2) ?> € + (<?= number_format($main_store['shipping_fee_per_km'], 2) ?> €/km * <?= number_format($distance_km, 2) ?> km) = <?= number_format($calculated_shipping, 2) ?> €</p>
                             <?php endif; ?>
                         </div>
                         <?php if (!empty($_SESSION['delivery_address'])): ?>
@@ -1264,6 +1362,8 @@ try {
                                         <i class="bi bi-map"></i>
                                     </a>
                                 </div>
+
+                                <div id="order-summary-map" style="width: 100%; height: 200px;"></div>
                             </div>
                         <?php endif; ?>
                         <div id="cart-items">
@@ -1306,18 +1406,9 @@ try {
                                                     <?php endif; ?>
                                                 </div>
                                                 <div class="text-end">
-                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong>
-                                                    <div class="mt-2 d-flex flex-column gap-1">
-                                                        <form action="index.php" method="POST">
-                                                            <input type="hidden" name="remove" value="<?= $i ?>">
-                                                            <button type="submit" class="btn btn-sm btn-danger" title="Remove Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Remove Item">
-                                                                <i class="bi bi-trash"></i>
-                                                            </button>
-                                                        </form>
-                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Edit Item">
-                                                            <i class="bi bi-pencil-square"></i>
-                                                        </button>
-                                                    </div>
+                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
+                                                    <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove Item"><i class="bi bi-trash"></i></button></form>
+                                                    <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit Item"><i class="bi bi-pencil-square"></i></button>
                                                 </div>
                                             </div>
                                         </li>
@@ -1331,12 +1422,32 @@ try {
                                 <?php endif; ?>
                                 <div class="mb-4">
                                     <p class="mb-1"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €</p>
+                                    <?php if (isset($tax_amount) && $tax_amount > 0): ?>
+                                        <p class="mb-1"><strong>Tax (<?= number_format($main_store['shipping_vat_percentage'], 2) ?>%):</strong> <?= number_format($tax_amount, 2) ?> €</p>
+                                    <?php endif; ?>
                                     <p class="mb-1"><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
                                     <?php if ($distance_km !== null): ?>
                                         <p class="mb-1"><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
                                     <?php endif; ?>
+                                    <?php if (isset($main_store['shipping_fee_base']) && isset($main_store['shipping_fee_per_km']) && $distance_km !== null):
+                                        $calculated_shipping = $main_store['shipping_fee_base'] + ($main_store['shipping_fee_per_km'] * $distance_km);
+                                    ?>
+                                        <p class="mb-1"><strong>Shipping Calculation:</strong> <?= number_format($main_store['shipping_fee_base'], 2) ?> € + (<?= number_format($main_store['shipping_fee_per_km'], 2) ?> €/km * <?= number_format($distance_km, 2) ?> km) = <?= number_format($calculated_shipping, 2) ?> €</p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($main_store['shipping_free_threshold'])):
+                                        if ($cart_total_with_tip < $main_store['shipping_free_threshold']):
+                                            $remaining = $main_store['shipping_free_threshold'] - $cart_total_with_tip;
+                                    ?>
+                                            <p class="mb-1 text-warning"><strong>Free Shipping:</strong> Add <?= number_format($remaining, 2) ?> € more to qualify for free shipping.</p>
+                                        <?php else: ?>
+                                            <p class="mb-1 text-success"><strong>Free Shipping:</strong> You qualify for free shipping!</p>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                     <hr class="my-2">
-                                    <p class="mb-1"><strong>Total:</strong> <?= number_format($total_with_shipping, 2) ?> €</p>
+                                    <?php
+                                    $total = $cart_total_with_tip + ($tax_amount ?? 0) + $shipping_for_display;
+                                    ?>
+                                    <p class="mb-1"><strong>Total:</strong> <?= number_format($total, 2) ?> €</p>
                                 </div>
                                 <form method="POST" action="index.php" class="mb-4">
                                     <div class="input-group">
@@ -1358,7 +1469,6 @@ try {
                         </div>
                     </div>
                 </div>
-            </div>
     </main>
     <?php include 'footer.php';
     include 'rules.php'; ?>
@@ -1525,92 +1635,34 @@ try {
                 childList: true,
                 subtree: true
             });
-        });
-        let observer = new MutationObserver(muts => {
-            muts.forEach(mu => {
-                if (mu.type === 'childList') {
-                    mu.addedNodes.forEach(n => {
-                        if (n.nodeType === Node.ELEMENT_NODE) {
-                            n.querySelectorAll('.add-to-cart-form').forEach(ff => {
-                                initializeEventListeners(ff);
-                            });
-                        }
-                    });
-                }
-            });
-        });
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
 
-        function initializeEventListeners(form) {
-            form.querySelectorAll('.item-quantity').forEach(iq => {
-                iq.addEventListener('change', () => {
-                    if (iq.classList.contains('sauce-quantity')) {
-                        window.lastChangedSauceInput = iq;
-                        limitSauceQuantities(form);
-                    }
-                    updateEstimatedPrice(form);
-                });
-            });
-            let sz = form.querySelector('.size-selector');
-            if (sz) {
-                sz.addEventListener('change', function() {
-                    let sd = {
-                        sizesExtras: this.selectedOptions[0].dataset.sizesExtras || '[]',
-                        sizesSauces: this.selectedOptions[0].dataset.sizesSauces || '[]'
-                    };
-                    updateSizeSpecificOptions(form, sd);
-                    limitSauceQuantities(form);
-                    updateEstimatedPrice(form);
-                });
-            }
-            let dr = form.querySelector('.drink-selector');
-            if (dr) {
-                dr.addEventListener('change', () => updateEstimatedPrice(form));
-            }
-            let qty = form.querySelector('.quantity-selector');
-            if (qty) {
-                qty.addEventListener('change', () => updateEstimatedPrice(form));
-            }
-            updateEstimatedPrice(form);
-        }
-        paypal.Buttons({
-            createOrder: function(d, a) {
-                console.log("PayPal createOrder triggered (no existing order).");
-                let pId = new URLSearchParams(window.location.search).get('pending_paypal_order_id');
-                if (!pId) {
-                    console.log("No pending order ID found in URL, might be initial checkout...");
+            paypal.Buttons({
+                createOrder: function(d, a) {
+                    let pId = new URLSearchParams(window.location.search).get('pending_paypal_order_id');
+                    let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
+                    return a.order.create({
+                        purchase_units: [{
+                            description: "Order (no pending ID)",
+                            amount: {
+                                currency_code: "EUR",
+                                value: t
+                            }
+                        }]
+                    });
+                },
+                onApprove: function(d, a) {
+                    return a.order.capture().then(function(det) {
+                        alert("Payment success (no pending order ID). Server needs to handle capture info.");
+                    });
+                },
+                onCancel: function(d) {
+                    alert("Payment canceled.");
+                },
+                onError: function(e) {
+                    alert("PayPal error occurred.");
                 }
-                let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
-                console.log("PayPal total from server:", t);
-                return a.order.create({
-                    purchase_units: [{
-                        description: "Order (no pending ID)",
-                        amount: {
-                            currency_code: "EUR",
-                            value: t
-                        }
-                    }]
-                });
-            },
-            onApprove: function(d, a) {
-                console.log("PayPal onApprove:", d);
-                return a.order.capture().then(function(det) {
-                    console.log("Capture:", det);
-                    alert("Payment success (no pending order ID). Server needs to handle capture info.");
-                });
-            },
-            onCancel: function(d) {
-                console.log("User canceled:", d);
-                alert("Payment canceled.");
-            },
-            onError: function(e) {
-                console.error("PayPal error:", e);
-                alert("PayPal error occurred.");
-            }
-        }).render('#paypal-button-container');
+            }).render('#paypal-button-container');
+        });
     </script>
 </body>
 
