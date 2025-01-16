@@ -266,6 +266,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $_SESSION['selected_store'] = $sid;
                 $_SESSION['store_name'] = $store['name'];
+                $_SESSION['store_lat'] = $store['store_lat'];
+                $_SESSION['store_lng'] = $store['store_lng'];
                 $_SESSION['delivery_address'] = $da;
                 $_SESSION['latitude'] = $la;
                 $_SESSION['longitude'] = $lo;
@@ -567,7 +569,7 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Restaurant Delivery</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" rel="stylesheet">
@@ -576,6 +578,11 @@ try {
         <link rel="icon" type="image/png" href="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>">
     <?php endif; ?>
     <style>
+        * {
+            font-family: 'Inter', sans-serif;
+            font-weight: 400
+        }
+
         body {
             font-size: 0.9rem;
         }
@@ -725,6 +732,7 @@ try {
                                                     <img src="admin/<?= htmlspecialchars($st['cart_logo'] ?? '') ?>" alt="Store Logo" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg'">
                                                     <h5 class="card-title"><?= htmlspecialchars($st['name']) ?></h5>
                                                     <p class="card-text"><?= htmlspecialchars($st['address'] ?? 'No address') ?></p>
+                                                    <p><?= htmlspecialchars($st['store_lat'] ?? '') ?> , <?= htmlspecialchars($st['store_lng'] ?? '') ?></p>
                                                     <input type="radio" name="store_id" value="<?= htmlspecialchars($st['id']) ?>" class="form-check-input visually-hidden">
                                                     <button type="button" class="btn btn-outline-primary select-store-btn"><i class="bi bi-pin-map"></i> Select</button>
                                                 </div>
@@ -743,6 +751,7 @@ try {
                             <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
                             <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
                             <div id="map" style="width:100%;height:300px"></div>
+                            <p><?= htmlspecialchars($_SESSION['latitude'] ?? '') ?> , <?= htmlspecialchars($_SESSION['longitude'] ?? '') ?></p>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Confirm</button>
@@ -951,13 +960,16 @@ try {
                             <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup"><label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Abholung</label></div>
                             <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash"><label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Nachnahme</label></div>
                         </div>
-                        <div class="mb-2"><label class="form-label">Trinkgeld auswählen</label><select class="form-select" name="selected_tip" id="tip_selection">
+                        <div class="mb-2">
+                            <label class="form-label">Trinkgeld auswählen</label>
+                            <select class="form-select" name="selected_tip" id="tip_selection">
                                 <option value="">Kein Trinkgeld</option>
                                 <?php foreach ($tip_options as $t): ?>
                                     <option value="<?= htmlspecialchars($t['id']) ?>" <?= ($selT == $t['id'] ? 'selected' : '') ?>><?= htmlspecialchars($t['name']) ?><?php if (!empty($t['percentage'])) echo " (" . $t['percentage'] . "%)";
                                                                                                                                                                         elseif (!empty($t['amount'])) echo " (+" . number_format($t['amount'], 2) . "€)"; ?></option>
                                 <?php endforeach; ?>
-                            </select></div>
+                            </select>
+                        </div>
                         <h6>Bestellübersicht</h6>
                         <ul class="list-group mb-2">
                             <?php foreach ($_SESSION['cart'] as $i => $it): ?>
@@ -1059,7 +1071,7 @@ try {
                                         <div class="modal-body">
                                             <div class="row">
                                                 <div class="col-4">
-                                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Product+Image';">
+                                                    <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="img-fluid rounded shadow" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                                                 </div>
                                                 <div class="col-8">
                                                     <h6 style="font-size:1rem"><b><?= htmlspecialchars($pd['name']) ?></b></h6>
@@ -1164,96 +1176,189 @@ try {
                     endforeach; ?>
                 </div>
             </div>
+            <?php
+            function calculateDistance($lat1, $lon1, $lat2, $lon2)
+            {
+                $earthRadius = 6371;
+                $lat1Rad = deg2rad($lat1);
+                $lon1Rad = deg2rad($lon1);
+                $lat2Rad = deg2rad($lat2);
+                $lon2Rad = deg2rad($lon2);
+                $dlat = $lat2Rad - $lat1Rad;
+                $dlon = $lon2Rad - $lon1Rad;
+                $a = sin($dlat / 2) * sin($dlat / 2) +
+                    cos($lat1Rad) * cos($lat2Rad) *
+                    sin($dlon / 2) * sin($dlon / 2);
+                $c = 2 * asin(sqrt($a));
+                return $earthRadius * $c;
+            }
+            $distance_km = null;
+            if (
+                !empty($main_store['latitude']) &&
+                !empty($main_store['longitude']) &&
+                !empty($_SESSION['latitude']) &&
+                !empty($_SESSION['longitude'])
+            ) {
+                $distance_km = calculateDistance(
+                    $main_store['latitude'],
+                    $main_store['longitude'],
+                    $_SESSION['latitude'],
+                    $_SESSION['longitude']
+                );
+            }
+            ?>
             <div class="col-lg-3">
-                <div class="order-summary">
-                    <h6 class="order-title">YOUR ORDER</h6>
-                    <?php if (!empty($main_store['logo'])): ?>
-                        <div class="mb-2 text-center"><img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Cart Logo" class="img-fluid" style="max-height:80px" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';"></div>
-                    <?php endif;
-                    if (!empty($main_store['cart_description'])): ?>
-                        <div class="mb-2" id="cart-description">
-                            <p style="font-size:.8rem"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?>
-                        </div>
-                    <?php endif; ?>
-                    <p style="font-size:.8rem">
-                        <strong>Min. order:</strong> <?= htmlspecialchars($_SESSION['minimum_order'] ?? '5.00') ?> €<br>
-                        <strong>Shipping base fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €<br>
-                        <strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €
-                    </p>
-                    <?php if (!empty($_SESSION['delivery_address'])): ?>
-                        <div class="mb-2">
-                            <h6 style="font-size:.9rem">Delivery Address</h6>
-                            <p style="font-size:.8rem"><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
-                            <a href="?action=change_address" class="btn btn-sm btn-outline-primary" style="font-size:.7rem" title="Change Address"><i class="bi bi-geo-alt"></i></a>
-                            <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem" title="View on Map"><i class="bi bi-map"></i></a>
-                        </div>
-                    <?php endif; ?>
-                    <div id="cart-items">
-                        <?php if (!empty($_SESSION['cart'])): ?>
-                            <ul class="list-group mb-2">
-                                <?php foreach ($_SESSION['cart'] as $i => $it): ?>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center" style="font-size:.85rem">
-                                        <div>
-                                            <h6 style="font-size:.9rem"><?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " ({$it['size']})"; ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
-                                            <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
-                                                <ul style="padding-left:16px;font-size:.75rem">
-                                                    <?php if (!empty($it['extras'])): ?>
-                                                        <li><strong>Extras:</strong>
-                                                            <ul><?php foreach ($it['extras'] as $ex): ?>
-                                                                    <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
-                                                        </li>
-                                                    <?php endif;
-                                                    if (!empty($it['sauces'])): ?>
-                                                        <li><strong>Saucen:</strong>
-                                                            <ul><?php foreach ($it['sauces'] as $sx): ?>
-                                                                    <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
-                                                                <?php endforeach; ?>
-                                                            </ul>
-                                                        </li>
-                                                    <?php endif;
-                                                    if (!empty($it['drink'])): ?>
-                                                        <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
-                                                    <?php endif;
-                                                    if (!empty($it['special_instructions'])): ?>
-                                                        <li><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
-                                                    <?php endif; ?>
-                                                </ul>
-                                            <?php endif; ?>
-                                        </div>
-                                        <div class="text-end"><strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove" style="font-size:.7rem"><i class="bi bi-trash"></i></button></form>
-                                            <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" style="font-size:.7rem" title="Edit"><i class="bi bi-pencil-square"></i></button>
-                                        </div>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                            <?php if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
-                                <ul class="list-group mb-2">
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <div>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</div>
-                                        <div>-<?= number_format($coupon_discount, 2) ?>€</div>
-                                    </li>
-                                </ul>
+                <div class="order-summary card shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center mb-4">
+                            <h5 class="card-title mb-0 flex-grow-1">Your Order</h5>
+                            <?php if (!empty($main_store['logo'])): ?>
+                                <img src="admin/<?= htmlspecialchars($main_store['logo']) ?>"
+                                    alt="Store Logo"
+                                    width="50"
+                                    height="50"
+                                    class="img-fluid rounded-circle"
+                                    onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                             <?php endif; ?>
-                            <p style="font-size:.85rem"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €<br><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
-                            <hr>
-                            <p style="font-size:.9rem"><strong>Total:</strong> <?= number_format($total_with_shipping, 2) ?> €</p>
-                            <form method="POST" action="index.php" class="mb-2 d-flex"><input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code" style="font-size:.8rem"><button type="submit" name="apply_coupon" class="btn btn-outline-primary ms-2" style="font-size:.8rem">Apply</button></form>
-                            <?php if (isset($_GET['coupon_error'])): ?>
-                                <div class="alert alert-danger p-1 text-center" style="font-size:.75rem"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
-                            <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
-                                <div class="alert alert-success p-1 text-center" style="font-size:.75rem">Coupon applied!</div>
-                            <?php endif; ?>
-                            <button class="btn btn-success w-100 mt-2" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?> style="font-size:.8rem"><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
-                        <?php else: ?>
-                            <p>Your cart is empty.</p>
+                        </div>
+                        <?php if (!empty($main_store['cart_description'])): ?>
+                            <div class="mb-3">
+                                <p class="text-muted small mb-1"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p>
+                                <p class="text-muted small mb-3"><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?></p>
+                                <p>
+                                    <?php echo $_SESSION['store_lat'] ?? '' ?> , <?php echo $_SESSION['store_lng'] ?? ''  ?>
+                                </p>
+                            </div>
                         <?php endif; ?>
+                        <div class="mb-4">
+                            <p class="mb-1"><strong>Min. Order:</strong> <?= htmlspecialchars($_SESSION['minimum_order'] ?? '5.00') ?> €</p>
+                            <p class="mb-1"><strong>Shipping Base Fee:</strong> <?= htmlspecialchars($main_store['shipping_fee_base'] ?? '0.00') ?> €</p>
+                            <p class="mb-1"><strong>Fee per km:</strong> <?= htmlspecialchars($main_store['shipping_fee_per_km'] ?? '0.50') ?> €</p>
+                            <?php if ($distance_km !== null): ?>
+                                <p class="mb-0"><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (!empty($_SESSION['delivery_address'])): ?>
+                            <div class="mb-4">
+                                <h6 class="fw-bold">Delivery Address</h6>
+                                <p class="mb-1"><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
+                                <?php if (isset($_SESSION['latitude'], $_SESSION['longitude'])): ?>
+                                    <p class="mb-1">
+                                        <?= htmlspecialchars($_SESSION['latitude']) ?> , <?= htmlspecialchars($_SESSION['longitude']) ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="mb-1">Location not available</p>
+                                <?php endif; ?>
+
+                                <div class="d-flex gap-2">
+                                    <a href="?action=change_address" class="btn btn-sm btn-outline-primary" title="Change Address" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Change Address">
+                                        <i class="bi bi-geo-alt"></i>
+                                    </a>
+                                    <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($_SESSION['latitude']) ?>&mlon=<?= htmlspecialchars($_SESSION['longitude']) ?>#map=18/<?= htmlspecialchars($_SESSION['latitude']) ?>/<?= htmlspecialchars($_SESSION['longitude']) ?>"
+                                        target="_blank"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        title="View on Map"
+                                        data-bs-toggle="tooltip"
+                                        data-bs-placement="top"
+                                        aria-label="View on Map">
+                                        <i class="bi bi-map"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        <div id="cart-items">
+                            <?php if (!empty($_SESSION['cart'])): ?>
+                                <ul class="list-group mb-4">
+                                    <?php foreach ($_SESSION['cart'] as $i => $it): ?>
+                                        <li class="list-group-item p-3">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="mb-1" style="font-size: 0.95rem;">
+                                                        <?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?> x<?= htmlspecialchars($it['quantity']) ?>
+                                                    </h6>
+                                                    <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
+                                                        <ul class="list-unstyled ms-3" style="font-size: 0.8rem;">
+                                                            <?php if (!empty($it['extras'])): ?>
+                                                                <li><strong>Extras:</strong>
+                                                                    <ul class="list-unstyled ms-3">
+                                                                        <?php foreach ($it['extras'] as $ex): ?>
+                                                                            <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
+                                                                        <?php endforeach; ?>
+                                                                    </ul>
+                                                                </li>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($it['sauces'])): ?>
+                                                                <li><strong>Saucen:</strong>
+                                                                    <ul class="list-unstyled ms-3">
+                                                                        <?php foreach ($it['sauces'] as $sx): ?>
+                                                                            <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
+                                                                        <?php endforeach; ?>
+                                                                    </ul>
+                                                                </li>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($it['drink'])): ?>
+                                                                <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($it['special_instructions'])): ?>
+                                                                <li><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
+                                                            <?php endif; ?>
+                                                        </ul>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="text-end">
+                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong>
+                                                    <div class="mt-2 d-flex flex-column gap-1">
+                                                        <form action="index.php" method="POST">
+                                                            <input type="hidden" name="remove" value="<?= $i ?>">
+                                                            <button type="submit" class="btn btn-sm btn-danger" title="Remove Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Remove Item">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Edit Item">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                                <?php if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
+                                    <div class="alert alert-info d-flex justify-content-between align-items-center mb-4 p-2" role="alert">
+                                        <span>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</span>
+                                        <span>-<?= number_format($coupon_discount, 2) ?>€</span>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="mb-4">
+                                    <p class="mb-1"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €</p>
+                                    <p class="mb-1"><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
+                                    <?php if ($distance_km !== null): ?>
+                                        <p class="mb-1"><strong>Distance:</strong> <?= number_format($distance_km, 2) ?> km</p>
+                                    <?php endif; ?>
+                                    <hr class="my-2">
+                                    <p class="mb-1"><strong>Total:</strong> <?= number_format($total_with_shipping, 2) ?> €</p>
+                                </div>
+                                <form method="POST" action="index.php" class="mb-4">
+                                    <div class="input-group">
+                                        <input type="text" name="coupon_code" class="form-control form-control-sm" placeholder="Enter coupon code" aria-label="Coupon Code">
+                                        <button type="submit" name="apply_coupon" class="btn btn-outline-primary btn-sm">Apply</button>
+                                    </div>
+                                    <?php if (isset($_GET['coupon_error'])): ?>
+                                        <div class="alert alert-danger mt-2 p-2 text-center small" role="alert"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
+                                    <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
+                                        <div class="alert alert-success mt-2 p-2 text-center small" role="alert">Coupon applied!</div>
+                                    <?php endif; ?>
+                                </form>
+                                <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>>
+                                    <i class="bi bi-bag-check-fill me-2"></i> Checkout
+                                </button>
+                            <?php else: ?>
+                                <p class="text-center text-muted">Your cart is empty.</p>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
     </main>
     <?php include 'footer.php';
     include 'rules.php'; ?>
@@ -1421,6 +1526,56 @@ try {
                 subtree: true
             });
         });
+        let observer = new MutationObserver(muts => {
+            muts.forEach(mu => {
+                if (mu.type === 'childList') {
+                    mu.addedNodes.forEach(n => {
+                        if (n.nodeType === Node.ELEMENT_NODE) {
+                            n.querySelectorAll('.add-to-cart-form').forEach(ff => {
+                                initializeEventListeners(ff);
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        function initializeEventListeners(form) {
+            form.querySelectorAll('.item-quantity').forEach(iq => {
+                iq.addEventListener('change', () => {
+                    if (iq.classList.contains('sauce-quantity')) {
+                        window.lastChangedSauceInput = iq;
+                        limitSauceQuantities(form);
+                    }
+                    updateEstimatedPrice(form);
+                });
+            });
+            let sz = form.querySelector('.size-selector');
+            if (sz) {
+                sz.addEventListener('change', function() {
+                    let sd = {
+                        sizesExtras: this.selectedOptions[0].dataset.sizesExtras || '[]',
+                        sizesSauces: this.selectedOptions[0].dataset.sizesSauces || '[]'
+                    };
+                    updateSizeSpecificOptions(form, sd);
+                    limitSauceQuantities(form);
+                    updateEstimatedPrice(form);
+                });
+            }
+            let dr = form.querySelector('.drink-selector');
+            if (dr) {
+                dr.addEventListener('change', () => updateEstimatedPrice(form));
+            }
+            let qty = form.querySelector('.quantity-selector');
+            if (qty) {
+                qty.addEventListener('change', () => updateEstimatedPrice(form));
+            }
+            updateEstimatedPrice(form);
+        }
         paypal.Buttons({
             createOrder: function(d, a) {
                 console.log("PayPal createOrder triggered (no existing order).");
