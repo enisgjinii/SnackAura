@@ -842,7 +842,7 @@ try {
             });
         </script>
     <?php endif;
-    $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'cart_modal.php', 'toast_notifications.php'];
+    $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'ratings_modal.php', 'cart_modal.php', 'toast_notifications.php'];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
     } ?>
