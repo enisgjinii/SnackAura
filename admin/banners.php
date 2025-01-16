@@ -19,8 +19,8 @@ function handleImageUpload($image, $targetDir = 'uploads/banners/')
     if (!in_array($image['type'], $allowedTypes)) {
         return ['error' => 'Ungültiges Bildformat. Erlaubt sind JPEG, PNG, GIF.'];
     }
-    if (!is_dir($targetDir)) {
-        mkdir($targetDir, 0755, true);
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {
+        return ['error' => "Verzeichnis '{$targetDir}' konnte nicht erstellt werden."];
     }
     $filename = uniqid() . '_' . basename($image['name']);
     $targetFile = $targetDir . $filename;
@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $link = trim($_POST['link'] ?? '');
             $is_active = isset($_POST['is_active']) ? 1 : 0;
             $image = $_FILES['image'] ?? null;
+
             if (empty($title) || empty($image)) {
                 $message = 'Alle mit * gekennzeichneten Felder sind erforderlich.';
             } else {
@@ -69,12 +70,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             break;
+
         case 'edit':
             if ($id > 0) {
                 $title = trim($_POST['title'] ?? '');
                 $link = trim($_POST['link'] ?? '');
                 $is_active = isset($_POST['is_active']) ? 1 : 0;
                 $image = $_FILES['image'] ?? null;
+
                 if (empty($title)) {
                     $message = 'Der Titel ist erforderlich.';
                 } else {
@@ -82,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$banner) {
                         redirectWithMessage('list', "Banner nicht gefunden.");
                     }
+
                     if ($image && $image['error'] === UPLOAD_ERR_OK) {
                         $uploadResult = handleImageUpload($image);
                         if (isset($uploadResult['error'])) {
@@ -96,10 +100,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         $imageFilename = $banner['image'];
                     }
+
                     if (empty($message)) {
                         try {
                             $stmt = $pdo->prepare('UPDATE banners SET title = ?, image = ?, link = ?, is_active = ?, updated_at = NOW() WHERE id = ?');
                             $stmt->execute([$title, $imageFilename, $link, $is_active, $id]);
+
+                            // Altes Bild entfernen, wenn ein neues hochgeladen wurde
+                            if (isset($uploadResult['filename']) && $banner['image'] && file_exists('uploads/banners/' . $banner['image'])) {
+                                unlink('uploads/banners/' . $banner['image']);
+                            }
+
                             redirectWithMessage('list', "Banner erfolgreich aktualisiert.");
                         } catch (PDOException $e) {
                             error_log("Fehler beim Aktualisieren des Banners (ID: $id): " . $e->getMessage());
@@ -109,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             break;
+
         case 'delete':
             if ($id > 0) {
                 $banner = fetchBanner($pdo, $id);
@@ -116,10 +128,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     try {
                         $stmt = $pdo->prepare('DELETE FROM banners WHERE id = ?');
                         $stmt->execute([$id]);
+
                         // Bilddatei löschen
                         if ($banner['image'] && file_exists('uploads/banners/' . $banner['image'])) {
                             unlink('uploads/banners/' . $banner['image']);
                         }
+
                         redirectWithMessage('list', "Banner erfolgreich gelöscht.");
                     } catch (PDOException $e) {
                         error_log("Fehler beim Löschen des Banners (ID: $id): " . $e->getMessage());
@@ -130,12 +144,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             break;
+
         case 'export':
             try {
                 header('Content-Type: text/csv; charset=utf-8');
                 header('Content-Disposition: attachment;filename=banners_' . date('Ymd') . '.csv');
                 $output = fopen('php://output', 'w');
                 fputcsv($output, ['ID', 'Titel', 'Bild', 'Link', 'Status', 'Erstellt', 'Aktualisiert']);
+
                 $stmt = $pdo->query('SELECT * FROM banners ORDER BY created_at DESC');
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     fputcsv($output, [
@@ -148,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $row['updated_at'] ?? 'N/A'
                     ]);
                 }
+
                 fclose($output);
                 exit();
             } catch (PDOException $e) {
@@ -155,6 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'Banner konnten nicht exportiert werden. Bitte versuchen Sie es später erneut.';
             }
             break;
+
         default:
             // Weitere POST-Aktionen bei Bedarf hinzufügen
             break;
@@ -214,7 +232,7 @@ if ($action === 'list') {
                         <th>Titel</th>
                         <th>Link</th>
                         <th>Status</th>
-                        <th>Erstellt</th>
+                        <th>Erstellt am</th>
                         <th>Aktionen</th>
                     </tr>
                 </thead>
@@ -249,7 +267,7 @@ if ($action === 'list') {
                                         <a href="banners.php?action=edit&id=<?= $banner['id'] ?>" class="btn btn-sm btn-warning" title="Bearbeiten">
                                             <i class="fas fa-edit"></i>
                                         </a>
-                                        <a href="banners.php?action=delete&id=<?= $banner['id'] ?>" class="btn btn-sm btn-danger" title="Löschen" onclick="return confirm('Sind Sie sicher, dass Sie dieses Banner löschen möchten?');">
+                                        <a href="banners.php?action=delete&id=<?= $banner['id'] ?>" class="btn btn-sm btn-danger" title="Löschen" onclick="return confirm('Möchten Sie dieses Banner wirklich löschen?');">
                                             <i class="fas fa-trash-alt"></i>
                                         </a>
                                         <a href="banners.php?action=toggle_status&id=<?= $banner['id'] ?>" class="btn btn-sm <?= $banner['is_active'] ? 'btn-secondary' : 'btn-success' ?>" title="<?= $banner['is_active'] ? 'Deaktivieren' : 'Aktivieren' ?>">
@@ -264,6 +282,7 @@ if ($action === 'list') {
             </table>
         </div>
     </div>
+
 <?php elseif ($action === 'create'): ?>
     <div class="container mt-4">
         <h2 class="mb-3"><i class="fas fa-plus"></i> Neues Banner erstellen</h2>
@@ -302,6 +321,7 @@ if ($action === 'list') {
             </div>
         </form>
     </div>
+
 <?php elseif ($action === 'edit' && isset($banner)): ?>
     <div class="container mt-4">
         <h2 class="mb-3"><i class="fas fa-edit"></i> Banner bearbeiten</h2>
@@ -343,6 +363,7 @@ if ($action === 'list') {
             </div>
         </form>
     </div>
+
 <?php elseif ($action === 'delete' && $id > 0): ?>
     <div class="container mt-4">
         <h2 class="mb-3"><i class="fas fa-trash-alt"></i> Banner löschen</h2>
@@ -370,6 +391,7 @@ if ($action === 'list') {
             </form>
         <?php endif; ?>
     </div>
+
 <?php elseif ($action === 'view' && isset($banner)): ?>
     <div class="container mt-4">
         <h2 class="mb-3"><i class="fas fa-eye"></i> Banner-Details</h2>
@@ -406,11 +428,11 @@ if ($action === 'list') {
                     </td>
                 </tr>
                 <tr>
-                    <th>Erstellt</th>
+                    <th>Erstellt am</th>
                     <td><?= htmlspecialchars($banner['created_at']) ?></td>
                 </tr>
                 <tr>
-                    <th>Aktualisiert</th>
+                    <th>Aktualisiert am</th>
                     <td><?= htmlspecialchars($banner['updated_at'] ?? 'N/A') ?></td>
                 </tr>
             </table>

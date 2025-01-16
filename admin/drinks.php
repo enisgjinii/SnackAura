@@ -1,210 +1,363 @@
 <?php
-// admin/drinks.php
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-
-// Initialize variables
-$action = $_GET['action'] ?? 'view';
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$action = $_REQUEST['action'] ?? 'view';
+$id = isset($_REQUEST['id']) ? (int)$_REQUEST['id'] : 0;
 $message = '';
 
-// Handle different actions
+function sanitizeInput($data)
+{
+    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
-        // Add Drink
-        $name = trim($_POST['name']);
-        $price = trim($_POST['price']);
+        $name = sanitizeInput($_POST['name'] ?? '');
+        $price = sanitizeInput($_POST['price'] ?? '');
 
-        // Validate inputs
         if ($name === '' || $price === '') {
-            $message = '<div class="alert alert-danger">Name and Price are required.</div>';
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Name und Preis sind erforderlich.'];
+            header("Location: drinks.php");
+            exit();
         } elseif (!is_numeric($price) || floatval($price) < 0) {
-            $message = '<div class="alert alert-danger">Price must be a valid non-negative number.</div>';
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Preis muss eine gültige nicht-negative Zahl sein.'];
+            header("Location: drinks.php");
+            exit();
         } else {
             try {
                 $stmt = $pdo->prepare("INSERT INTO `drinks` (`name`, `price`) VALUES (?, ?)");
                 $stmt->execute([$name, $price]);
-                $message = '<div class="alert alert-success">Drink added successfully.</div>';
-                // Redirect to view
+                $_SESSION['toast'] = ['type' => 'success', 'message' => 'Getränk erfolgreich hinzugefügt.'];
                 header("Location: drinks.php");
                 exit();
             } catch (PDOException $e) {
-                if ($e->getCode() === '23000') { // Integrity constraint violation
-                    $message = '<div class="alert alert-danger">Drink name already exists.</div>';
+                if ($e->getCode() === '23000') {
+                    $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Getränkename existiert bereits.'];
                 } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
+                    $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler: ' . sanitizeInput($e->getMessage())];
                 }
+                header("Location: drinks.php");
+                exit();
             }
         }
     } elseif ($action === 'edit' && $id > 0) {
-        // Edit Drink
-        $name = trim($_POST['name']);
-        $price = trim($_POST['price']);
+        $name = sanitizeInput($_POST['name'] ?? '');
+        $price = sanitizeInput($_POST['price'] ?? '');
 
-        // Validate inputs
         if ($name === '' || $price === '') {
-            $message = '<div class="alert alert-danger">Name and Price are required.</div>';
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Name und Preis sind erforderlich.'];
+            header("Location: drinks.php");
+            exit();
         } elseif (!is_numeric($price) || floatval($price) < 0) {
-            $message = '<div class="alert alert-danger">Price must be a valid non-negative number.</div>';
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Preis muss eine gültige nicht-negative Zahl sein.'];
+            header("Location: drinks.php");
+            exit();
         } else {
             try {
                 $stmt = $pdo->prepare("UPDATE `drinks` SET `name` = ?, `price` = ? WHERE `id` = ?");
                 $stmt->execute([$name, $price, $id]);
-                $message = '<div class="alert alert-success">Drink updated successfully.</div>';
-                // Redirect to view
+                $_SESSION['toast'] = ['type' => 'success', 'message' => 'Getränk erfolgreich aktualisiert.'];
                 header("Location: drinks.php");
                 exit();
             } catch (PDOException $e) {
-                if ($e->getCode() === '23000') { // Integrity constraint violation
-                    $message = '<div class="alert alert-danger">Drink name already exists.</div>';
+                if ($e->getCode() === '23000') {
+                    $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Getränkename existiert bereits.'];
                 } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
+                    $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler: ' . sanitizeInput($e->getMessage())];
                 }
+                header("Location: drinks.php");
+                exit();
             }
         }
     }
 } elseif ($action === 'delete' && $id > 0) {
-    // Delete Drink
     try {
         $stmt = $pdo->prepare("DELETE FROM `drinks` WHERE `id` = ?");
         $stmt->execute([$id]);
-        $message = '<div class="alert alert-success">Drink deleted successfully.</div>';
-        // Redirect to view
+        $_SESSION['toast'] = ['type' => 'success', 'message' => 'Getränk erfolgreich gelöscht.'];
         header("Location: drinks.php");
         exit();
     } catch (PDOException $e) {
-        $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler: ' . sanitizeInput($e->getMessage())];
+        header("Location: drinks.php");
+        exit();
     }
 }
 
-// Fetch all drinks for viewing
 if ($action === 'view') {
     try {
         $stmt = $pdo->query("SELECT * FROM `drinks` ORDER BY `created_at` DESC");
         $drinks = $stmt->fetchAll();
     } catch (PDOException $e) {
-        $message = '<div class="alert alert-danger">Error fetching drinks: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Abrufen der Getränke: ' . sanitizeInput($e->getMessage())];
     }
 }
 ?>
 
 <?php if ($action === 'view'): ?>
-    <h2>Manage Drinks</h2>
-    <?php if ($message): ?>
-        <?= $message ?>
-    <?php endif; ?>
-
-    <!-- Add Drink Button -->
-    <a href="drinks.php?action=add" class="btn btn-primary mb-3">Add Drink</a>
-
-    <!-- Drinks Table -->
-    <table class="table table-bordered table-hover">
-        <thead class="table-dark">
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Price (€)</th>
-                <th>Created At</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (!empty($drinks)): ?>
-                <?php foreach ($drinks as $drink): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($drink['id']) ?></td>
-                        <td><?= htmlspecialchars($drink['name']) ?></td>
-                        <td><?= number_format($drink['price'], 2) ?></td>
-                        <td><?= htmlspecialchars($drink['created_at']) ?></td>
-                        <td>
-                            <a href="drinks.php?action=edit&id=<?= $drink['id'] ?>" class="btn btn-sm btn-warning">Edit</a>
-                            <a href="#" class="btn btn-sm btn-danger" onclick="showDeleteModal(<?= $drink['id'] ?>)">Delete</a>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php else: ?>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2>Getränke verwalten</h2>
+        <button class="btn btn-success btn-sm" data-bs-toggle="offcanvas" data-bs-target="#addDrinkOffcanvas">
+            <i class="fas fa-plus"></i> Neues Getränk
+        </button>
+    </div>
+    <hr>
+    <div class="table-responsive">
+        <table id="drinksTable" class="table table-striped table-bordered align-middle small">
+            <thead class="table-dark">
                 <tr>
-                    <td colspan="5" class="text-center">No drinks found.</td>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Preis (€)</th>
+                    <th>Erstellt am</th>
+                    <th>Aktionen</th>
                 </tr>
-            <?php endif; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php if (!empty($drinks)): ?>
+                    <?php foreach ($drinks as $drink): ?>
+                        <tr>
+                            <td><?= sanitizeInput($drink['id']) ?></td>
+                            <td><?= sanitizeInput($drink['name']) ?></td>
+                            <td><?= number_format($drink['price'], 2) ?></td>
+                            <td><?= sanitizeInput($drink['created_at']) ?></td>
+                            <td>
+                                <button class="btn btn-sm btn-warning me-1 edit-drink-btn"
+                                    data-id="<?= $drink['id'] ?>"
+                                    data-name="<?= sanitizeInput($drink['name']) ?>"
+                                    data-price="<?= sanitizeInput($drink['price']) ?>"
+                                    data-bs-toggle="offcanvas"
+                                    data-bs-target="#editDrinkOffcanvas">
+                                    <i class="fas fa-edit"></i> 
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-drink-btn"
+                                    data-id="<?= $drink['id'] ?>"
+                                    data-name="<?= sanitizeInput($drink['name']) ?>">
+                                    <i class="fas fa-trash-alt"></i> 
+                                </button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="5" class="text-center">Keine Getränke gefunden.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <form method="GET" action="drinks.php">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="id" id="deleteDrinkId">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="deleteModalLabel">Confirm Deletion</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        Are you sure you want to delete this drink?
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    </div>
+    <!-- Add Drink Offcanvas -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="addDrinkOffcanvas" aria-labelledby="addDrinkOffcanvasLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="addDrinkOffcanvasLabel">Neues Getränk hinzufügen</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+        </div>
+        <div class="offcanvas-body">
+            <form method="POST" action="drinks.php?action=add">
+                <div class="mb-2">
+                    <label for="add-name" class="form-label">Getränkename <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="add-name" name="name" required>
                 </div>
+                <div class="mb-2">
+                    <label for="add-price" class="form-label">Preis (€) <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="add-price" name="price" required>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Speichern</button>
             </form>
         </div>
     </div>
 
-    <script>
-        function showDeleteModal(id) {
-            document.getElementById('deleteDrinkId').value = id;
-            var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
-            deleteModal.show();
-        }
-    </script>
+    <!-- Edit Drink Offcanvas -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="editDrinkOffcanvas" aria-labelledby="editDrinkOffcanvasLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="editDrinkOffcanvasLabel">Getränk </h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+        </div>
+        <div class="offcanvas-body">
+            <form method="POST" action="drinks.php?action=edit">
+                <input type="hidden" name="id" id="edit-drink-id">
+                <div class="mb-2">
+                    <label for="edit-name" class="form-label">Getränkename <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="edit-name" name="name" required>
+                </div>
+                <div class="mb-2">
+                    <label for="edit-price" class="form-label">Preis (€) <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="edit-price" name="price" required>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Aktualisieren</button>
+            </form>
+        </div>
+    </div>
 
-<?php elseif ($action === 'add' || ($action === 'edit' && $id > 0)): ?>
+    <!-- Toast-Benachrichtigungen -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+        <div id="toast-container"></div>
+    </div>
+<?php endif; ?>
+
+<?php if ($action === 'add' || ($action === 'edit' && $id > 0)): ?>
     <?php
     if ($action === 'edit') {
-        // Fetch existing drink details
         try {
             $stmt = $pdo->prepare("SELECT * FROM `drinks` WHERE `id` = ?");
             $stmt->execute([$id]);
             $drink = $stmt->fetch();
             if (!$drink) {
-                echo '<div class="alert alert-danger">Drink not found.</div>';
-                require_once 'includes/footer.php';
+                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Getränk nicht gefunden.'];
+                header("Location: drinks.php");
                 exit();
             }
         } catch (PDOException $e) {
-            echo '<div class="alert alert-danger">Error fetching drink details: ' . htmlspecialchars($e->getMessage()) . '</div>';
-            require_once 'includes/footer.php';
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler: ' . sanitizeInput($e->getMessage())];
+            header("Location: drinks.php");
             exit();
         }
     }
     ?>
-
-    <h2><?= $action === 'add' ? 'Add Drink' : 'Edit Drink' ?></h2>
-    <?php if ($message): ?>
-        <?= $message ?>
-    <?php endif; ?>
-    <form method="POST" action="drinks.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>">
-        <?php if ($action === 'edit'): ?>
-            <!-- Hidden input for ID -->
-            <input type="hidden" name="id" value="<?= $id ?>">
-        <?php endif; ?>
-        <div class="mb-3">
-            <label for="name" class="form-label">Drink Name *</label>
-            <input type="text" class="form-control" id="name" name="name" required value="<?= $action === 'edit' ? htmlspecialchars($drink['name']) : (isset($_POST['name']) ? htmlspecialchars($_POST['name']) : '') ?>">
+    <!-- Edit Drink Offcanvas (redundant but kept for consistency) -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="editDrinkOffcanvas" aria-labelledby="editDrinkOffcanvasLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="editDrinkOffcanvasLabel">Getränk </h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
         </div>
-        <div class="mb-3">
-            <label for="price" class="form-label">Price (€) *</label>
-            <input type="number" step="0.01" min="0" class="form-control" id="price" name="price" required value="<?= $action === 'edit' ? htmlspecialchars($drink['price']) : (isset($_POST['price']) ? htmlspecialchars($_POST['price']) : '') ?>">
+        <div class="offcanvas-body">
+            <form method="POST" action="drinks.php?action=edit">
+                <input type="hidden" name="id" id="edit-drink-id" value="<?= $id ?>">
+                <div class="mb-2">
+                    <label for="edit-name" class="form-label">Getränkename <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="edit-name" name="name" required value="<?= sanitizeInput($drink['name']) ?>">
+                </div>
+                <div class="mb-2">
+                    <label for="edit-price" class="form-label">Preis (€) <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="edit-price" name="price" required value="<?= sanitizeInput($drink['price']) ?>">
+                </div>
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Aktualisieren</button>
+                <a href="drinks.php" class="btn btn-secondary btn-sm">Abbrechen</a>
+            </form>
         </div>
-        <button type="submit" class="btn btn-success"><?= $action === 'add' ? 'Add' : 'Update' ?> Drink</button>
-        <a href="drinks.php" class="btn btn-secondary">Cancel</a>
-    </form>
-
+    </div>
 <?php endif; ?>
 
 <?php
 require_once 'includes/footer.php';
 ?>
+<script>
+    $(document).ready(function() {
+        $('#drinksTable').DataTable({
+            "paging": true,
+            "searching": true,
+            "info": true,
+            "order": [
+                [3, "desc"]
+            ],
+            "dom": '<"row mb-3"' +
+                '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
+                '>' +
+                'rt' +
+                '<"row mt-3"' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
+                '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
+                '>',
+            "buttons": [{
+                    text: '<i class="fas fa-plus"></i> Neues Getränk',
+                    className: 'btn btn-success btn-sm rounded-2',
+                    action: function() {
+                        $('#addDrinkOffcanvas').offcanvas('show');
+                    }
+                },
+                {
+                    extend: 'csv',
+                    text: '<i class="fas fa-file-csv"></i> CSV exportieren',
+                    className: 'btn btn-primary btn-sm rounded-2'
+                },
+                {
+                    extend: 'pdf',
+                    text: '<i class="fas fa-file-pdf"></i> PDF exportieren',
+                    className: 'btn btn-primary btn-sm rounded-2'
+                },
+                {
+                    extend: 'colvis',
+                    text: '<i class="fas fa-columns"></i> Spalten',
+                    className: 'btn btn-primary btn-sm rounded-2',
+                },
+                {
+                    extend: 'copy',
+                    text: '<i class="fas fa-copy"></i> Kopieren',
+                    className: 'btn btn-primary btn-sm rounded-2',
+                },
+            ],
+            initComplete: function() {
+                var buttons = this.api().buttons();
+                buttons.container().addClass('d-flex flex-wrap gap-2');
+            },
+            "language": {
+                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
+            }
+        });
+
+        $('.edit-drink-btn').on('click', function() {
+            var id = $(this).data('id');
+            var name = $(this).data('name');
+            var price = $(this).data('price');
+            $('#edit-drink-id').val(id);
+            $('#edit-name').val(name);
+            $('#edit-price').val(price);
+            $('#editDrinkOffcanvas').offcanvas('show');
+        });
+
+        $('.delete-drink-btn').on('click', function() {
+            var id = $(this).data('id');
+            var name = $(this).data('name');
+            Swal.fire({
+                title: 'Sind Sie sicher?',
+                text: `Möchten Sie das Getränk "${name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ja, löschen!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    var form = $('<form>', {
+                        method: 'POST',
+                        action: 'drinks.php?action=delete'
+                    });
+                    form.append($('<input>', {
+                        type: 'hidden',
+                        name: 'id',
+                        value: id
+                    }));
+                    $('body').append(form);
+                    form.submit();
+                }
+            });
+        });
+
+        <?php if (isset($_SESSION['toast'])): ?>
+            var toastHtml = `
+                <div class="toast align-items-center text-white bg-<?= $_SESSION['toast']['type'] === 'success' ? 'success' : 'danger' ?> border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <?= $_SESSION['toast']['message'] ?>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Schließen"></button>
+                    </div>
+                </div>
+            `;
+            $('#toast-container').html(toastHtml);
+            $('.toast').toast({
+                delay: 5000
+            }).toast('show');
+            <?php unset($_SESSION['toast']); ?>
+        <?php endif; ?>
+    });
+</script>
+<!-- Benutzerdefinierte Styles für Sortable Placeholder (falls benötigt) -->
+<style>
+    .sortable-placeholder {
+        background: #f0f0f0;
+        border: 2px dashed #ccc;
+        height: 40px;
+    }
+</style>
