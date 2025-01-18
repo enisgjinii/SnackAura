@@ -10,7 +10,7 @@ try {
             `username` VARCHAR(50) NOT NULL UNIQUE,
             `password` VARCHAR(255) NOT NULL,
             `email` VARCHAR(100) NOT NULL UNIQUE,
-            `role` ENUM('super-admin', 'admin', 'waiter', 'delivery') NOT NULL DEFAULT 'waiter',
+            `role` ENUM('super-admin','admin','waiter','delivery') NOT NULL DEFAULT 'waiter',
             `code` VARCHAR(10) DEFAULT NULL,
             `is_active` TINYINT(1) DEFAULT 1,
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -79,27 +79,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($errors) {
             $_SESSION['toast'] = ['type' => 'danger', 'message' => implode('<br>', $errors)];
-            header("Location: users.php?action=create");
+            header("Location: users.php?action=list");
             exit;
         } else {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ? OR email = ?");
-            $stmt->execute([$data['username'], $data['email']]);
-            if ($stmt->fetchColumn() > 0) {
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Benutzername oder E-Mail existiert bereits.'];
-                header("Location: users.php?action=create");
-                exit();
-            }
             $hashed_password = password_hash($password, PASSWORD_BCRYPT);
             $code = $data['role'] === 'waiter' ? generateWaiterCode($pdo) : null;
-            $stmt = $pdo->prepare('INSERT INTO users (username, password, email, role, code) VALUES (?, ?, ?, ?, ?)');
+            $is_active = isset($_POST['is_active']) ? 1 : 0;
+            $stmt = $pdo->prepare('INSERT INTO users (username, password, email, role, code, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())');
             try {
-                $stmt->execute([$data['username'], $hashed_password, $data['email'], $data['role'], $code]);
+                $stmt->execute([$data['username'], $hashed_password, $data['email'], $data['role'], $code, $is_active]);
                 $_SESSION['toast'] = ['type' => 'success', 'message' => 'Benutzer erfolgreich erstellt.'];
                 header("Location: users.php?action=list");
                 exit();
             } catch (PDOException $e) {
                 $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Erstellen des Benutzers.'];
-                header("Location: users.php?action=create");
+                header("Location: users.php?action=list");
                 exit();
             }
         }
@@ -109,14 +103,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_active = isset($_POST['is_active']) ? 1 : 0;
         if ($errors) {
             $_SESSION['toast'] = ['type' => 'danger', 'message' => implode('<br>', $errors)];
-            header("Location: users.php?action=edit&id=$id");
-            exit();
+            header("Location: users.php?action=list");
+            exit;
         } else {
             $stmt = $pdo->prepare("SELECT code FROM users WHERE id = ?");
             $stmt->execute([$id]);
             $existingCode = $stmt->fetchColumn();
             $params = [$data['username'], $data['email'], $data['role'], $is_active];
-            $sql = 'UPDATE users SET username = ?, email = ?, role = ?, is_active = ?';
+            $sql = 'UPDATE users SET username = ?, email = ?, role = ?, is_active = ?, updated_at = NOW()';
             if (!empty($password)) {
                 $hashed_password = password_hash($password, PASSWORD_BCRYPT);
                 $sql .= ', password = ?';
@@ -140,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
             } catch (PDOException $e) {
                 $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Aktualisieren des Benutzers.'];
-                header("Location: users.php?action=edit&id=$id");
+                header("Location: users.php?action=list");
                 exit();
             }
         }
@@ -164,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'toggle_status' && $id >
     $stmt->execute([$id]);
     if ($user = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $new_status = $user['is_active'] ? 0 : 1;
-        $stmt = $pdo->prepare('UPDATE users SET is_active = ? WHERE id = ?');
+        $stmt = $pdo->prepare('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?');
         try {
             $stmt->execute([$new_status, $id]);
             $status_text = $new_status ? 'aktiviert' : 'deaktiviert';
@@ -191,27 +185,14 @@ if ($action === 'list') {
         $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Abrufen der Benutzer.'];
         $users = [];
     }
-} elseif ($action === 'edit' && $id > 0) {
-    $stmt = $pdo->prepare('SELECT id, username, email, role, is_active, code FROM users WHERE id = ?');
-    $stmt->execute([$id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$user) {
-        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Benutzer nicht gefunden.'];
-        header('Location: users.php?action=list');
-        exit();
-    }
-} elseif ($action === 'delete' && $id > 0) {
-    $stmt = $pdo->prepare('SELECT id, username, email FROM users WHERE id = ?');
-    $stmt->execute([$id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 ?>
 
 <?php if ($action === 'list'): ?>
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h2>Benutzer verwalten</h2>
-        <button class="btn btn-success btn-sm" data-bs-toggle="offcanvas" data-bs-target="#createUserOffcanvas" data-bs-toggle="tooltip" data-bs-placement="top" title="Neuen Benutzer hinzufügen">
-            <i class="fas fa-user-plus"></i>
+        <button class="btn btn-success btn-sm" data-bs-toggle="offcanvas" data-bs-target="#createUserOffcanvas">
+            <i class="fas fa-user-plus"></i> Neuer Benutzer
         </button>
     </div>
     <hr>
@@ -239,19 +220,32 @@ if ($action === 'list') {
                             <td><?= sanitizeInput($u['email']) ?></td>
                             <td><?= ucfirst(sanitizeInput($u['role'])) ?></td>
                             <td>
-                                <span class="badge bg-<?= $u['is_active'] ? 'success' : 'secondary' ?>">
+                                <span class="badge <?= $u['is_active'] ? 'bg-success' : 'bg-secondary' ?>">
                                     <?= $u['is_active'] ? 'Aktiv' : 'Inaktiv' ?>
                                 </span>
                             </td>
                             <td><?= sanitizeInput($u['created_at']) ?></td>
-                            <td class="text-center">
-                                <button class="btn btn-sm btn-warning me-1 edit-user-btn" data-id="<?= $u['id'] ?>" data-username="<?= sanitizeInput($u['username']) ?>" data-email="<?= sanitizeInput($u['email']) ?>" data-role="<?= sanitizeInput($u['role']) ?>" data-active="<?= $u['is_active'] ?>" data-code="<?= sanitizeInput($u['code']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Bearbeiten">
+                            <td>
+                                <button class="btn btn-sm btn-warning me-1 edit-user-btn"
+                                    data-id="<?= $u['id'] ?>"
+                                    data-username="<?= sanitizeInput($u['username']) ?>"
+                                    data-email="<?= sanitizeInput($u['email']) ?>"
+                                    data-role="<?= sanitizeInput($u['role']) ?>"
+                                    data-active="<?= $u['is_active'] ?>"
+                                    data-code="<?= sanitizeInput($u['code']) ?>"
+                                    data-bs-toggle="offcanvas"
+                                    data-bs-target="#editUserOffcanvas">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger delete-user-btn" data-id="<?= $u['id'] ?>" data-username="<?= sanitizeInput($u['username']) ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="Löschen">
+                                <button class="btn btn-sm btn-danger delete-user-btn"
+                                    data-id="<?= $u['id'] ?>"
+                                    data-username="<?= sanitizeInput($u['username']) ?>">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
-                                <button class="btn btn-sm <?= $u['is_active'] ? 'btn-warning' : 'btn-success' ?> toggle-status-btn" data-id="<?= $u['id'] ?>" data-username="<?= sanitizeInput($u['username']) ?>" data-status="<?= $u['is_active'] ? 'deaktivieren' : 'aktivieren' ?>" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= $u['is_active'] ? 'Deaktivieren' : 'Aktivieren' ?>">
+                                <button class="btn btn-sm <?= $u['is_active'] ? 'btn-warning' : 'btn-success' ?> toggle-status-btn"
+                                    data-id="<?= $u['id'] ?>"
+                                    data-username="<?= sanitizeInput($u['username']) ?>"
+                                    data-status="<?= $u['is_active'] ? 'deaktivieren' : 'aktivieren' ?>">
                                     <i class="fas <?= $u['is_active'] ? 'fa-toggle-off' : 'fa-toggle-on' ?>"></i>
                                 </button>
                             </td>
@@ -295,8 +289,12 @@ if ($action === 'list') {
                         <option value="delivery">Lieferung</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i></button>
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas"><i class="fas fa-times"></i></button>
+                <div class="form-check mb-2">
+                    <input type="checkbox" name="is_active" id="create_is_active" class="form-check-input" value="1" checked>
+                    <label class="form-check-label" for="create_is_active">Aktiv</label>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Speichern</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Abbrechen</button>
             </form>
         </div>
     </div>
@@ -308,7 +306,7 @@ if ($action === 'list') {
             <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
         </div>
         <div class="offcanvas-body">
-            <form method="POST" id="editForm" action="users.php?action=edit&id=0">
+            <form method="POST" id="editForm" action="users.php?action=edit">
                 <input type="hidden" name="id" id="edit_id">
                 <div class="mb-2">
                     <label for="edit_username" class="form-label">Benutzername <span class="text-danger">*</span></label>
@@ -335,12 +333,12 @@ if ($action === 'list') {
                     <label for="edit_code" class="form-label">Kellner-Code</label>
                     <input type="text" id="edit_code" class="form-control form-control-sm" readonly>
                 </div>
-                <div class="mb-2 form-check">
+                <div class="form-check mb-2">
                     <input type="checkbox" name="is_active" id="edit_is_active" class="form-check-input">
                     <label class="form-check-label" for="edit_is_active">Aktiv</label>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i></button>
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas"><i class="fas fa-times"></i></button>
+                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Aktualisieren</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Abbrechen</button>
             </form>
         </div>
     </div>
@@ -351,46 +349,15 @@ if ($action === 'list') {
     </div>
 <?php endif; ?>
 
-<?php if ($action === 'create' || ($action === 'edit' && $id > 0)): ?>
-    <?php
-    if ($action === 'edit') {
-        try {
-            $stmt = $pdo->prepare("SELECT id, username, email, role, is_active, code FROM users WHERE id = ?");
-            $stmt->execute([$id]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$user) {
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Benutzer nicht gefunden.'];
-                header("Location: users.php?action=list");
-                exit();
-            }
-        } catch (PDOException $e) {
-            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler: ' . sanitizeInput($e->getMessage())];
-            header("Location: users.php?action=list");
-            exit();
-        }
-    }
-    ?>
-<?php endif; ?>
-
 <?php
 require_once 'includes/footer.php';
 ob_end_flush();
 ?>
 
 <!-- JavaScript -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.colVis.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
-        // Initialisiere DataTable
+        // Initialize DataTable
         $('#usersTable').DataTable({
             "paging": true,
             "searching": true,
@@ -407,36 +374,31 @@ ob_end_flush();
                 '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
                 '>',
             "buttons": [{
-                    text: '<i class="fas fa-user-plus"></i>',
+                    text: '<i class="fas fa-user-plus"></i> Neuer Benutzer',
                     className: 'btn btn-success btn-sm rounded-2',
                     action: function() {
                         $('#createUserOffcanvas').offcanvas('show');
-                    },
-                    titleAttr: 'Neuen Benutzer hinzufügen'
+                    }
                 },
                 {
                     extend: 'csv',
-                    text: '<i class="fas fa-file-csv"></i>',
-                    className: 'btn btn-primary btn-sm rounded-2',
-                    titleAttr: 'CSV exportieren'
+                    text: '<i class="fas fa-file-csv"></i> CSV exportieren',
+                    className: 'btn btn-primary btn-sm rounded-2'
                 },
                 {
                     extend: 'pdf',
-                    text: '<i class="fas fa-file-pdf"></i>',
-                    className: 'btn btn-primary btn-sm rounded-2',
-                    titleAttr: 'PDF exportieren'
+                    text: '<i class="fas fa-file-pdf"></i> PDF exportieren',
+                    className: 'btn btn-primary btn-sm rounded-2'
                 },
                 {
                     extend: 'colvis',
-                    text: '<i class="fas fa-columns"></i>',
+                    text: '<i class="fas fa-columns"></i> Spalten',
                     className: 'btn btn-primary btn-sm rounded-2',
-                    titleAttr: 'Spalten anzeigen'
                 },
                 {
                     extend: 'copy',
-                    text: '<i class="fas fa-copy"></i>',
+                    text: '<i class="fas fa-copy"></i> Kopieren',
                     className: 'btn btn-primary btn-sm rounded-2',
-                    titleAttr: 'Kopieren'
                 },
             ],
             initComplete: function() {
@@ -448,13 +410,13 @@ ob_end_flush();
             }
         });
 
-        // Tooltips initialisieren
+        // Initialize Tooltips
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
         var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl)
         })
 
-        // Bearbeiten-Button
+        // Edit User Button Click
         $('.edit-user-btn').on('click', function() {
             var id = $(this).data('id');
             var username = $(this).data('username');
@@ -478,9 +440,8 @@ ob_end_flush();
             $('#editUserOffcanvas').offcanvas('show');
         });
 
-        // Löschen-Button
-        $('.delete-user-btn').on('click', function(e) {
-            e.preventDefault();
+        // Delete User Button Click
+        $('.delete-user-btn').on('click', function() {
             var id = $(this).data('id');
             var username = $(this).data('username');
             Swal.fire({
@@ -503,7 +464,7 @@ ob_end_flush();
             });
         });
 
-        // Status-Button
+        // Toggle Status Button Click
         $('.toggle-status-btn').on('click', function() {
             var id = $(this).data('id');
             var username = $(this).data('username');
@@ -523,10 +484,18 @@ ob_end_flush();
             });
         });
 
-        // Formular-Übertragung für Bearbeiten (optional, wenn Offcanvas genutzt wird)
-        // Kann entfernt werden, da die Daten bereits durch das Offcanvas-Formular gesetzt werden
+        // Role Change in Edit Form to Show/Hide Waiter Code
+        $('#edit_role').on('change', function() {
+            var selectedRole = $(this).val();
+            if (selectedRole === 'waiter') {
+                $('#waiter_code_section').show();
+            } else {
+                $('#waiter_code_section').hide();
+                $('#edit_code').val('');
+            }
+        });
 
-        // Toast-Benachrichtigungen
+        // Toast Notifications
         <?php if (isset($_SESSION['toast'])): ?>
             var toastHtml = `
                 <div class="toast align-items-center text-white bg-<?= $_SESSION['toast']['type'] === 'success' ? 'success' : 'danger' ?> border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
@@ -566,5 +535,9 @@ ob_end_flush();
     .btn {
         padding: 0.25rem 0.4rem;
         font-size: 0.875rem;
+    }
+
+    .toast-container .toast {
+        min-width: 250px;
     }
 </style>

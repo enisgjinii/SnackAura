@@ -376,7 +376,7 @@ $image_source = $editing ? (isset($_POST['image_source']) ? $_POST['image_source
 $img_u = ($image_source === 'upload') ? 'block' : 'none';
 $img_ul = ($image_source === 'url') ? 'block' : 'none';
 ?>
-<div class="container mt-5">
+<div>
     <?php
     if ($adding) {
         echo '<h2 class="mb-4">Add Product</h2>';

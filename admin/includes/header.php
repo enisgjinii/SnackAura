@@ -350,7 +350,7 @@ try {
         <!-- Sidebar Navigation -->
         <nav id="sidebar" class="<?= isset($_COOKIE['sidebar_collapsed']) && $_COOKIE['sidebar_collapsed'] === 'true' ? 'collapsed' : '' ?>" aria-label="Sidebar Navigation">
             <div class="sidebar-header">
-                <h4><?= htmlspecialchars($_SESSION['company_name'] ?? 'Your Company', ENT_QUOTES, 'UTF-8') ?></h4>
+                <h4><?= htmlspecialchars($_SESSION['company_name'] ?? 'Yumiis', ENT_QUOTES, 'UTF-8') ?></h4>
             </div>
             <ul class="list-unstyled components">
                 <?php if (!empty($menuItems)): ?>
