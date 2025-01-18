@@ -5,9 +5,18 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 session_start();
 require 'includes/db_connect.php';
+
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
-$showChangeAddressModal = (isset($_GET['action']) && $_GET['action'] === 'change_address');
+$_SESSION['cart'] = $_SESSION['cart'] ?? [];
+$_SESSION['customer_name'] = $_SESSION['customer_name'] ?? '';
+$_SESSION['customer_email'] = $_SESSION['customer_email'] ?? '';
+$_SESSION['customer_phone'] = $_SESSION['customer_phone'] ?? '';
+$_SESSION['postal_code'] = $_SESSION['postal_code'] ?? '';
+$_SESSION['payment_method'] = $_SESSION['payment_method'] ?? '';
+$_SESSION['scheduled_date'] = $_SESSION['scheduled_date'] ?? '';
+$_SESSION['scheduled_time'] = $_SESSION['scheduled_time'] ?? '';
 $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
+
 define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
 
 function log_error_markdown($m, $c = '')
@@ -27,11 +36,11 @@ set_error_handler(function ($sev, $msg, $fl, $ln) {
 });
 
 include 'settings_fetch.php';
-$_SESSION['cart'] = $_SESSION['cart'] ?? [];
-$is_closed = false;
-$notification = [];
+
 $selected_store_id = $_SESSION['selected_store'] ?? null;
 $main_store = null;
+$is_closed = false;
+$notification = [];
 
 if ($selected_store_id) {
     $st = $pdo->prepare("SELECT * FROM stores WHERE id=? AND is_active=1");
@@ -77,11 +86,6 @@ if ($main_store) {
     $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
 
-function logdb($m)
-{
-    file_put_contents('errors.md', $m . "\n", FILE_APPEND);
-}
-
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -108,7 +112,18 @@ function fetchProduct($pdo, $pid)
     $p = $s->fetch(PDO::FETCH_ASSOC);
     if (!$p) return null;
     $props = json_decode($p['properties'] ?? '{}', true) ?: [];
-    return ['sizes' => $props['sizes'] ?? [], 'extras' => $props['extras'] ?? [], 'sauces' => $props['sauces'] ?? [], 'dresses' => $props['dresses'] ?? [], 'base_price' => (float)($props['base_price'] ?? $p['base_price']), 'name' => $p['name'], 'description' => $p['description'], 'image_url' => $p['image_url'], 'properties' => $p['properties'] ?? '', 'id' => $p['id']];
+    return [
+        'sizes' => $props['sizes'] ?? [],
+        'extras' => $props['extras'] ?? [],
+        'sauces' => $props['sauces'] ?? [],
+        'dresses' => $props['dresses'] ?? [],
+        'base_price' => (float)($props['base_price'] ?? $p['base_price']),
+        'name' => $p['name'],
+        'description' => $p['description'],
+        'image_url' => $p['image_url'],
+        'properties' => $p['properties'] ?? '',
+        'id' => $p['id']
+    ];
 }
 
 function calculateCartTotal($cart)
@@ -132,11 +147,10 @@ function applyTip($cartTotal, $tips, $selectedTipId)
 
 function haversineDist($lat1, $lon1, $lat2, $lon2)
 {
-    $R = 6371; // Earth radius in kilometers
+    $R = 6371;
     $dLat = deg2rad($lat2 - $lat1);
     $dLon = deg2rad($lon2 - $lon1);
-    return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 +
-        cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
+    return $R * 2 * asin(sqrt(sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2));
 }
 
 function computeShipping($store, $lat, $lon)
@@ -149,7 +163,8 @@ function computeShipping($store, $lat, $lon)
     $postalZones = json_decode($store['postal_code_zones'] ?? '{}', true) ?: [];
     if (in_array($mode, ['postal', 'both'])) {
         $address = $_SESSION['delivery_address'] ?? '';
-        if (isset($postalZones[$address])) return max((float)$postalZones[$address], 0);
+        $postal_code = $_SESSION['postal_code'] ?? '';
+        if (isset($postalZones[$postal_code])) return max((float)$postalZones[$postal_code], 0);
     }
     $distance = haversineDist((float)$store['store_lat'], (float)$store['store_lng'], (float)$lat, (float)$lon);
     if ($distance > $radius && $mode !== 'postal') return 0;
@@ -175,13 +190,20 @@ function applyCoupon($pdo, $code, $cartTotal)
         $r['error'] = "This coupon has expired.";
         return $r;
     }
-    $dv = ($c['discount_type'] === 'percentage') ? ($cartTotal * ($c['discount_value'] / 100)) : $c['discount_value'];
+    $dv = ($c['discount_type'] === 'percentage') ? ($cartTotal * ((float)$c['discount_value'] / 100)) : (float)($c['discount_value']);
     $r['ok'] = true;
     $r['coupon'] = ['code' => $c['code'], 'discount_type' => $c['discount_type'], 'discount_value' => $dv];
     return $r;
 }
 
+function logdb($m)
+{
+    file_put_contents('errors.md', $m . "\n", FILE_APPEND);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+   
+
     if (isset($_POST['checkout'])) {
         if (empty($_SESSION['cart'])) {
             header("Location:index.php?error=empty_cart");
@@ -191,11 +213,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cn = trim($_POST['customer_name'] ?? '');
         $ce = trim($_POST['customer_email'] ?? '');
         $cp = trim($_POST['customer_phone'] ?? '');
-        $da = trim($_POST['delivery_address'] ?? '');
+        $da = $_SESSION['delivery_address'] ?? '';
+        $postal_code = trim($_POST['postal_code'] ?? '');
         $stid = $_POST['selected_tip'] ?? null;
         $ev = (isset($_POST['is_event']) && $_POST['is_event'] == '1');
         $sd = $_POST['scheduled_date'] ?? null;
         $st_time = $_POST['scheduled_time'] ?? null;
+        $pm = $_POST['payment_method'] ?? '';
+
         if ($ev) {
             $sdt = DateTime::createFromFormat('Y-m-d H:i', "$sd $st_time");
             if (!$sdt || $sdt < new DateTime()) {
@@ -203,25 +228,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         }
-        $pm = $_POST['payment_method'] ?? '';
+
         if (!in_array($pm, ['paypal', 'pickup', 'cash'])) {
             header("Location:index.php?error=invalid_payment_method");
             exit;
         }
-        if (!$cn || !$ce || !$cp || !$da) {
+
+        if (!$cn || !$ce || !$cp || !$da || !$postal_code) {
             header("Location:index.php?error=invalid_order_details");
             exit;
         }
+
         $cart_total = calculateCartTotal($_SESSION['cart']);
         $tip_amount = applyTip($cart_total, $tip_options, $stid);
         $shipping = 0;
+
         if ($pm !== 'pickup' && $main_store) {
             $shipping = computeShipping($main_store, $_SESSION['latitude'] ?? 0, $_SESSION['longitude'] ?? 0);
         }
+
         $free_threshold = (float)($main_store['shipping_free_threshold'] ?? 9999);
         if ($cart_total >= $free_threshold) {
             $shipping = 0;
         }
+
         $coupon_discount = 0;
         if (!empty($_SESSION['applied_coupon'])) {
             $coupon_discount = $_SESSION['applied_coupon']['discount_value'];
@@ -229,13 +259,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $coupon_discount = $cart_total;
             }
         }
+
         $total = max($cart_total + $tip_amount + $shipping - $coupon_discount, 0);
-        $order_details = json_encode(['items' => $_SESSION['cart'], 'latitude' => $_SESSION['latitude'] ?? null, 'longitude' => $_SESSION['longitude'] ?? null, 'tip_id' => $stid, 'tip_amount' => $tip_amount, 'store_id' => $store_id, 'is_event' => $ev, 'scheduled_date' => $sd, 'scheduled_time' => $st_time, 'shipping_fee' => $shipping, 'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null, 'coupon_discount' => $coupon_discount], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        $order_details = json_encode([
+            'items' => $_SESSION['cart'],
+            'latitude' => $_SESSION['latitude'] ?? null,
+            'longitude' => $_SESSION['longitude'] ?? null,
+            'tip_id' => $stid,
+            'tip_amount' => $tip_amount,
+            'store_id' => $store_id,
+            'is_event' => $ev,
+            'scheduled_date' => $sd,
+            'scheduled_time' => $st_time,
+            'shipping_fee' => $shipping,
+            'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null,
+            'coupon_discount' => $coupon_discount
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
         try {
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("INSERT INTO orders(user_id,customer_name,customer_email,customer_phone,delivery_address,total_amount,status_id,tip_id,tip_amount,scheduled_date,scheduled_time,payment_method,store_id,order_details,coupon_code,coupon_discount)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([null, $cn, $ce, $cp, $da, $total, 2, $stid, $tip_amount, $sd, $st_time, $pm, $store_id, $order_details, $_SESSION['applied_coupon']['code'] ?? null, $coupon_discount]);
+            $stmt = $pdo->prepare("INSERT INTO orders(user_id, customer_name, customer_email, customer_phone, delivery_address, postal_code, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method, store_id, order_details, coupon_code, coupon_discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                null,
+                $cn,
+                $ce,
+                $cp,
+                $da,
+                $postal_code,
+                $total,
+                2,
+                $stid,
+                $tip_amount,
+                $sd,
+                $st_time,
+                $pm,
+                $store_id,
+                $order_details,
+                $_SESSION['applied_coupon']['code'] ?? null,
+                $coupon_discount
+            ]);
             $oid = $pdo->lastInsertId();
+
             if ($pm === 'paypal') {
                 $pdo->commit();
                 $_SESSION['cart'] = [];
@@ -278,14 +343,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $da = trim($_POST['delivery_address'] ?? '');
             $la = trim($_POST['latitude'] ?? '');
             $lo = trim($_POST['longitude'] ?? '');
-            if (!$da) {
-                $error_message = "Please provide a valid delivery address & location.";
+            $postal_code = trim($_POST['postal_code'] ?? '');
+
+            if (!$da || !$la || !$lo || !$postal_code) {
+                $error_message = "Please provide a valid delivery address, postal code & location.";
             } else {
                 $_SESSION['selected_store'] = $sid;
                 $_SESSION['store_name'] = $store['name'];
                 $_SESSION['store_lat'] = $store['store_lat'];
                 $_SESSION['store_lng'] = $store['store_lng'];
                 $_SESSION['delivery_address'] = $da;
+                $_SESSION['postal_code'] = $postal_code;
                 $_SESSION['latitude'] = $la;
                 $_SESSION['longitude'] = $lo;
                 $_SESSION['minimum_order'] = $store['minimum_order'];
@@ -471,7 +539,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $qx = (int)$pSa[$nm];
                 if ($qx > 0) {
                     $saTot += $sx['price'] * $qx;
-                    $sel_sa[] = ['name' => $nm, 'price' => $prc, 'quantity' => $qx];
+                    $sel_sa[] = ['name' => $nm, 'price' => $sx['price'], 'quantity' => $qx];
                 }
             }
         }
@@ -518,32 +586,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         header("Location:index.php?updated=1");
         exit;
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['paypal_success'])) {
-    $data = json_decode(file_get_contents('php://input'), true);
-    if ($data && isset($data['orderId']) && isset($data['paypalOrderId']) && isset($data['paypalCaptureId'])) {
-        $orderId = (int)$data['orderId'];
-        $paypalOrderId = $data['paypalOrderId'];
-        $paypalCaptureId = $data['paypalCaptureId'];
-        try {
-            $stmt = $pdo->prepare("UPDATE orders SET status_id=?,payment_info=? WHERE id=?");
-            $stmt->execute([5, json_encode(['paypalOrderId' => $paypalOrderId, 'paypalCaptureId' => $paypalCaptureId]), $orderId]);
-            echo json_encode(['status' => 'ok']);
-            exit;
-        } catch (Exception $e) {
-            log_error_markdown("Failed to update order status: " . $e->getMessage(), "PayPal Success");
-            echo json_encode(['status' => 'error']);
-            exit;
+    } elseif (isset($_POST['paypal_success'])) {
+        $data = json_decode(file_get_contents('php://input'), true);
+        if ($data && isset($data['orderId']) && isset($data['paypalOrderId']) && isset($data['paypalCaptureId'])) {
+            $orderId = (int)$data['orderId'];
+            $paypalOrderId = $data['paypalOrderId'];
+            $paypalCaptureId = $data['paypalCaptureId'];
+            try {
+                $stmt = $pdo->prepare("UPDATE orders SET status_id=?, payment_info=? WHERE id=?");
+                $stmt->execute([5, json_encode(['paypalOrderId' => $paypalOrderId, 'paypalCaptureId' => $paypalCaptureId]), $orderId]);
+                echo json_encode(['status' => 'ok']);
+                exit;
+            } catch (Exception $e) {
+                log_error_markdown("Failed to update order status: " . $e->getMessage(), "PayPal Success");
+                echo json_encode(['status' => 'error']);
+                exit;
+            }
         }
+        echo json_encode(['status' => 'invalid']);
+        exit;
     }
-    echo json_encode(['status' => 'invalid']);
-    exit;
 }
 
 try {
-    $catStmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC,name ASC");
+    $catStmt = $pdo->prepare("SELECT * FROM categories ORDER BY position ASC, name ASC");
     $catStmt->execute();
     $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -552,7 +618,7 @@ try {
 }
 
 $selC = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-$q = "SELECT p.id AS product_id,p.product_code,p.name AS product_name,p.category,p.description,p.allergies,p.image_url,p.is_new,p.is_offer,p.is_active,p.properties,p.base_price,p.created_at,p.updated_at,p.category_id FROM products p WHERE p.is_active=1";
+$q = "SELECT p.id AS product_id, p.product_code, p.name AS product_name, p.category, p.description, p.allergies, p.image_url, p.is_new, p.is_offer, p.is_active, p.properties, p.base_price, p.created_at, p.updated_at, p.category_id FROM products p WHERE p.is_active=1";
 if ($selC > 0) {
     $q .= " AND p.category_id=:c";
 }
@@ -636,10 +702,9 @@ try {
     $active_offers = [];
 }
 
-// Calculate Distance
 function calculateDistance($lat1, $lon1, $lat2, $lon2)
 {
-    $earthRadius = 6371; // in kilometers
+    $earthRadius = 6371;
     $dLat = deg2rad($lat2 - $lat1);
     $dLon = deg2rad($lon2 - $lon1);
     $a = sin($dLat / 2) * sin($dLat / 2) +
@@ -790,6 +855,10 @@ if (
 </head>
 
 <body>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog modal-dialog-centered">
@@ -798,24 +867,22 @@ if (
                         <h5 class="modal-title"><?= htmlspecialchars($notification['title']) ?></h5>
                     </div>
                     <div class="modal-body"><?= htmlspecialchars($notification['message']) ?></div>
-                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><a href="?action=change_address" class="btn btn-primary">Change Store</a></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <a href="?action=change_address" class="btn btn-primary">Change Store</a>
+                    </div>
                 </div>
             </div>
         </div>
     <?php endif; ?>
-    <div class="loading-overlay" id="loading-overlay">
-        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
-    </div>
-    <?php if (!isset($_SESSION['selected_store']) || $showChangeAddressModal): ?>
+
+    <?php if (!isset($_SESSION['selected_store']) || (isset($_GET['action']) && $_GET['action'] === 'change_address')): ?>
         <div class="modal fade show" id="storeModal" tabindex="-1" style="display:block;background:rgba(0,0,0,0.5)">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
                     <form method="POST" id="storeSelectionForm">
                         <div class="modal-header">
                             <h5 class="modal-title">Select Your Store</h5>
-                            <?php if (!empty($main_store['cart_logo'])): ?>
-                                <img src="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>" alt="Cart Logo" style="width:50px;height:50px;object-fit:cover;margin-left:10px">
-                            <?php endif; ?>
                         </div>
                         <div class="modal-body">
                             <?php if (isset($error_message)): ?>
@@ -847,41 +914,31 @@ if (
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label for="delivery_address" class="form-label">Delivery Address</label>
-                                <input type="text" class="form-control" id="delivery_address" name="delivery_address" required value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
+                                <label for="delivery_address" class="form-label">Delivery Address (optional)</label>
+                                <input type="text" class="form-control" id="delivery_address" name="delivery_address" value="<?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?>">
                             </div>
-                            <input type="hidden" id="latitude" name="latitude" value="<?= htmlspecialchars($_SESSION['latitude'] ?? '') ?>">
-                            <input type="hidden" id="longitude" name="longitude" value="<?= htmlspecialchars($_SESSION['longitude'] ?? '') ?>">
-                            <div id="map" style="width:100%;height:300px"></div>
-                            <p><?= htmlspecialchars($_SESSION['latitude'] ?? '') ?> , <?= htmlspecialchars($_SESSION['longitude'] ?? '') ?></p>
+                            <div class="mb-3">
+                                <label for="postal_code" class="form-label">Postal Code</label>
+                                <input type="text" class="form-control" id="postal_code" name="postal_code" required value="<?= htmlspecialchars($_SESSION['postal_code'] ?? '') ?>">
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i> Confirm</button>
                         </div>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     </form>
                 </div>
             </div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
-            function showBootstrapAlert(m, t = 'info') {
-                let a = document.getElementById('alert_placeholder');
-                if (!a) {
-                    let c = document.createElement('div');
-                    c.id = 'alert_placeholder';
-                    document.body.prepend(c);
-                    a = c;
-                }
-                let w = document.createElement('div');
-                w.innerHTML = `<div class="alert alert-${t} alert-dismissible fade show" role="alert">${m}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
-                a.append(w);
-            }
             (function() {
                 let storeModal = new bootstrap.Modal('#storeModal', {
                     backdrop: 'static',
                     keyboard: false
                 });
                 storeModal.show();
+
                 document.querySelectorAll('.select-store-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         document.querySelectorAll('.store-card').forEach(c => {
@@ -893,84 +950,69 @@ if (
                         card.querySelector('input[name="store_id"]').checked = true;
                     });
                 });
-                let map = L.map('map').setView([51.505, -0.09], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-                let marker = null;
-                let slt = parseFloat(document.getElementById('latitude').value) || null;
-                let sln = parseFloat(document.getElementById('longitude').value) || null;
-                if (slt && sln) {
-                    marker = L.marker([slt, sln]).addTo(map);
-                    map.setView([slt, sln], 13);
-                }
-                map.on('click', function(e) {
-                    if (marker) map.removeLayer(marker);
-                    marker = L.marker(e.latlng).addTo(map);
-                    document.getElementById('latitude').value = e.latlng.lat;
-                    document.getElementById('longitude').value = e.latlng.lng;
-                    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`).then(r => r.json()).then(d => {
-                        if (d.display_name) {
-                            document.getElementById('delivery_address').value = d.display_name;
-                        }
-                    });
-                });
-                document.getElementById('delivery_address').addEventListener('change', function() {
-                    let a = this.value.trim();
-                    if (a.length > 5) {
-                        fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(a)}`).then(r => r.json()).then(d => {
-                            if (d && d.length > 0) {
-                                if (marker) map.removeLayer(marker);
-                                let lat = parseFloat(d[0].lat),
-                                    lon = parseFloat(d[0].lon);
-                                marker = L.marker([lat, lon]).addTo(map);
-                                map.setView([lat, lon], 13);
-                                document.getElementById('latitude').value = lat;
-                                document.getElementById('longitude').value = lon;
-                            }
-                        });
-                    }
-                });
+
                 document.getElementById('storeSelectionForm').addEventListener('submit', function(e) {
                     if (!document.querySelector('input[name="store_id"]:checked')) {
                         e.preventDefault();
-                        showBootstrapAlert('No store selected.', 'warning');
-                        return;
-                    }
-                    if (!document.getElementById('delivery_address').value.trim() || !document.getElementById('latitude').value || !document.getElementById('longitude').value) {
-                        e.preventDefault();
-                        showBootstrapAlert('Please provide a complete address and location.', 'warning');
+                        alert('Please select a store.');
                     }
                 });
             })();
         </script>
-    <?php endif;
-    if ($is_closed && isset($_SESSION['selected_store'])): ?>
+    <?php endif; ?>
+
+    <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
                 new bootstrap.Modal(document.getElementById('storeClosedModal')).show();
             });
         </script>
-    <?php endif;
+    <?php endif; ?>
+
+    <?php
     $includes = ['edit_cart.php', 'header.php', 'reservation.php', 'promotional_banners.php', 'special_offers.php', 'checkout.php', 'ratings_modal.php', 'cart_modal.php', 'toast_notifications.php'];
     foreach ($includes as $f) {
         if (file_exists($f)) include $f;
-    } ?>
+    }
+    ?>
+
     <div class="modal fade" id="checkoutModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <form method="POST" action="index.php" id="checkoutForm">
                     <div class="modal-body">
-                        <div class="mb-2"><label class="form-label">Vollständiger Name <span class="text-danger">*</span></label><input type="text" class="form-control" name="customer_name" required></div>
-                        <div class="mb-2"><label class="form-label">Kontaktnummer <span class="text-danger">*</span></label><input type="tel" class="form-control" name="customer_phone" required></div>
-                        <div class="mb-2"><label class="form-label">E-Mail <span class="text-danger">*</span></label><input type="email" class="form-control" name="customer_email" required></div>
-                        <div class="mb-2"><label class="form-label">Standort <span class="text-danger">*</span></label><textarea class="form-control" name="delivery_address" rows="2" required><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea></div>
-                        <div class="mb-2"><label class="form-label">Postleitzahl <span class="text-danger">*</span></label><input type="text" class="form-control" name="postal_code" required></div>
-                        <div class="mb-2"><label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox"> Veranstaltung</label></div>
-                        <div id="event_details" style="display:none">
-                            <div class="mb-2"><label class="form-label">Bevorzugtes Lieferdatum <span class="text-danger">*</span></label><input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>"></div>
-                            <div class="mb-2"><label class="form-label">Bevorzugte Lieferzeit <span class="text-danger">*</span></label><input type="time" class="form-control" name="scheduled_time"></div>
+                        <div class="mb-2">
+                            <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="customer_name" required value="<?= htmlspecialchars($_SESSION['customer_name'] ?? '') ?>">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Contact Number <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" name="customer_phone" required value="<?= htmlspecialchars($_SESSION['customer_phone'] ?? '') ?>">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">E-Mail <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" name="customer_email" required value="<?= htmlspecialchars($_SESSION['customer_email'] ?? '') ?>">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Delivery Address <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="delivery_address" rows="2" required readonly><?= htmlspecialchars($_SESSION['delivery_address'] ?? '') ?></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Postal Code <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="postal_code" required value="<?= htmlspecialchars($_SESSION['postal_code'] ?? '') ?>">
+                        </div>
+                        <div class="mb-2">
+                            <label><input class="form-check-input" type="checkbox" name="is_event" value="1" id="event_checkbox" <?= ($_SESSION['is_event'] ?? '') == '1' ? 'checked' : '' ?>> Event</label>
+                        </div>
+                        <div id="event_details" style="display: <?= ($_SESSION['is_event'] ?? '') == '1' ? 'block' : 'none' ?>">
+                            <div class="mb-2">
+                                <label class="form-label">Preferred Delivery Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="scheduled_date" min="<?= date('Y-m-d') ?>" value="<?= htmlspecialchars($_SESSION['scheduled_date'] ?? '') ?>">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Preferred Delivery Time <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" name="scheduled_time" value="<?= htmlspecialchars($_SESSION['scheduled_time'] ?? '') ?>">
+                            </div>
                         </div>
                         <script>
                             document.getElementById('event_checkbox').addEventListener('change', function() {
@@ -989,14 +1031,16 @@ if (
                             });
                         </script>
                         <div class="mb-2">
-                            <label class="form-label">Zahlungsmethode <span class="text-danger">*</span></label>
-                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal"><label class="form-check-label" for="paymentPayPal"><i class="bi bi-paypal"></i> PayPal</label></div>
+                            <label class="form-label">Payment Method <span class="text-danger">*</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="payment_method" value="paypal" required id="paymentPayPal" <?= ($_SESSION['payment_method'] ?? '') === 'paypal' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="paymentPayPal"><i class="bi bi-paypal"></i> PayPal</label>
+                            </div>
                             <div id="paypal-button-container"></div>
                             <?php if (isset($_GET['pending_paypal_order_id'])): ?>
                                 <h6 class="mt-3">Complete PayPal Payment</h6>
-                                <div id="paypal-button-container"></div>
+                                <div id="paypal-button-container-pending"></div>
                                 <script>
-                                    console.log("Initializing PayPal Buttons for existing pending order...");
                                     paypal.Buttons({
                                         createOrder: function(data, actions) {
                                             const urlParams = new URLSearchParams(window.location.search);
@@ -1006,9 +1050,7 @@ if (
                                                 console.error("No ID in URL.");
                                                 return;
                                             }
-                                            console.log("Creating order for pendingOrderId:", pId);
                                             let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
-                                            console.log("PayPal Order total:", t);
                                             return actions.order.create({
                                                 purchase_units: [{
                                                     description: "Order #" + pId,
@@ -1019,10 +1061,8 @@ if (
                                                 }]
                                             });
                                         },
-                                        onApprove: function(d, a) {
-                                            console.log("onApprove triggered. data:", d);
-                                            return a.order.capture().then(function(det) {
-                                                console.log("PayPal capture:", det);
+                                        onApprove: function(data, actions) {
+                                            return actions.order.capture().then(function(details) {
                                                 fetch('index.php', {
                                                     method: 'POST',
                                                     headers: {
@@ -1031,11 +1071,10 @@ if (
                                                     body: JSON.stringify({
                                                         paypal_success: true,
                                                         orderId: <?= json_encode((int)($_GET['pending_paypal_order_id'] ?? 0)) ?>,
-                                                        paypalOrderId: d.orderID,
-                                                        paypalCaptureId: det.purchase_units[0].payments.captures[0].id
+                                                        paypalOrderId: data.orderID,
+                                                        paypalCaptureId: details.purchase_units[0].payments.captures[0].id
                                                     })
-                                                }).then(r => r.json()).then(res => {
-                                                    console.log("Server response:", res);
+                                                }).then(response => response.json()).then(res => {
                                                     if (res.status === 'ok') {
                                                         alert("Payment successful!");
                                                         window.location.href = 'index.php?order=success';
@@ -1048,61 +1087,68 @@ if (
                                                 });
                                             });
                                         },
-                                        onCancel: function(d) {
-                                            console.log("Payment canceled by user:", d);
+                                        onCancel: function(data) {
                                             alert("Payment was canceled.");
                                         },
-                                        onError: function(e) {
-                                            console.error("PayPal onError:", e);
-                                            alert("Error in PayPal process.");
+                                        onError: function(err) {
+                                            console.error("PayPal error:", err);
+                                            alert("PayPal error occurred.");
                                         }
-                                    }).render('#paypal-button-container');
+                                    }).render('#paypal-button-container-pending');
                                 </script>
                             <?php endif; ?>
-                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup"><label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Abholung</label></div>
-                            <div class="form-check"><input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash"><label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Nachnahme</label></div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="payment_method" value="pickup" required id="paymentPickup" <?= ($_SESSION['payment_method'] ?? '') === 'pickup' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="paymentPickup"><i class="bi bi-bag"></i> Pickup</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="payment_method" value="cash" required id="paymentCash" <?= ($_SESSION['payment_method'] ?? '') === 'cash' ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="paymentCash"><i class="bi bi-cash"></i> Cash on Delivery</label>
+                            </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">Trinkgeld auswählen</label>
+                            <label class="form-label">Select Tip</label>
                             <select class="form-select" name="selected_tip" id="tip_selection">
-                                <option value="">Kein Trinkgeld</option>
+                                <option value="">No Tip</option>
                                 <?php foreach ($tip_options as $t): ?>
                                     <option value="<?= htmlspecialchars($t['id']) ?>" <?= ($selT == $t['id'] ? 'selected' : '') ?>><?= htmlspecialchars($t['name']) ?><?php if (!empty($t['percentage'])) echo " (" . $t['percentage'] . "%)";
                                                                                                                                                                         elseif (!empty($t['amount'])) echo " (+" . number_format($t['amount'], 2) . "€)"; ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <h6>Bestellübersicht</h6>
+                        <h6>Order Summary</h6>
                         <ul class="list-group mb-2">
                             <?php foreach ($_SESSION['cart'] as $i => $it): ?>
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-start">
-                                        <div class="ms-2 me-auto">
-                                            <div class="fw-bold"><?= htmlspecialchars($it['name']) ?> x<?= htmlspecialchars($it['quantity']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?></div>
+                                        <div>
+                                            <h6 class="mb-1" style="font-size: 0.95rem;">
+                                                <?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?> x<?= htmlspecialchars($it['quantity']) ?>
+                                            </h6>
                                             <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
-                                                <ul class="mb-1">
+                                                <ul class="list-unstyled ms-3" style="font-size: 0.8rem;">
                                                     <?php if (!empty($it['extras'])): ?>
                                                         <li><strong>Extras:</strong>
-                                                            <ul>
+                                                            <ul class="list-unstyled ms-3">
                                                                 <?php foreach ($it['extras'] as $ex): ?>
                                                                     <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
                                                                 <?php endforeach; ?>
                                                             </ul>
                                                         </li>
-                                                    <?php endif;
-                                                    if (!empty($it['sauces'])): ?>
-                                                        <li><strong>Saucen:</strong>
-                                                            <ul>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['sauces'])): ?>
+                                                        <li><strong>Sauces:</strong>
+                                                            <ul class="list-unstyled ms-3">
                                                                 <?php foreach ($it['sauces'] as $sx): ?>
                                                                     <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
                                                                 <?php endforeach; ?>
                                                             </ul>
                                                         </li>
-                                                    <?php endif;
-                                                    if (!empty($it['drink'])): ?>
-                                                        <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
-                                                    <?php endif;
-                                                    if (!empty($it['special_instructions'])): ?>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['drink'])): ?>
+                                                        <li><strong>Drink:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($it['special_instructions'])): ?>
                                                         <li><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
                                                     <?php endif; ?>
                                                 </ul>
@@ -1110,14 +1156,17 @@ if (
                                         </div>
                                         <div class="text-end">
                                             <strong><?= number_format($it['total_price'], 2) ?>€</strong><br>
-                                            <form action="index.php" method="POST" style="display:inline;"><input type="hidden" name="remove" value="<?= $i ?>"><button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove"><i class="bi bi-trash"></i></button></form>
+                                            <form action="index.php" method="POST" style="display:inline;">
+                                                <input type="hidden" name="remove" value="<?= $i ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger mt-1" title="Remove"><i class="bi bi-trash"></i></button>
+                                            </form>
                                             <button type="button" class="btn btn-sm btn-secondary mt-1" data-bs-toggle="modal" data-bs-target="#editCartModal<?= $i ?>" title="Edit"><i class="bi bi-pencil-square"></i></button>
                                         </div>
                                     </div>
                                 </li>
                             <?php endforeach;
                             if ($tip_amount > 0): ?>
-                                <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Trinkgeld</strong><span><?= number_format($tip_amount, 2) ?>€</span></li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Tip</strong><span><?= number_format($tip_amount, 2) ?>€</span></li>
                             <?php endif;
                             if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center"><strong>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</strong><span>-<?= number_format($coupon_discount, 2) ?>€</span></li>
@@ -1131,18 +1180,23 @@ if (
                         <?php endif; ?>
                         <hr>
                         <h6>Total: <?= number_format($total_with_shipping, 2) ?> €</h6>
-                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-2" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Bestellung abschicken</button>
+                        <button type="submit" name="checkout" value="1" class="btn btn-success w-100 mt-2" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill"></i> Place Order</button>
+                    </div>
+                    <div class="modal-footer">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                     </div>
                 </form>
             </div>
         </div>
     </div>
+
     <ul class="nav nav-tabs justify-content-center my-3">
         <li class="nav-item"><a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a></li>
         <?php foreach ($categories as $cItem): ?>
             <li class="nav-item"><a class="nav-link <?= ($selC === $cItem['id'] ? 'active' : '') ?>" href="index.php?category_id=<?= $cItem['id'] ?>"><?= htmlspecialchars($cItem['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
+
     <main class="container my-3">
         <div class="row">
             <div class="col-lg-9">
@@ -1169,6 +1223,7 @@ if (
                                 </div>
                             </div>
                         </div>
+
                         <div class="modal fade" id="addToCartModal<?= $pd['id'] ?>" tabindex="-1">
                             <div class="modal-dialog modal-xl modal-dialog-centered">
                                 <div class="modal-content">
@@ -1190,7 +1245,7 @@ if (
                                                             <select class="form-select size-selector" name="size" data-productid="<?= $pd['id'] ?>">
                                                                 <option value="">Choose a size</option>
                                                                 <?php foreach ($pd['sizes'] as $sz): $maxS = isset($sz['max_sauces']) ? (int)$sz['max_sauces'] : 0; ?>
-                                                                    <option value="<?= htmlspecialchars($sz['size']) ?>" data-sizeprice="<?= number_format($sz['price'], 2, '.', '') ?>" data-sizes-extras='<?= json_encode($sz['extras'] ?? []) ?>' data-sizes-sauces='<?= json_encode($sz['sauces'] ?? []) ?>' data-maxsauces="<?= $maxS ?>"><?= htmlspecialchars($sz['size']) ?> (<?= number_format($pd['base_price'] + $sz['price'], 2) ?>€)<?php if ($maxS > 0) echo " - Max $maxS sauces"; ?></option>
+                                                                    <option value="<?= htmlspecialchars($sz['size']) ?>" data-sizeprice="<?= number_format($sz['price'], 2, '.', '') ?>" data-sizes-extras='<?= json_encode($sz['extras'] ?? []) ?>' data-sizes-sauces='<?= json_encode($sz['sauces'] ?? []) ?>' data-maxsauces="<?= $maxS ?>"><?= htmlspecialchars($sz['size']) ?> (<?= number_format($pd['base_price'] + $sz['price'], 2) ?>€)<?php if ($maxS > 0) echo " - Max $maxS sauce(s)"; ?></option>
                                                                 <?php endforeach; ?>
                                                             </select>
                                                         </div>
@@ -1243,14 +1298,21 @@ if (
                                                         <label class="form-label">Quantity</label>
                                                         <input type="number" class="form-control quantity-selector" name="quantity" data-productid="<?= $pd['id'] ?>" value="1" min="1" max="99" required>
                                                     </div>
-                                                    <div class="mb-2"><label class="form-label">Special Instructions</label><textarea class="form-control" name="special_instructions" rows="2" style="font-size:.8rem"></textarea></div>
-                                                    <div class="bg-light p-2 mb-2 rounded"><small><strong>Estimated Price: </strong></small><span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1rem;color:#d3b213"><?= number_format($pd['base_price'], 2) ?>€</span></div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label">Special Instructions</label>
+                                                        <textarea class="form-control" name="special_instructions" rows="2" style="font-size:.8rem"></textarea>
+                                                    </div>
+                                                    <div class="bg-light p-2 mb-2 rounded">
+                                                        <small><strong>Estimated Price: </strong></small>
+                                                        <span id="estimated-price-<?= $pd['id'] ?>" style="font-size:1rem;color:#d3b213"><?= number_format($pd['base_price'], 2) ?>€</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="modal-footer">
                                             <input type="hidden" name="product_id" value="<?= $pd['id'] ?>">
                                             <input type="hidden" name="add_to_cart" value="1">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i></button>
                                             <button type="submit" class="btn btn-primary" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-cart-plus"></i></button>
                                         </div>
@@ -1258,12 +1320,14 @@ if (
                                 </div>
                             </div>
                         </div>
+
                         <?php if ($pd['allergies']): ?>
                             <div class="modal fade" id="allergiesModal<?= $pd['id'] ?>" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content">
                                         <div class="modal-header">
-                                            <h5 class="modal-title">Allergies for <?= htmlspecialchars($pd['name']) ?></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            <h5 class="modal-title">Allergies for <?= htmlspecialchars($pd['name']) ?></h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                         </div>
                                         <div class="modal-body">
                                             <ul class="list-group">
@@ -1273,17 +1337,17 @@ if (
                                                 <?php endforeach; ?>
                                             </ul>
                                         </div>
-                                        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                    <?php endif;
-                    endforeach; ?>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
-            <?php
-            // Order Summary Enhancements
-            ?>
+
             <div class="col-lg-3">
                 <div class="order-summary card shadow-sm">
                     <div class="card-body p-4">
@@ -1336,7 +1400,6 @@ if (
                                 <?php else: ?>
                                     <p class="mb-1">Location not available</p>
                                 <?php endif; ?>
-
                                 <div class="d-flex gap-2">
                                     <a href="?action=change_address" class="btn btn-sm btn-outline-primary" title="Change Address" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Change Address">
                                         <i class="bi bi-geo-alt"></i>
@@ -1375,7 +1438,7 @@ if (
                                                                 </li>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['sauces'])): ?>
-                                                                <li><strong>Saucen:</strong>
+                                                                <li><strong>Sauces:</strong>
                                                                     <ul class="list-unstyled ms-3">
                                                                         <?php foreach ($it['sauces'] as $sx): ?>
                                                                             <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
@@ -1384,7 +1447,7 @@ if (
                                                                 </li>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['drink'])): ?>
-                                                                <li><strong>Getränk:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
+                                                                <li><strong>Drink:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['special_instructions'])): ?>
                                                                 <li><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
@@ -1442,7 +1505,7 @@ if (
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     <?php if (isset($tax_amount)): ?>
-                                        <p class="mb-1"><strong>Shipping:</strong> <?= number_format($shipping_for_display, 2) ?> €</p>
+                                        <p class="mb-1"><strong>Tax:</strong> <?= number_format($tax_amount, 2) ?> €</p>
                                     <?php endif; ?>
                                     <hr class="my-2">
                                     <?php
@@ -1471,10 +1534,12 @@ if (
                     </div>
                 </div>
             </div>
-
+        </div>
     </main>
+
     <?php include 'footer.php';
     include 'rules.php'; ?>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://www.paypal.com/sdk/js?client-id=AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-NDgpng0NLAiWr&currency=EUR"></script>
@@ -1491,6 +1556,7 @@ if (
             w.innerHTML = `<div class="alert alert-${t} alert-dismissible fade show" role="alert">${m}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
             a.append(w);
         }
+
         $(function() {
             $('#loading-overlay').fadeOut('slow');
             <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>showBootstrapAlert("Item added to cart.", "success");
@@ -1508,6 +1574,7 @@ if (
             if (isset($_GET['out_of_stock']) && $_GET['out_of_stock'] == 1): ?>showBootstrapAlert("Some items are out of stock.", "warning");
         <?php endif; ?>
         });
+
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedSauceInput = null;
 
@@ -1618,9 +1685,11 @@ if (
                 }
                 updateEstimatedPrice(form);
             }
+
             document.querySelectorAll('.add-to-cart-form').forEach(f => {
                 initializeEventListeners(f);
             });
+
             let observer = new MutationObserver(muts => {
                 muts.forEach(mu => {
                     if (mu.type === 'childList') {
@@ -1639,9 +1708,8 @@ if (
                 subtree: true
             });
 
-            // Initialize PayPal Buttons
             paypal.Buttons({
-                createOrder: function(d, a) {
+                createOrder: function(data, actions) {
                     console.log("PayPal createOrder triggered (no existing order).");
                     let pId = new URLSearchParams(window.location.search).get('pending_paypal_order_id');
                     if (!pId) {
@@ -1649,7 +1717,7 @@ if (
                     }
                     let t = <?= json_encode(number_format($total_with_shipping, 2, '.', '')) ?>;
                     console.log("PayPal Order total from server:", t);
-                    return a.order.create({
+                    return actions.order.create({
                         purchase_units: [{
                             description: "Order (no pending ID)",
                             amount: {
@@ -1659,19 +1727,18 @@ if (
                         }]
                     });
                 },
-                onApprove: function(d, a) {
-                    console.log("PayPal onApprove:", d);
-                    return a.order.capture().then(function(det) {
-                        console.log("Capture:", det);
+                onApprove: function(data, actions) {
+                    console.log("PayPal onApprove:", data);
+                    return actions.order.capture().then(function(details) {
                         alert("Payment success (no pending order ID). Server needs to handle capture info.");
                     });
                 },
-                onCancel: function(d) {
-                    console.log("User canceled:", d);
-                    alert("Payment canceled.");
+                onCancel: function(data) {
+                    console.log("User canceled:", data);
+                    alert("Payment was canceled.");
                 },
-                onError: function(e) {
-                    console.error("PayPal error:", e);
+                onError: function(err) {
+                    console.error("PayPal error:", err);
                     alert("PayPal error occurred.");
                 }
             }).render('#paypal-button-container');
