@@ -174,10 +174,10 @@ function logdb($m) {
     file_put_contents('errors.md', $m . "\n", FILE_APPEND);
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        header("Location:index.php?error=invalid_csrf_token");
-        exit;
-    }
+    // if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    //     header("Location:index.php?error=invalid_csrf_token");
+    //     exit;
+    // }
     if (isset($_POST['checkout'])) {
         if (empty($_SESSION['cart'])) {
             header("Location:index.php?error=empty_cart");
@@ -1117,11 +1117,11 @@ if (!empty($main_store['store_lat']) && !empty($main_store['store_lng']) && !emp
                                                     <?php
                                                     $showBaseLimits=(!$thereAreSizes&&($pd['max_extras_base']||$pd['max_sauces_base']||$pd['max_dresses_base']));
                                                     if($showBaseLimits): ?>
-                                                        <p style="font-size:.85rem" class="text-info">
+                                                        <!-- <p style="font-size:.85rem" class="text-info">
                                                             <?php if($pd['max_extras_base']>0) echo "Max Extras: ".$pd['max_extras_base']." "; ?>
                                                             <?php if($pd['max_sauces_base']>0) echo "Max Sauces: ".$pd['max_sauces_base']." "; ?>
                                                             <?php if($pd['max_dresses_base']>0) echo "Max Dresses: ".$pd['max_dresses_base']; ?>
-                                                        </p>
+                                                        </p> -->
                                                     <?php endif; ?>
                                                     <div class="mb-2">
                                                         <label class="form-label">Extras</label>
