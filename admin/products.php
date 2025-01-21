@@ -116,9 +116,15 @@ if ($adding) {
 }
 
 if ($adding || $editing) {
+    // If editing, we still might need them:
+    if ($editing) {
+        $unique_extras = getUniqueProperties($pdo, 'extras');
+        $unique_sauces = getUniqueProperties($pdo, 'sauces');
+        $unique_dresses = getUniqueProperties($pdo, 'dresses');
+    }
+
     $post_image_source = $_POST['image_source'] ?? '';
     $image_source = $editing ? $post_image_source : ($post_image_source ?: 'upload');
-
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $product_code = s($_POST['product_code'] ?? '');
         $name = s($_POST['name'] ?? '');
@@ -128,7 +134,6 @@ if ($adding || $editing) {
         $is_new = isset($_POST['is_new']) ? 1 : 0;
         $is_offer = isset($_POST['is_offer']) ? 1 : 0;
         $is_active = isset($_POST['is_active']) ? 1 : 0;
-
         $has_extras_sauces = isset($_POST['has_extras_sauces']) ? 1 : 0;
         $has_sizes = isset($_POST['has_sizes']) ? 1 : 0;
         $has_dresses = isset($_POST['has_dresses']) ? 1 : 0;
@@ -144,7 +149,6 @@ if ($adding || $editing) {
                 $message = '<div class="alert alert-danger">Product code already exists.</div>';
             }
         }
-
         if (!$message) {
             $image_url = '';
             if ($image_source === 'upload') {
@@ -169,14 +173,12 @@ if ($adding || $editing) {
                     $message = '<div class="alert alert-danger">' . $validate['error'] . '</div>';
                 }
             }
-
             if (!$message) {
                 $properties = [];
                 if (!$has_sizes) {
                     $base_price = (float)($_POST['base_price'] ?? 0);
                     $properties['base_price'] = $base_price;
                 }
-
                 if ($has_extras_sauces) {
                     $properties['extras'] = [];
                     if (!empty($_POST['global_extras'])) {
@@ -188,7 +190,6 @@ if ($adding || $editing) {
                             }
                         }
                     }
-
                     $properties['sauces'] = [];
                     if (!empty($_POST['global_sauces'])) {
                         foreach ($_POST['global_sauces'] as $gs) {
@@ -200,17 +201,15 @@ if ($adding || $editing) {
                         }
                     }
                 }
-
                 if ($has_sizes) {
                     $properties['sizes'] = [];
                     if (!empty($_POST['sizes_block'])) {
                         foreach ($_POST['sizes_block'] as $block) {
                             $size = s($block['size'] ?? '');
                             $price = (float)($block['price'] ?? 0);
-                            $max_sauces = isset($block['max_sauces']) ? (int)$block['max_sauces'] : 0;
+                            $max_sauces_block = isset($block['max_sauces']) ? (int)$block['max_sauces'] : 0;
                             $exs = [];
                             $sas = [];
-
                             if ($has_extras_sauces && !empty($block['extras_selected'])) {
                                 $global_extras = $properties['extras'] ?? [];
                                 foreach ($block['extras_selected'] as $ex_i) {
@@ -239,13 +238,19 @@ if ($adding || $editing) {
                                     'price' => $price,
                                     'extras' => $exs,
                                     'sauces' => $sas,
-                                    'max_sauces' => $max_sauces
+                                    'max_sauces' => $max_sauces_block
                                 ];
                             }
                         }
                     }
+                } else {
+                    if ($has_extras_sauces) {
+                        $max_sauces_base = isset($_POST['max_sauces_base']) ? (int)$_POST['max_sauces_base'] : 0;
+                        $max_extras_base = isset($_POST['max_extras_base']) ? (int)$_POST['max_extras_base'] : 0;
+                        $properties['max_sauces_base'] = $max_sauces_base;
+                        $properties['max_extras_base'] = $max_extras_base;
+                    }
                 }
-
                 if ($has_dresses) {
                     $properties['dresses'] = [];
                     if (!empty($_POST['dresses'])) {
@@ -260,11 +265,14 @@ if ($adding || $editing) {
                             }
                         }
                     }
+                    if (!$has_sizes) {
+                        $max_dresses_base = isset($_POST['max_dresses_base']) ? (int)$_POST['max_dresses_base'] : 0;
+                        $properties['max_dresses_base'] = $max_dresses_base;
+                    }
                 }
 
                 $props_json = json_encode($properties);
                 $user_id = $_SESSION['user_id'] ?? null;
-
                 try {
                     if ($editing) {
                         $stmt_old = $pdo->prepare('SELECT * FROM products WHERE id=?');
@@ -272,19 +280,19 @@ if ($adding || $editing) {
                         $old_product = $stmt_old->fetch(PDO::FETCH_ASSOC);
 
                         $sql = 'UPDATE products
-                                SET product_code=?,
-                                    category_id=?,
-                                    name=?,
-                                    description=?,
-                                    allergies=?,
-                                    image_url=?,
-                                    is_new=?,
-                                    is_offer=?,
-                                    is_active=?,
-                                    properties=?,
-                                    updated_by=?,
-                                    updated_at=NOW()
-                                WHERE id=?';
+                              SET product_code=?,
+                                  category_id=?,
+                                  name=?,
+                                  description=?,
+                                  allergies=?,
+                                  image_url=?,
+                                  is_new=?,
+                                  is_offer=?,
+                                  is_active=?,
+                                  properties=?,
+                                  updated_by=?,
+                                  updated_at=NOW()
+                              WHERE id=?';
                         $params = [
                             $product_code,
                             $category_id,
@@ -301,7 +309,6 @@ if ($adding || $editing) {
                         ];
                         $stmt_update = $pdo->prepare($sql);
                         $stmt_update->execute($params);
-
                         $new_product = fetchAll($pdo, 'SELECT * FROM products WHERE id=?', [$id])[0];
                         $stmt_audit = $pdo->prepare('INSERT INTO product_audit (product_id, action, changed_by, old_values, new_values) VALUES (?, "update", ?, ?, ?)');
                         $stmt_audit->execute([
@@ -312,9 +319,9 @@ if ($adding || $editing) {
                         ]);
                     } else {
                         $sql = 'INSERT INTO products
-                                (product_code, category_id, name, description, allergies, image_url,
-                                 is_new, is_offer, is_active, properties, created_by, created_at)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())';
+                              (product_code, category_id, name, description, allergies, image_url,
+                               is_new, is_offer, is_active, properties, created_by, created_at)
+                              VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())';
                         $params = [
                             $product_code,
                             $category_id,
@@ -362,102 +369,132 @@ $img_src = $editing ? ($product['image_url'] ?? '') : ($_POST['image_url'] ?? ''
 if ($img_src === null) {
     $img_src = '';
 }
-
 $props = ($editing && $product['properties']) ? json_decode($product['properties'], true) : [];
-
 $has_extras_sauces = (!empty($props['extras']) || !empty($props['sauces']) || isset($_POST['has_extras_sauces']));
 $has_sizes = (!empty($props['sizes']) || isset($_POST['has_sizes']));
 $has_dresses = (!empty($props['dresses']) || isset($_POST['has_dresses']));
-
 $base_price = isset($props['base_price']) ? $props['base_price'] : (float)($_POST['base_price'] ?? 0);
 
-$image_source = $editing ? (isset($_POST['image_source']) ? $_POST['image_source'] : ((!empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === false) ? 'url' : 'upload')) : (isset($_POST['image_source']) ? $_POST['image_source'] : 'upload');
+$image_source = $editing
+    ? (isset($_POST['image_source'])
+        ? $_POST['image_source']
+        : ((!empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === false)
+            ? 'url'
+            : 'upload'))
+    : (isset($_POST['image_source'])
+        ? $_POST['image_source']
+        : 'upload');
 
 $img_u = ($image_source === 'upload') ? 'block' : 'none';
 $img_ul = ($image_source === 'url') ? 'block' : 'none';
 ?>
-<div>
+<div class="container my-5">
     <?php
-    if ($adding) {
-        echo '<h2 class="mb-4">Add Product</h2>';
-    } elseif ($editing) {
-        echo '<h2 class="mb-4">Edit Product</h2>';
-    }
+    if ($adding) echo '<h2 class="mb-4 text-primary">Add New Product</h2>';
+    elseif ($editing) echo '<h2 class="mb-4 text-primary">Edit Product</h2>';
     echo $message;
 
     if ($adding || $editing) {
     ?>
-        <form method="POST" enctype="multipart/form-data" action="products.php?action=<?= $editing ? 'edit&id=' . $id : 'add' ?>">
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <label class="form-label">Product Code *</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-id-badge"></i></span>
-                        <input type="text" class="form-control" name="product_code" required value="<?= s($pc) ?>" placeholder="e.g., P1234">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Product Name *</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-heading"></i></span>
-                        <input type="text" class="form-control" name="name" required value="<?= s($pn) ?>" placeholder="e.g., Chicken Nuggets">
-                    </div>
-                </div>
-            </div>
+        <div class="row">
+            <div class="col-lg-8">
+                <form method="POST" enctype="multipart/form-data" action="products.php?action=<?= $editing ? 'edit&id=' . $id : 'add' ?>">
 
-            <div class="row g-4 mt-3">
-                <div class="col-md-4">
-                    <label class="form-label">Category *</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-list"></i></span>
-                        <select class="form-select" name="category_id" required>
-                            <option value="">Select</option>
-                            <?php
-                            foreach ($db_categories as $c) {
-                                echo '<option value="' . $c['id'] . '" ' . ($category_id == $c['id'] ? 'selected' : '') . '>' . s($c['name']) . '</option>';
-                            }
-                            ?>
-                        </select>
+                    <div class="card mb-4">
+                        <div class="card-header bg-light fw-bold">Basic Information</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Product Code <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-id-badge"></i></span>
+                                    <input type="text" class="form-control" name="product_code" required value="<?= s($pc) ?>" placeholder="e.g., P1234">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Product Name <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-heading"></i></span>
+                                    <input type="text" class="form-control" name="name" required value="<?= s($pn) ?>" placeholder="e.g., Chicken Nuggets">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Category <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-list"></i></span>
+                                    <select class="form-select" name="category_id" required>
+                                        <option value="">Select Category</option>
+                                        <?php
+                                        foreach ($db_categories as $c) {
+                                            echo '<option value="' . $c['id'] . '" ' . ($category_id == $c['id'] ? 'selected' : '') . '>' . s($c['name']) . '</option>';
+                                        }
+                                        ?>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-md-8 d-flex align-items-end">
-                    <div class="form-check me-3">
-                        <input class="form-check-input" type="checkbox" name="has_extras_sauces" id="extras_sauces_checkbox" <?= $has_extras_sauces ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="extras_sauces_checkbox">Has Extras & Sauces</label>
-                    </div>
-                    <div class="form-check me-3">
-                        <input class="form-check-input" type="checkbox" name="has_sizes" id="sizes_checkbox" <?= $has_sizes ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="sizes_checkbox">Has Sizes</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="has_dresses" id="dresses_checkbox" <?= $has_dresses ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="dresses_checkbox">Has Dresses</label>
-                    </div>
-                </div>
-            </div>
 
-            <div class="row g-4 mt-3" id="basePriceField" style="display:<?= $has_sizes ? 'none' : 'block' ?>;">
-                <div class="col-md-6">
-                    <label class="form-label"><strong>Base Price ($)</strong></label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" step="0.01" class="form-control" name="base_price" value="<?= s($base_price) ?>" placeholder="e.g., 6.99">
-                    </div>
-                </div>
-            </div>
+                    <div class="card mb-4">
+                        <div class="card-header bg-light fw-bold">Product Options</div>
+                        <div class="card-body">
+                            <div class="row g-3 align-items-center">
+                                <div class="col-auto">
+                                    <input class="form-check-input" type="checkbox" name="has_extras_sauces" id="extras_sauces_checkbox" <?= $has_extras_sauces ? 'checked' : '' ?>>
+                                    <label class="form-check-label ms-1" for="extras_sauces_checkbox">Has Extras & Sauces</label>
+                                </div>
+                                <div class="col-auto">
+                                    <input class="form-check-input" type="checkbox" name="has_sizes" id="sizes_checkbox" <?= $has_sizes ? 'checked' : '' ?>>
+                                    <label class="form-check-label ms-1" for="sizes_checkbox">Has Sizes</label>
+                                </div>
+                                <div class="col-auto">
+                                    <input class="form-check-input" type="checkbox" name="has_dresses" id="dresses_checkbox" <?= $has_dresses ? 'checked' : '' ?>>
+                                    <label class="form-check-label ms-1" for="dresses_checkbox">Has Dresses</label>
+                                </div>
+                            </div>
 
-            <div class="row g-4 mt-3" id="extrasSaucesFields" style="display:<?= $has_extras_sauces ? 'block' : 'none' ?>;">
-                <div class="col-12">
-                    <label class="form-label">Global Extras & Sauces</label>
-                    <small class="text-muted">Define global extras and sauces for all sizes or base product.</small>
-                    <div class="row mt-3">
-                        <div class="col-md-6">
-                            <h5>Extras (Name / Price)</h5>
-                            <div id="globalExtrasContainer">
-                                <?php
-                                if (($editing || $adding) && isset($props['extras'])) {
-                                    foreach ($props['extras'] as $ei => $ev) {
-                                        echo '<div class="row g-2 mb-2 global-extra">
+                            <div id="basePriceField" style="display:<?= $has_sizes ? 'none' : 'block' ?>;" class="mt-4">
+                                <label class="form-label fw-semibold">Base Price (USD)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" step="0.01" class="form-control" name="base_price" value="<?= s($base_price) ?>" placeholder="e.g., 6.99">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4" id="extrasSaucesFields" style="display:<?= $has_extras_sauces ? 'block' : 'none' ?>;">
+                        <div class="card-header bg-light fw-bold">Global Extras & Sauces</div>
+                        <div class="card-body">
+                            <p class="small text-muted">These apply to all sizes or to the base product if no sizes.</p>
+
+                            <!-- Base-level max fields (shown only if no sizes) -->
+                            <div id="baseLimitsFields" style="display:none;">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max Sauces (Base)</label>
+                                        <input type="number" class="form-control" name="max_sauces_base" min="0"
+                                            value="<?= s($props['max_sauces_base'] ?? ($_POST['max_sauces_base'] ?? 0)) ?>"
+                                            placeholder="e.g., 2" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max Extras (Base)</label>
+                                        <input type="number" class="form-control" name="max_extras_base" min="0"
+                                            value="<?= s($props['max_extras_base'] ?? ($_POST['max_extras_base'] ?? 0)) ?>"
+                                            placeholder="e.g., 3" />
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- / Base-level max fields -->
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Extras</h6>
+                                    <div id="globalExtrasContainer">
+                                        <?php
+                                        // Display existing product extras if they are set
+                                        if (($editing || $adding) && isset($props['extras'])) {
+                                            foreach ($props['extras'] as $ei => $ev) {
+                                                echo '<div class="row g-2 mb-2 global-extra">
                                                 <div class="col">
                                                     <input type="text" class="form-control" name="global_extras[' . $ei . '][name]" value="' . s($ev['name']) . '" placeholder="Extra name">
                                                 </div>
@@ -465,33 +502,34 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                                     <input type="number" step="0.01" class="form-control" name="global_extras[' . $ei . '][price]" value="' . s($ev['price']) . '" placeholder="Price">
                                                 </div>
                                                 <div class="col-auto">
-                                                    <button type="button" class="btn btn-danger remove-global-extra">&times;</button>
+                                                    <button type="button" class="btn btn-sm btn-danger remove-global-extra">&times;</button>
                                                 </div>
-                                              </div>';
-                                    }
-                                }
-                                if ($adding && !empty($unique_extras)) {
-                                    echo '<div class="mb-3">
-                                            <label>Select from existing Extras:</label>
-                                            <select class="form-select existing-extras-select" multiple>
-                                                ';
-                                    foreach ($unique_extras as $ue) {
-                                        echo '<option value="' . s($ue['name']) . '">' . s($ue['name']) . ' ($' . s($ue['price']) . ')</option>';
-                                    }
-                                    echo '</select>
-                                          </div>';
-                                }
-                                ?>
-                            </div>
-                            <button type="button" class="btn btn-primary btn-sm" id="addGlobalExtra">Add Extra</button>
-                        </div>
-                        <div class="col-md-6">
-                            <h5>Sauces (Name / Price)</h5>
-                            <div id="globalSaucesContainer">
-                                <?php
-                                if (($editing || $adding) && isset($props['sauces'])) {
-                                    foreach ($props['sauces'] as $si => $sv) {
-                                        echo '<div class="row g-2 mb-2 global-sauce">
+                                            </div>';
+                                            }
+                                        }
+
+                                        // NEW: Show "Select from existing Extras" when adding OR editing
+                                        if (($adding || $editing) && !empty($unique_extras)) {
+                                            echo '<div class="mb-3">
+                                            <label class="text-muted">Add from existing Extras:</label>
+                                            <select class="form-select existing-extras-select" multiple>';
+                                            foreach ($unique_extras as $ue) {
+                                                echo '<option value="' . s($ue['name']) . '">' . s($ue['name']) . ' ($' . s($ue['price']) . ')</option>';
+                                            }
+                                            echo '</select>
+                                        </div>';
+                                        }
+                                        ?>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="addGlobalExtra">Add Extra</button>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Sauces</h6>
+                                    <div id="globalSaucesContainer">
+                                        <?php
+                                        if (($editing || $adding) && isset($props['sauces'])) {
+                                            foreach ($props['sauces'] as $si => $sv) {
+                                                echo '<div class="row g-2 mb-2 global-sauce">
                                                 <div class="col">
                                                     <input type="text" class="form-control" name="global_sauces[' . $si . '][name]" value="' . s($sv['name']) . '" placeholder="Sauce name">
                                                 </div>
@@ -499,42 +537,42 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                                     <input type="number" step="0.01" class="form-control" name="global_sauces[' . $si . '][price]" value="' . s($sv['price']) . '" placeholder="Price">
                                                 </div>
                                                 <div class="col-auto">
-                                                    <button type="button" class="btn btn-danger remove-global-sauce">&times;</button>
+                                                    <button type="button" class="btn btn-sm btn-danger remove-global-sauce">&times;</button>
                                                 </div>
-                                              </div>';
-                                    }
-                                }
-                                if ($adding && !empty($unique_sauces)) {
-                                    echo '<div class="mb-3">
-                                            <label>Select from existing Sauces:</label>
-                                            <select class="form-select existing-sauces-select" multiple>
-                                                ';
-                                    foreach ($unique_sauces as $us) {
-                                        echo '<option value="' . s($us['name']) . '">' . s($us['name']) . ' ($' . s($us['price']) . ')</option>';
-                                    }
-                                    echo '</select>
-                                          </div>';
-                                }
-                                ?>
+                                            </div>';
+                                            }
+                                        }
+                                        // NEW: Show "Select from existing Sauces" when adding OR editing
+                                        if (($adding || $editing) && !empty($unique_sauces)) {
+                                            echo '<div class="mb-3">
+                                            <label class="text-muted">Add from existing Sauces:</label>
+                                            <select class="form-select existing-sauces-select" multiple>';
+                                            foreach ($unique_sauces as $us) {
+                                                echo '<option value="' . s($us['name']) . '">' . s($us['name']) . ' ($' . s($us['price']) . ')</option>';
+                                            }
+                                            echo '</select>
+                                        </div>';
+                                        }
+                                        ?>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="addGlobalSauce">Add Sauce</button>
+                                </div>
                             </div>
-                            <button type="button" class="btn btn-primary btn-sm" id="addGlobalSauce">Add Sauce</button>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div class="row g-4 mt-3" id="sizesFields" style="display:<?= $has_sizes ? 'block' : 'none' ?>;">
-                <div class="col-12">
-                    <label class="form-label"><strong>Sizes</strong></label>
-                    <small class="text-muted d-block">Define sizes, base price, and max sauces.</small>
-                    <div id="sizeBlocks">
-                        <?php
-                        if ($editing && isset($props['sizes']) && is_array($props['sizes'])) {
-                            foreach ($props['sizes'] as $sz_id => $szb) {
-                                $sz_name = s($szb['size']);
-                                $sz_price = (float)$szb['price'];
-                                $sz_maxSauce = isset($szb['max_sauces']) ? (int)$szb['max_sauces'] : 0;
-                                echo '<div class="size-block border p-4 mb-4" data-block-index="' . $sz_id . '">
+                    <div class="card mb-4" id="sizesFields" style="display:<?= $has_sizes ? 'block' : 'none' ?>;">
+                        <div class="card-header bg-light fw-bold">Sizes</div>
+                        <div class="card-body">
+                            <p class="small text-muted">Define multiple sizes, their base price, etc.</p>
+                            <div id="sizeBlocks">
+                                <?php
+                                if ($editing && isset($props['sizes']) && is_array($props['sizes'])) {
+                                    foreach ($props['sizes'] as $sz_id => $szb) {
+                                        $sz_name = s($szb['size']);
+                                        $sz_price = (float)$szb['price'];
+                                        $sz_maxSauce = isset($szb['max_sauces']) ? (int)$szb['max_sauces'] : 0;
+                                        echo '<div class="size-block border p-3 mb-3" data-block-index="' . $sz_id . '">
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-4">
                                                 <label class="form-label">Size</label>
@@ -555,35 +593,49 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                         <div class="row g-3 mt-3">
                                             <div class="col-md-6">
                                                 <label class="form-label">Extras</label>
-                                                <select class="form-select extras-select" name="sizes_block[' . $sz_id . '][extras_selected][]" multiple></select>
+                                                <select class="form-select extras-select" name="sizes_block[<?= $sz_id ?>][extras_selected][]" multiple></select>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label">Sauces</label>
-                                                <select class="form-select sauces-select" name="sizes_block[' . $sz_id . '][sauces_selected][]" multiple></select>
+                                                <select class="form-select sauces-select" name="sizes_block[<?= $sz_id ?>][sauces_selected][]" multiple></select>
                                             </div>
                                         </div>
                                         <div class="extras-prices mt-3"></div>
                                         <div class="sauces-prices mt-3"></div>
                                     </div>';
-                            }
-                        }
-                        ?>
+                                    }
+                                }
+                                ?>
+                            </div>
+                            <button type="button" class="btn btn-success btn-sm" id="addSizeBlock"><i class="fas fa-plus-circle"></i> Add Size</button>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-success btn-sm" id="addSizeBlock"><i class="fas fa-plus-circle"></i> Add Size</button>
-                </div>
-            </div>
 
-            <div class="row g-4 mt-3" id="dressesFields" style="display:<?= $has_dresses ? 'block' : 'none' ?>;">
-                <div class="col-12">
-                    <label class="form-label"><strong>Dresses</strong></label>
-                    <small class="text-muted d-block">Additional dress options.</small>
-                    <div id="dressBlocks">
-                        <?php
-                        if ($editing && isset($props['dresses']) && is_array($props['dresses'])) {
-                            foreach ($props['dresses'] as $db_i => $db) {
-                                $dname = s($db['name']);
-                                $dprice = (float)$db['price'];
-                                echo '<div class="dress-block border p-4 mb-4">
+                    <div class="card mb-4" id="dressesFields" style="display:<?= $has_dresses ? 'block' : 'none' ?>;">
+                        <div class="card-header bg-light fw-bold">Dresses</div>
+                        <div class="card-body">
+                            <p class="small text-muted">Additional dress options.</p>
+
+                            <!-- Base-level max dresses (shown if no sizes) -->
+                            <div id="baseDressLimit" style="display:none;">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Max Dressings (Base)</label>
+                                        <input type="number" class="form-control" name="max_dresses_base" min="0"
+                                            value="<?= s($props['max_dresses_base'] ?? ($_POST['max_dresses_base'] ?? 0)) ?>"
+                                            placeholder="e.g., 1" />
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- / Base-level max dresses -->
+
+                            <div id="dressBlocks">
+                                <?php
+                                if ($editing && isset($props['dresses']) && is_array($props['dresses'])) {
+                                    foreach ($props['dresses'] as $db_i => $db) {
+                                        $dname = s($db['name']);
+                                        $dprice = (float)$db['price'];
+                                        echo '<div class="dress-block border p-3 mb-3">
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-6">
                                                 <label class="form-label">Dress</label>
@@ -597,106 +649,128 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                                 <button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button>
                                             </div>
                                         </div>
-                                      </div>';
-                            }
-                        }
-                        ?>
+                                    </div>';
+                                    }
+                                }
+                                ?>
+                            </div>
+                            <!-- NEW: If you also want the “Select from existing Dresses” option, do similarly: -->
+                            <?php if (($adding || $editing) && !empty($unique_dresses)): ?>
+                                <div class="mb-3">
+                                    <label class="text-muted">Add from existing Dresses:</label>
+                                    <select class="form-select existing-dresses-select" multiple>
+                                        <?php foreach ($unique_dresses as $ud): ?>
+                                            <option value="<?= s($ud['name']) ?>">
+                                                <?= s($ud['name']) ?> ($<?= s($ud['price']) ?>)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            <?php endif; ?>
+
+                            <button type="button" class="btn btn-success btn-sm" id="addDressBlock"><i class="fas fa-plus-circle"></i> Add Dress</button>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-success btn-sm" id="addDressBlock"><i class="fas fa-plus-circle"></i> Add Dress</button>
-                </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-light fw-bold">Image</div>
+                        <div class="card-body">
+                            <label class="form-label d-block">Image Source <span class="text-danger">*</span></label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image_source" value="upload" <?= $image_source === 'upload' ? 'checked' : '' ?>>
+                                <label class="form-check-label">Upload</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="image_source" value="url" <?= $image_source === 'url' ? 'checked' : '' ?>>
+                                <label class="form-check-label">URL</label>
+                            </div>
+
+                            <div class="mt-3" id="image_upload_field" style="display:<?= $img_u ?>;">
+                                <label class="form-label">Upload Image</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-upload"></i></span>
+                                    <input type="file" class="form-control" name="image_file" accept="image/*">
+                                </div>
+                                <div id="image_file_preview" class="mt-2">
+                                    <?php
+                                    if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0) {
+                                        echo '<img src="' . s($product['image_url']) . '" class="img-thumbnail" style="max-width:200px;">';
+                                    }
+                                    ?>
+                                </div>
+                            </div>
+
+                            <div class="mt-3" id="image_url_field" style="display:<?= $img_ul ?>;">
+                                <label class="form-label">Image URL</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-image"></i></span>
+                                    <input type="url" class="form-control" name="image_url" placeholder="https://example.com/img.jpg" value="<?= s($img_src) ?>">
+                                </div>
+                                <div id="image_url_preview" class="mt-2">
+                                    <?php
+                                    if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0) {
+                                        echo '<img src="' . s($product['image_url']) . '" class="img-thumbnail" style="max-width:200px;">';
+                                    }
+                                    ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-light fw-bold">Allergies & Description</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Allergies</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-exclamation-triangle"></i></span>
+                                    <input type="text" class="form-control" name="allergies" value="<?= s($allg) ?>" placeholder="e.g., Contains Nuts">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="form-label">Description</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-align-left"></i></span>
+                                    <textarea class="form-control" name="description" rows="3"><?= s($desc) ?></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header bg-light fw-bold">Additional Flags</div>
+                        <div class="card-body">
+                            <div class="form-check mb-2">
+                                <input type="checkbox" class="form-check-input" name="is_new" id="is_new_checkbox" <?= $i_new ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="is_new_checkbox">New</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input type="checkbox" class="form-check-input" name="is_offer" id="is_offer_checkbox" <?= $i_off ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="is_offer_checkbox">Offer</label>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="is_active" id="is_active_checkbox" <?= $i_act ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="is_active_checkbox">Active</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-success me-2"><?= $editing ? 'Update' : 'Add' ?> Product</button>
+                        <a href="products.php" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
             </div>
 
-            <div class="row g-4 mt-3">
-                <div class="col-md-6">
-                    <label class="form-label">Image Source *</label>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="image_source" value="upload" <?= $image_source === 'upload' ? 'checked' : '' ?>>
-                        <label class="form-check-label">Upload</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="image_source" value="url" <?= $image_source === 'url' ? 'checked' : '' ?>>
-                        <label class="form-check-label">URL</label>
+            <div class="col-lg-4">
+                <div class="card mb-4" id="previewBox">
+                    <div class="card-header bg-primary text-white fw-bold">Live Preview</div>
+                    <div class="card-body" id="previewContent">
+                        No data yet...
                     </div>
                 </div>
             </div>
-
-            <div class="row g-4 mt-3" id="image_upload_field" style="display:<?= $img_u ?>;">
-                <div class="col-md-6">
-                    <label class="form-label">Upload Image</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-upload"></i></span>
-                        <input type="file" class="form-control" name="image_file" accept="image/*">
-                    </div>
-                    <div id="image_file_preview" class="mt-3">
-                        <?php
-                        if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) === 0) {
-                            echo '<img src="' . s($product['image_url']) . '" class="img-thumbnail" style="max-width:200px;">';
-                        }
-                        ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mt-3" id="image_url_field" style="display:<?= $img_ul ?>;">
-                <div class="col-md-6">
-                    <label class="form-label">Image URL</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-image"></i></span>
-                        <input type="url" class="form-control" name="image_url" placeholder="https://example.com/img.jpg" value="<?= s($img_src) ?>">
-                    </div>
-                    <div id="image_url_preview" class="mt-3">
-                        <?php
-                        if ($editing && !empty($product['image_url']) && strpos($product['image_url'], UPLOAD_DIR) !== 0) {
-                            echo '<img src="' . s($product['image_url']) . '" class="img-thumbnail" style="max-width:200px;">';
-                        }
-                        ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mt-3">
-                <div class="col-md-6">
-                    <label class="form-label">Allergies</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-exclamation-triangle"></i></span>
-                        <input type="text" class="form-control" name="allergies" value="<?= s($allg) ?>" placeholder="e.g., Contains Nuts">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Description</label>
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-align-left"></i></span>
-                        <textarea class="form-control" name="description" rows="3"><?= s($desc) ?></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mt-3">
-                <div class="col-md-4">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" name="is_new" id="is_new_checkbox" <?= $i_new ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="is_new_checkbox">New</label>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" name="is_offer" id="is_offer_checkbox" <?= $i_off ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="is_offer_checkbox">Offer</label>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" name="is_active" id="is_active_checkbox" <?= $i_act ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="is_active_checkbox">Active</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-4 d-flex justify-content-end">
-                <button type="submit" class="btn btn-success me-2"><?= $editing ? 'Update' : 'Add' ?> Product</button>
-                <a href="products.php" class="btn btn-secondary">Cancel</a>
-            </div>
-        </form>
+        </div>
     <?php
     } elseif ($viewing) {
         $products = fetchAll(
@@ -706,15 +780,14 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
              JOIN categories c ON p.category_id=c.id
              ORDER BY p.created_at DESC'
         );
-        echo '<h2 class="mb-4">Manage Products</h2>';
+        echo '<h2 class="mb-4 text-primary">Manage Products</h2>';
         echo $_SESSION['message'] ?? '';
         unset($_SESSION['message']);
         echo '<div class="mb-3">
                 <a href="products.php?action=add" class="btn btn-success"><i class="fas fa-plus-circle"></i> Add New Product</a>
               </div>';
-
         echo '<div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered">
+                <table class="table table-striped table-hover table-bordered align-middle">
                   <thead class="table-dark">
                     <tr>
                       <th>ID</th>
@@ -764,10 +837,20 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         echo implode(', ', $saarr) . '<br>';
                     }
                 }
-            } elseif (isset($pr['base_price'])) {
-                echo '<strong>Base Price:</strong> $' . number_format($pr['base_price'], 2) . '<br>';
+            } else {
+                if (isset($pr['base_price'])) {
+                    echo '<strong>Base Price:</strong> $' . number_format($pr['base_price'], 2) . '<br>';
+                }
+                if (isset($pr['max_sauces_base'])) {
+                    echo '<strong>Max Sauces (Base):</strong> ' . (int)$pr['max_sauces_base'] . '<br>';
+                }
+                if (isset($pr['max_extras_base'])) {
+                    echo '<strong>Max Extras (Base):</strong> ' . (int)$pr['max_extras_base'] . '<br>';
+                }
+                if (isset($pr['max_dresses_base'])) {
+                    echo '<strong>Max Dressings (Base):</strong> ' . (int)$pr['max_dresses_base'] . '<br>';
+                }
             }
-
             if (!empty($pr['extras']) && empty($pr['sizes'])) {
                 echo '<strong>Extras:</strong> ';
                 $exarr = [];
@@ -789,7 +872,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     echo '<strong>Dress:</strong> ' . s($d['name']) . ' - $' . number_format($d['price'], 2) . '<br>';
                 }
             }
-
             echo '</td>
                   <td>' . (s($p['allergies']) ?: '-') . '</td>
                   <td>' . (s($p['description']) ?: '-') . '</td>
@@ -800,15 +882,9 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 echo '-';
             }
             echo '</td>
-                  <td>';
-            echo $p['is_new'] ? '<span class="badge bg-success"><i class="fas fa-star"></i></span>' : '-';
-            echo '</td>
-                  <td>';
-            echo $p['is_offer'] ? '<span class="badge bg-warning text-dark"><i class="fas fa-tags"></i></span>' : '-';
-            echo '</td>
-                  <td>';
-            echo $p['is_active'] ? '<span class="badge bg-primary"><i class="fas fa-check-circle"></i></span>' : '<span class="badge bg-secondary"><i class="fas fa-times-circle"></i></span>';
-            echo '</td>
+                  <td>' . ($p['is_new'] ? '<span class="badge bg-success"><i class="fas fa-star"></i></span>' : '-') . '</td>
+                  <td>' . ($p['is_offer'] ? '<span class="badge bg-warning text-dark"><i class="fas fa-tags"></i></span>' : '-') . '</td>
+                  <td>' . ($p['is_active'] ? '<span class="badge bg-primary"><i class="fas fa-check-circle"></i></span>' : '<span class="badge bg-secondary"><i class="fas fa-times-circle"></i></span>') . '</td>
                   <td>' . s($p['created_at']) . '</td>
                   <td>
                     <a href="products.php?action=edit&id=' . $p['id'] . '" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i> Edit</a>
@@ -866,10 +942,26 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
         var sizeBlockCounter = 1000;
 
         function toggleFields() {
-            $('#extrasSaucesFields').toggle($('#extras_sauces_checkbox').is(':checked'));
-            $('#sizesFields').toggle($('#sizes_checkbox').is(':checked'));
-            $('#dressesFields').toggle($('#dresses_checkbox').is(':checked'));
-            $('#basePriceField').toggle(!$('#sizes_checkbox').is(':checked'));
+            var hasExtrasSauces = $('#extras_sauces_checkbox').is(':checked');
+            var hasSizes = $('#sizes_checkbox').is(':checked');
+            var hasDresses = $('#dresses_checkbox').is(':checked');
+
+            $('#extrasSaucesFields').toggle(hasExtrasSauces);
+            $('#sizesFields').toggle(hasSizes);
+            $('#dressesFields').toggle(hasDresses);
+            $('#basePriceField').toggle(!hasSizes);
+
+            if (hasExtrasSauces && !hasSizes) {
+                $('#baseLimitsFields').show();
+            } else {
+                $('#baseLimitsFields').hide();
+            }
+            if (hasDresses && !hasSizes) {
+                $('#baseDressLimit').show();
+            } else {
+                $('#baseDressLimit').hide();
+            }
+
             updatePreview();
         }
 
@@ -1032,17 +1124,17 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
         $('#addGlobalExtra').click(function() {
             var c = $('#globalExtrasContainer .global-extra').length;
             $('#globalExtrasContainer').append(`
-                <div class="row g-2 mb-2 global-extra">
-                  <div class="col">
-                    <input type="text" class="form-control" name="global_extras[${c}][name]" placeholder="Extra name">
-                  </div>
-                  <div class="col">
-                    <input type="number" step="0.01" class="form-control" name="global_extras[${c}][price]" placeholder="Price">
-                  </div>
-                  <div class="col-auto">
-                    <button type="button" class="btn btn-danger remove-global-extra">&times;</button>
-                  </div>
-                </div>`);
+<div class="row g-2 mb-2 global-extra">
+  <div class="col">
+    <input type="text" class="form-control" name="global_extras[${c}][name]" placeholder="Extra name">
+  </div>
+  <div class="col">
+    <input type="number" step="0.01" class="form-control" name="global_extras[${c}][price]" placeholder="Price">
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-sm btn-danger remove-global-extra">&times;</button>
+  </div>
+</div>`);
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
@@ -1051,17 +1143,17 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
         $('#addGlobalSauce').click(function() {
             var c = $('#globalSaucesContainer .global-sauce').length;
             $('#globalSaucesContainer').append(`
-                <div class="row g-2 mb-2 global-sauce">
-                  <div class="col">
-                    <input type="text" class="form-control" name="global_sauces[${c}][name]" placeholder="Sauce name">
-                  </div>
-                  <div class="col">
-                    <input type="number" step="0.01" class="form-control" name="global_sauces[${c}][price]" placeholder="Price">
-                  </div>
-                  <div class="col-auto">
-                    <button type="button" class="btn btn-danger remove-global-sauce">&times;</button>
-                  </div>
-                </div>`);
+<div class="row g-2 mb-2 global-sauce">
+  <div class="col">
+    <input type="text" class="form-control" name="global_sauces[${c}][name]" placeholder="Sauce name">
+  </div>
+  <div class="col">
+    <input type="number" step="0.01" class="form-control" name="global_sauces[${c}][price]" placeholder="Price">
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-sm btn-danger remove-global-sauce">&times;</button>
+  </div>
+</div>`);
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
@@ -1084,17 +1176,17 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
                         var price = priceMatch ? priceMatch[0].replace('$', '') : '';
                         $('#globalExtrasContainer').append(`
-                            <div class="row g-2 mb-2 global-extra">
-                              <div class="col">
-                                <input type="text" class="form-control" name="global_extras[${index}][name]" value="${extraName}" placeholder="Extra name">
-                              </div>
-                              <div class="col">
-                                <input type="number" step="0.01" class="form-control" name="global_extras[${index}][price]" value="${price}" placeholder="Price">
-                              </div>
-                              <div class="col-auto">
-                                <button type="button" class="btn btn-danger remove-global-extra">&times;</button>
-                              </div>
-                            </div>`);
+<div class="row g-2 mb-2 global-extra">
+  <div class="col">
+    <input type="text" class="form-control" name="global_extras[${index}][name]" value="${extraName}" placeholder="Extra name">
+  </div>
+  <div class="col">
+    <input type="number" step="0.01" class="form-control" name="global_extras[${index}][price]" value="${price}" placeholder="Price">
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-sm btn-danger remove-global-extra">&times;</button>
+  </div>
+</div>`);
                     }
                 });
                 $(this).val(null).trigger('change');
@@ -1121,17 +1213,17 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
                         var price = priceMatch ? priceMatch[0].replace('$', '') : '';
                         $('#globalSaucesContainer').append(`
-                            <div class="row g-2 mb-2 global-sauce">
-                              <div class="col">
-                                <input type="text" class="form-control" name="global_sauces[${index}][name]" value="${sauceName}" placeholder="Sauce name">
-                              </div>
-                              <div class="col">
-                                <input type="number" step="0.01" class="form-control" name="global_sauces[${index}][price]" value="${price}" placeholder="Price">
-                              </div>
-                              <div class="col-auto">
-                                <button type="button" class="btn btn-danger remove-global-sauce">&times;</button>
-                              </div>
-                            </div>`);
+<div class="row g-2 mb-2 global-sauce">
+  <div class="col">
+    <input type="text" class="form-control" name="global_sauces[${index}][name]" value="${sauceName}" placeholder="Sauce name">
+  </div>
+  <div class="col">
+    <input type="number" step="0.01" class="form-control" name="global_sauces[${index}][price]" value="${price}" placeholder="Price">
+  </div>
+  <div class="col-auto">
+    <button type="button" class="btn btn-sm btn-danger remove-global-sauce">&times;</button>
+  </div>
+</div>`);
                     }
                 });
                 $(this).val(null).trigger('change');
@@ -1158,21 +1250,21 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         var priceMatch = optionText.match(/\$\d+(\.\d{1,2})?/);
                         var price = priceMatch ? priceMatch[0].replace('$', '') : '';
                         $('#dressBlocks').append(`
-                            <div class="dress-block border p-4 mb-4">
-                              <div class="row g-3 align-items-end">
-                                <div class="col-md-6">
-                                  <label class="form-label">Dress</label>
-                                  <input type="text" class="form-control" name="dresses[${index}][dress]" required value="${dressName}" placeholder="Italian Dressing">
-                                </div>
-                                <div class="col-md-4">
-                                  <label class="form-label">Price ($)</label>
-                                  <input type="number" step="0.01" class="form-control" name="dresses[${index}][price]" required value="${price}" placeholder="1.50">
-                                </div>
-                                <div class="col-md-2 text-end">
-                                  <button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button>
-                                </div>
-                              </div>
-                            </div>`);
+<div class="dress-block border p-3 mb-3">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label">Dress</label>
+      <input type="text" class="form-control" name="dresses[${index}][dress]" required value="${dressName}" placeholder="Italian Dressing">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Price ($)</label>
+      <input type="number" step="0.01" class="form-control" name="dresses[${index}][price]" required value="${price}" placeholder="1.50">
+    </div>
+    <div class="col-md-2 text-end">
+      <button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button>
+    </div>
+  </div>
+</div>`);
                     }
                 });
                 $(this).val(null).trigger('change');
@@ -1211,16 +1303,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             width: '100%'
         });
 
-        $('body').append(`
-            <div id="previewBox" class="card mt-5">
-              <div class="card-header">Real-Time Preview</div>
-              <div class="card-body" id="previewContent">No data yet...</div>
-            </div>`);
-
-        $(document).on('input change', 'input, textarea, select', function() {
-            updatePreview();
-        });
-
         $(document).on('change', 'input[name="image_file"]', function() {
             var input = this;
             if (input.files && input.files[0]) {
@@ -1238,8 +1320,8 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             var url = $(this).val().trim();
             if (url !== '') {
                 $('#image_url_preview').html(`
-                      <img src="${url}" class="img-thumbnail" style="max-width:200px;" onerror="this.onerror=null; this.remove(); $('#image_url_preview').append('<small class=\'text-danger\'>Invalid image URL</small>');" />
-                    `);
+<img src="${url}" class="img-thumbnail" style="max-width:200px;" onerror="this.onerror=null; this.remove(); $('#image_url_preview').append('<small class=\'text-danger\'>Invalid image URL</small>');" />
+`);
             } else {
                 $('#image_url_preview').empty();
             }
@@ -1262,6 +1344,10 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             var globalSauces = getUniqueSauces();
             var globalDresses = getUniqueDresses();
 
+            var max_sauces_base = $('input[name="max_sauces_base"]').val() || 0;
+            var max_extras_base = $('input[name="max_extras_base"]').val() || 0;
+            var max_dresses_base = $('input[name="max_dresses_base"]').val() || 0;
+
             var preview = '<strong>Product:</strong> ' + productName + ' (Code: ' + productCode + ')<br>' +
                 '<strong>Category:</strong> ' + categoryName + '<br>';
             if (allergies.trim() !== '') {
@@ -1271,10 +1357,10 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 preview += '<strong>Description:</strong> ' + description + '<br>';
             }
             if (isNew) {
-                preview += '<span class="badge bg-success">New</span> ';
+                preview += '<span class="badge bg-success me-1">New</span>';
             }
             if (isOffer) {
-                preview += '<span class="badge bg-warning text-dark">Offer</span> ';
+                preview += '<span class="badge bg-warning text-dark me-1">Offer</span>';
             }
             if (isActive) {
                 preview += '<span class="badge bg-primary">Active</span><br>';
@@ -1339,6 +1425,14 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             } else {
                 var basePrice = $('input[name="base_price"]').val() || 0;
                 preview += '<strong>Base Price:</strong> $' + basePrice + '<br>';
+                if (extrasSauces) {
+                    if (max_sauces_base > 0) {
+                        preview += '<strong>Max Sauces (Base):</strong> ' + max_sauces_base + '<br>';
+                    }
+                    if (max_extras_base > 0) {
+                        preview += '<strong>Max Extras (Base):</strong> ' + max_extras_base + '<br>';
+                    }
+                }
             }
 
             if (dresses) {
@@ -1350,6 +1444,9 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                         preview += '- ' + dn + ' ($' + dp + ')<br>';
                     }
                 });
+                if (!sizes && max_dresses_base > 0) {
+                    preview += '<strong>Max Dressings (Base):</strong> ' + max_dresses_base + '<br>';
+                }
             }
 
             $('#previewContent').html(preview);
@@ -1357,57 +1454,57 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
 
         function renderSizeBlock(index) {
             return `
-                <div class="size-block border p-4 mb-4" data-block-index="${index}">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label class="form-label">Size</label>
-                      <input type="text" class="form-control" name="sizes_block[${index}][size]" required placeholder="Medium / 10 pieces">
-                    </div>
-                    <div class="col-md-3">
-                      <label class="form-label">Base Price ($)</label>
-                      <input type="number" step="0.01" class="form-control" name="sizes_block[${index}][price]" required placeholder="9.99">
-                    </div>
-                    <div class="col-md-3">
-                      <label class="form-label">Max Sauces</label>
-                      <input type="number" class="form-control" name="sizes_block[${index}][max_sauces]" min="0" placeholder="1">
-                    </div>
-                    <div class="col-md-2 text-end">
-                      <button type="button" class="btn btn-danger remove-size-block"><i class="fas fa-minus-circle"></i></button>
-                    </div>
-                  </div>
-                  <div class="row g-3 mt-3">
-                    <div class="col-md-6">
-                      <label class="form-label">Extras</label>
-                      <select class="form-select extras-select" name="sizes_block[${index}][extras_selected][]" multiple></select>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label">Sauces</label>
-                      <select class="form-select sauces-select" name="sizes_block[${index}][sauces_selected][]" multiple></select>
-                    </div>
-                  </div>
-                  <div class="extras-prices mt-3"></div>
-                  <div class="sauces-prices mt-3"></div>
-                </div>`;
+<div class="size-block border p-3 mb-3" data-block-index="${index}">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label">Size</label>
+      <input type="text" class="form-control" name="sizes_block[${index}][size]" required placeholder="Medium / 10 pieces">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Base Price ($)</label>
+      <input type="number" step="0.01" class="form-control" name="sizes_block[${index}][price]" required placeholder="9.99">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Max Sauces</label>
+      <input type="number" class="form-control" name="sizes_block[${index}][max_sauces]" min="0" placeholder="1">
+    </div>
+    <div class="col-md-2 text-end">
+      <button type="button" class="btn btn-danger remove-size-block"><i class="fas fa-minus-circle"></i></button>
+    </div>
+  </div>
+  <div class="row g-3 mt-3">
+    <div class="col-md-6">
+      <label class="form-label">Extras</label>
+      <select class="form-select extras-select" name="sizes_block[${index}][extras_selected][]" multiple></select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Sauces</label>
+      <select class="form-select sauces-select" name="sizes_block[${index}][sauces_selected][]" multiple></select>
+    </div>
+  </div>
+  <div class="extras-prices mt-3"></div>
+  <div class="sauces-prices mt-3"></div>
+</div>`;
         }
 
         function renderDressBlock() {
             var c = $('#dressBlocks .dress-block').length;
             return `
-                <div class="dress-block border p-4 mb-4">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-6">
-                      <label class="form-label">Dress</label>
-                      <input type="text" class="form-control" name="dresses[${c}][dress]" required placeholder="Italian Dressing">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">Price ($)</label>
-                      <input type="number" step="0.01" class="form-control" name="dresses[${c}][price]" required placeholder="1.50">
-                    </div>
-                    <div class="col-md-2 text-end">
-                      <button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button>
-                    </div>
-                  </div>
-                </div>`;
+<div class="dress-block border p-3 mb-3">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label">Dress</label>
+      <input type="text" class="form-control" name="dresses[${c}][dress]" required placeholder="Italian Dressing">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Price ($)</label>
+      <input type="number" step="0.01" class="form-control" name="dresses[${c}][price]" required placeholder="1.50">
+    </div>
+    <div class="col-md-2 text-end">
+      <button type="button" class="btn btn-danger remove-dress-block"><i class="fas fa-minus-circle"></i></button>
+    </div>
+  </div>
+</div>`;
         }
 
         toggleFields();
