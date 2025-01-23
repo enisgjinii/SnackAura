@@ -79,24 +79,11 @@ function validateImageUrl($url)
     return ['valid' => false, 'error' => 'Cannot verify image URL.'];
 }
 
-function getUniqueProperties($pdo, $type)
-{
-    $unique = [];
-    $stmt = $pdo->query("SELECT properties FROM products WHERE properties IS NOT NULL");
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $props = json_decode($row['properties'], true);
-        if (isset($props[$type]) && is_array($props[$type])) {
-            foreach ($props[$type] as $item) {
-                if (isset($item['name']) && !in_array($item['name'], array_column($unique, 'name'))) {
-                    $unique[] = $item;
-                }
-            }
-        }
-    }
-    return $unique;
-}
-
 $db_categories = fetchAll($pdo, "SELECT id,name FROM categories");
+$extrasList  = fetchAll($pdo, "SELECT * FROM extras_products WHERE category='Extras' ORDER BY name ASC");
+$saucesList  = fetchAll($pdo, "SELECT * FROM extras_products WHERE category='Sauces' ORDER BY name ASC");
+$dressesList = fetchAll($pdo, "SELECT * FROM extras_products WHERE category='Dressing' ORDER BY name ASC");
+
 $action = $_GET['action'] ?? 'view';
 $id = (int)($_GET['id'] ?? 0);
 $message = '';
@@ -109,20 +96,10 @@ $product = $editing && !empty($product) ? $product[0] : [];
 
 if ($adding) {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        $unique_extras = getUniqueProperties($pdo, 'extras');
-        $unique_sauces = getUniqueProperties($pdo, 'sauces');
-        $unique_dresses = getUniqueProperties($pdo, 'dresses');
     }
 }
 
 if ($adding || $editing) {
-    // If editing, we still might need them:
-    if ($editing) {
-        $unique_extras = getUniqueProperties($pdo, 'extras');
-        $unique_sauces = getUniqueProperties($pdo, 'sauces');
-        $unique_dresses = getUniqueProperties($pdo, 'dresses');
-    }
-
     $post_image_source = $_POST['image_source'] ?? '';
     $image_source = $editing ? $post_image_source : ($post_image_source ?: 'upload');
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -137,7 +114,6 @@ if ($adding || $editing) {
         $has_extras_sauces = isset($_POST['has_extras_sauces']) ? 1 : 0;
         $has_sizes = isset($_POST['has_sizes']) ? 1 : 0;
         $has_dresses = isset($_POST['has_dresses']) ? 1 : 0;
-
         if (empty($product_code) || empty($name) || $category_id === 0) {
             $message = '<div class="alert alert-danger">Code, name, and category are required.</div>';
         } else {
@@ -270,7 +246,6 @@ if ($adding || $editing) {
                         $properties['max_dresses_base'] = $max_dresses_base;
                     }
                 }
-
                 $props_json = json_encode($properties);
                 $user_id = $_SESSION['user_id'] ?? null;
                 try {
@@ -278,7 +253,6 @@ if ($adding || $editing) {
                         $stmt_old = $pdo->prepare('SELECT * FROM products WHERE id=?');
                         $stmt_old->execute([$id]);
                         $old_product = $stmt_old->fetch(PDO::FETCH_ASSOC);
-
                         $sql = 'UPDATE products
                               SET product_code=?,
                                   category_id=?,
@@ -374,7 +348,6 @@ $has_extras_sauces = (!empty($props['extras']) || !empty($props['sauces']) || is
 $has_sizes = (!empty($props['sizes']) || isset($_POST['has_sizes']));
 $has_dresses = (!empty($props['dresses']) || isset($_POST['has_dresses']));
 $base_price = isset($props['base_price']) ? $props['base_price'] : (float)($_POST['base_price'] ?? 0);
-
 $image_source = $editing
     ? (isset($_POST['image_source'])
         ? $_POST['image_source']
@@ -384,22 +357,20 @@ $image_source = $editing
     : (isset($_POST['image_source'])
         ? $_POST['image_source']
         : 'upload');
-
 $img_u = ($image_source === 'upload') ? 'block' : 'none';
 $img_ul = ($image_source === 'url') ? 'block' : 'none';
 ?>
+
 <div class="container my-5">
     <?php
     if ($adding) echo '<h2 class="mb-4 text-primary">Add New Product</h2>';
     elseif ($editing) echo '<h2 class="mb-4 text-primary">Edit Product</h2>';
     echo $message;
-
     if ($adding || $editing) {
     ?>
         <div class="row">
             <div class="col-lg-8">
                 <form method="POST" enctype="multipart/form-data" action="products.php?action=<?= $editing ? 'edit&id=' . $id : 'add' ?>">
-
                     <div class="card mb-4">
                         <div class="card-header bg-light fw-bold">Basic Information</div>
                         <div class="card-body">
@@ -433,7 +404,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="card mb-4">
                         <div class="card-header bg-light fw-bold">Product Options</div>
                         <div class="card-body">
@@ -451,7 +421,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                     <label class="form-check-label ms-1" for="dresses_checkbox">Has Dresses</label>
                                 </div>
                             </div>
-
                             <div id="basePriceField" style="display:<?= $has_sizes ? 'none' : 'block' ?>;" class="mt-4">
                                 <label class="form-label fw-semibold">Base Price (USD)</label>
                                 <div class="input-group">
@@ -461,38 +430,30 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="card mb-4" id="extrasSaucesFields" style="display:<?= $has_extras_sauces ? 'block' : 'none' ?>;">
                         <div class="card-header bg-light fw-bold">Global Extras & Sauces</div>
                         <div class="card-body">
                             <p class="small text-muted">These apply to all sizes or to the base product if no sizes.</p>
-
-                            <!-- Base-level max fields (shown only if no sizes) -->
                             <div id="baseLimitsFields" style="display:none;">
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-4">
                                         <label class="form-label">Max Sauces (Base)</label>
                                         <input type="number" class="form-control" name="max_sauces_base" min="0"
-                                            value="<?= s($props['max_sauces_base'] ?? ($_POST['max_sauces_base'] ?? 0)) ?>"
-                                            placeholder="e.g., 2" />
+                                            value="<?= s($props['max_sauces_base'] ?? ($_POST['max_sauces_base'] ?? 0)) ?>" placeholder="e.g., 2" />
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">Max Extras (Base)</label>
                                         <input type="number" class="form-control" name="max_extras_base" min="0"
-                                            value="<?= s($props['max_extras_base'] ?? ($_POST['max_extras_base'] ?? 0)) ?>"
-                                            placeholder="e.g., 3" />
+                                            value="<?= s($props['max_extras_base'] ?? ($_POST['max_extras_base'] ?? 0)) ?>" placeholder="e.g., 3" />
                                     </div>
                                 </div>
                             </div>
-                            <!-- / Base-level max fields -->
-
                             <div class="row">
                                 <div class="col-md-6">
                                     <h6>Extras</h6>
                                     <div id="globalExtrasContainer">
                                         <?php
-                                        // Display existing product extras if they are set
-                                        if (($editing || $adding) && isset($props['extras'])) {
+                                        if (($adding || $editing) && isset($props['extras'])) {
                                             foreach ($props['extras'] as $ei => $ev) {
                                                 echo '<div class="row g-2 mb-2 global-extra">
                                                 <div class="col">
@@ -507,13 +468,11 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                             </div>';
                                             }
                                         }
-
-                                        // NEW: Show "Select from existing Extras" when adding OR editing
-                                        if (($adding || $editing) && !empty($unique_extras)) {
+                                        if (($adding || $editing) && !empty($extrasList)) {
                                             echo '<div class="mb-3">
                                             <label class="text-muted">Add from existing Extras:</label>
                                             <select class="form-select existing-extras-select" multiple>';
-                                            foreach ($unique_extras as $ue) {
+                                            foreach ($extrasList as $ue) {
                                                 echo '<option value="' . s($ue['name']) . '">' . s($ue['name']) . ' ($' . s($ue['price']) . ')</option>';
                                             }
                                             echo '</select>
@@ -527,7 +486,7 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                     <h6>Sauces</h6>
                                     <div id="globalSaucesContainer">
                                         <?php
-                                        if (($editing || $adding) && isset($props['sauces'])) {
+                                        if (($adding || $editing) && isset($props['sauces'])) {
                                             foreach ($props['sauces'] as $si => $sv) {
                                                 echo '<div class="row g-2 mb-2 global-sauce">
                                                 <div class="col">
@@ -542,12 +501,11 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                             </div>';
                                             }
                                         }
-                                        // NEW: Show "Select from existing Sauces" when adding OR editing
-                                        if (($adding || $editing) && !empty($unique_sauces)) {
+                                        if (($adding || $editing) && !empty($saucesList)) {
                                             echo '<div class="mb-3">
                                             <label class="text-muted">Add from existing Sauces:</label>
                                             <select class="form-select existing-sauces-select" multiple>';
-                                            foreach ($unique_sauces as $us) {
+                                            foreach ($saucesList as $us) {
                                                 echo '<option value="' . s($us['name']) . '">' . s($us['name']) . ' ($' . s($us['price']) . ')</option>';
                                             }
                                             echo '</select>
@@ -560,7 +518,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="card mb-4" id="sizesFields" style="display:<?= $has_sizes ? 'block' : 'none' ?>;">
                         <div class="card-header bg-light fw-bold">Sizes</div>
                         <div class="card-body">
@@ -593,11 +550,11 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                         <div class="row g-3 mt-3">
                                             <div class="col-md-6">
                                                 <label class="form-label">Extras</label>
-                                                <select class="form-select extras-select" name="sizes_block[<?= $sz_id ?>][extras_selected][]" multiple></select>
+                                                <select class="form-select extras-select" name="sizes_block[' . $sz_id . '][extras_selected][]" multiple></select>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label">Sauces</label>
-                                                <select class="form-select sauces-select" name="sizes_block[<?= $sz_id ?>][sauces_selected][]" multiple></select>
+                                                <select class="form-select sauces-select" name="sizes_block[' . $sz_id . '][sauces_selected][]" multiple></select>
                                             </div>
                                         </div>
                                         <div class="extras-prices mt-3"></div>
@@ -610,25 +567,19 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             <button type="button" class="btn btn-success btn-sm" id="addSizeBlock"><i class="fas fa-plus-circle"></i> Add Size</button>
                         </div>
                     </div>
-
                     <div class="card mb-4" id="dressesFields" style="display:<?= $has_dresses ? 'block' : 'none' ?>;">
                         <div class="card-header bg-light fw-bold">Dresses</div>
                         <div class="card-body">
                             <p class="small text-muted">Additional dress options.</p>
-
-                            <!-- Base-level max dresses (shown if no sizes) -->
                             <div id="baseDressLimit" style="display:none;">
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-4">
                                         <label class="form-label">Max Dressings (Base)</label>
                                         <input type="number" class="form-control" name="max_dresses_base" min="0"
-                                            value="<?= s($props['max_dresses_base'] ?? ($_POST['max_dresses_base'] ?? 0)) ?>"
-                                            placeholder="e.g., 1" />
+                                            value="<?= s($props['max_dresses_base'] ?? ($_POST['max_dresses_base'] ?? 0)) ?>" placeholder="e.g., 1" />
                                     </div>
                                 </div>
                             </div>
-                            <!-- / Base-level max dresses -->
-
                             <div id="dressBlocks">
                                 <?php
                                 if ($editing && isset($props['dresses']) && is_array($props['dresses'])) {
@@ -654,12 +605,11 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                 }
                                 ?>
                             </div>
-                            <!-- NEW: If you also want the “Select from existing Dresses” option, do similarly: -->
-                            <?php if (($adding || $editing) && !empty($unique_dresses)): ?>
+                            <?php if (($adding || $editing) && !empty($dressesList)): ?>
                                 <div class="mb-3">
                                     <label class="text-muted">Add from existing Dresses:</label>
                                     <select class="form-select existing-dresses-select" multiple>
-                                        <?php foreach ($unique_dresses as $ud): ?>
+                                        <?php foreach ($dressesList as $ud): ?>
                                             <option value="<?= s($ud['name']) ?>">
                                                 <?= s($ud['name']) ?> ($<?= s($ud['price']) ?>)
                                             </option>
@@ -667,11 +617,9 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                     </select>
                                 </div>
                             <?php endif; ?>
-
                             <button type="button" class="btn btn-success btn-sm" id="addDressBlock"><i class="fas fa-plus-circle"></i> Add Dress</button>
                         </div>
                     </div>
-
                     <div class="card mb-4">
                         <div class="card-header bg-light fw-bold">Image</div>
                         <div class="card-body">
@@ -684,7 +632,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                 <input class="form-check-input" type="radio" name="image_source" value="url" <?= $image_source === 'url' ? 'checked' : '' ?>>
                                 <label class="form-check-label">URL</label>
                             </div>
-
                             <div class="mt-3" id="image_upload_field" style="display:<?= $img_u ?>;">
                                 <label class="form-label">Upload Image</label>
                                 <div class="input-group">
@@ -699,7 +646,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                                     ?>
                                 </div>
                             </div>
-
                             <div class="mt-3" id="image_url_field" style="display:<?= $img_ul ?>;">
                                 <label class="form-label">Image URL</label>
                                 <div class="input-group">
@@ -716,7 +662,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="card mb-4">
                         <div class="card-header bg-light fw-bold">Allergies & Description</div>
                         <div class="card-body">
@@ -736,7 +681,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="card mb-4">
                         <div class="card-header bg-light fw-bold">Additional Flags</div>
                         <div class="card-body">
@@ -754,20 +698,16 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                             </div>
                         </div>
                     </div>
-
                     <div class="text-end">
                         <button type="submit" class="btn btn-success me-2"><?= $editing ? 'Update' : 'Add' ?> Product</button>
                         <a href="products.php" class="btn btn-secondary">Cancel</a>
                     </div>
                 </form>
             </div>
-
             <div class="col-lg-4">
                 <div class="card mb-4" id="previewBox">
                     <div class="card-header bg-primary text-white fw-bold">Live Preview</div>
-                    <div class="card-body" id="previewContent">
-                        No data yet...
-                    </div>
+                    <div class="card-body" id="previewContent">No data yet...</div>
                 </div>
             </div>
         </div>
@@ -945,12 +885,10 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             var hasExtrasSauces = $('#extras_sauces_checkbox').is(':checked');
             var hasSizes = $('#sizes_checkbox').is(':checked');
             var hasDresses = $('#dresses_checkbox').is(':checked');
-
             $('#extrasSaucesFields').toggle(hasExtrasSauces);
             $('#sizesFields').toggle(hasSizes);
             $('#dressesFields').toggle(hasDresses);
             $('#basePriceField').toggle(!hasSizes);
-
             if (hasExtrasSauces && !hasSizes) {
                 $('#baseLimitsFields').show();
             } else {
@@ -961,10 +899,8 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             } else {
                 $('#baseDressLimit').hide();
             }
-
             updatePreview();
         }
-
         $('input[name="has_extras_sauces"], input[name="has_sizes"], input[name="has_dresses"]').change(function() {
             toggleFields();
             populateExtrasSaucesSelects();
@@ -1037,7 +973,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $saucesSelect.val(saucesVal).trigger('change');
             });
         }
-
         $(document).on('change', '.extras-select', function() {
             updateSizeExtrasPrices($(this).closest('.size-block'));
         });
@@ -1077,7 +1012,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             });
             updatePreview();
         }
-
         $('#addSizeBlock').click(function() {
             var index = sizeBlockCounter++;
             $('#sizeBlocks').append(renderSizeBlock(index));
@@ -1087,31 +1021,26 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             populateExtrasSaucesSelects();
             updatePreview();
         });
-
         $(document).on('click', '.remove-size-block', function() {
             $(this).closest('.size-block').remove();
             updatePreview();
         });
-
         $(document).on('click', '.remove-dress-block', function() {
             $(this).closest('.dress-block').remove();
             updatePreview();
         });
-
         $(document).on('click', '.remove-global-extra', function() {
             $(this).closest('.global-extra').remove();
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
         });
-
         $(document).on('click', '.remove-global-sauce', function() {
             $(this).closest('.global-sauce').remove();
             populateExtrasSaucesSelects();
             refreshAllPrices();
             updatePreview();
         });
-
         $('#addDressBlock').click(function() {
             $('#dressBlocks').append(renderDressBlock());
             $('.extras-select, .sauces-select').select2({
@@ -1120,7 +1049,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             populateExtrasSaucesSelects();
             updatePreview();
         });
-
         $('#addGlobalExtra').click(function() {
             var c = $('#globalExtrasContainer .global-extra').length;
             $('#globalExtrasContainer').append(`
@@ -1139,7 +1067,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             refreshAllPrices();
             updatePreview();
         });
-
         $('#addGlobalSauce').click(function() {
             var c = $('#globalSaucesContainer .global-sauce').length;
             $('#globalSaucesContainer').append(`
@@ -1158,7 +1085,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             refreshAllPrices();
             updatePreview();
         });
-
         $('.existing-extras-select').change(function() {
             var selectedExtras = $(this).val();
             if (selectedExtras) {
@@ -1195,7 +1121,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 updatePreview();
             }
         });
-
         $('.existing-sauces-select').change(function() {
             var selectedSauces = $(this).val();
             if (selectedSauces) {
@@ -1232,7 +1157,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 updatePreview();
             }
         });
-
         $('.existing-dresses-select').change(function() {
             var selectedDresses = $(this).val();
             if (selectedDresses) {
@@ -1280,7 +1204,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 updateSizeSaucesPrices($(this));
             });
         }
-
         $('input[name="image_source"]').change(function() {
             var v = $(this).val();
             $('#image_upload_field').toggle(v === 'upload');
@@ -1293,7 +1216,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $('input[name="image_url"]').prop('required', true).prop('disabled', false);
             }
         }).trigger('change');
-
         $('.extras-select, .sauces-select').select2({
             placeholder: "Select options",
             width: '100%'
@@ -1302,7 +1224,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             placeholder: "Select options",
             width: '100%'
         });
-
         $(document).on('change', 'input[name="image_file"]', function() {
             var input = this;
             if (input.files && input.files[0]) {
@@ -1315,7 +1236,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                 $('#image_file_preview').empty();
             }
         });
-
         $(document).on('input', 'input[name="image_url"]', function() {
             var url = $(this).val().trim();
             if (url !== '') {
@@ -1339,15 +1259,12 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             var isNew = $('#is_new_checkbox').is(':checked');
             var isOffer = $('#is_offer_checkbox').is(':checked');
             var isActive = $('#is_active_checkbox').is(':checked');
-
             var globalExtras = getUniqueExtras();
             var globalSauces = getUniqueSauces();
             var globalDresses = getUniqueDresses();
-
             var max_sauces_base = $('input[name="max_sauces_base"]').val() || 0;
             var max_extras_base = $('input[name="max_extras_base"]').val() || 0;
             var max_dresses_base = $('input[name="max_dresses_base"]').val() || 0;
-
             var preview = '<strong>Product:</strong> ' + productName + ' (Code: ' + productCode + ')<br>' +
                 '<strong>Category:</strong> ' + categoryName + '<br>';
             if (allergies.trim() !== '') {
@@ -1365,7 +1282,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
             if (isActive) {
                 preview += '<span class="badge bg-primary">Active</span><br>';
             }
-
             if (extrasSauces) {
                 preview += '<strong>Global Extras:</strong><br>';
                 if (globalExtras.length > 0) {
@@ -1384,7 +1300,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     preview += '(None)<br>';
                 }
             }
-
             if (sizes) {
                 preview += '<strong>Sizes:</strong><br>';
                 $('#sizeBlocks .size-block').each(function() {
@@ -1434,7 +1349,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     }
                 }
             }
-
             if (dresses) {
                 preview += '<strong>Dresses:</strong><br>';
                 $('#dressBlocks .dress-block').each(function() {
@@ -1448,7 +1362,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
                     preview += '<strong>Max Dressings (Base):</strong> ' + max_dresses_base + '<br>';
                 }
             }
-
             $('#previewContent').html(preview);
         }
 
@@ -1506,7 +1419,6 @@ $img_ul = ($image_source === 'url') ? 'block' : 'none';
   </div>
 </div>`;
         }
-
         toggleFields();
         updatePreview();
     });

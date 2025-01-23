@@ -27,6 +27,7 @@ $adminMenuItems = [
     ['banners.php', 'fas fa-photo-video', 'Banners'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
     ['logs.php', 'fas fa-history', 'Audit'],
+    
 ];
 
 $deliveryMenuItems = [
