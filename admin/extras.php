@@ -1,244 +1,209 @@
 <?php
-// admin/extras.php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
 
-$action = $_GET['action'] ?? 'view';
+function s($str)
+{
+    return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+}
+
+$valid_categories = ['Extras', 'Sauces', 'Dressing'];
+$category = $_GET['category'] ?? 'Extras';
+if (!in_array($category, $valid_categories)) {
+    $category = 'Extras';
+}
+
+$action = $_GET['action'] ?? 'list';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $message = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($action === 'add') {
-        $name = trim($_POST['name']);
-        $price = trim($_POST['price']);
-        $category = trim($_POST['category']) ?: 'addon';
-
-        if ($name === '' || $price === '') {
-            $message = '<div class="alert alert-danger">Name and Price are required.</div>';
-        } elseif (!is_numeric($price) || floatval($price) < 0) {
-            $message = '<div class="alert alert-danger">Price must be a valid non-negative number.</div>';
-        } elseif ($category === '') {
-            $message = '<div class="alert alert-danger">Category is required.</div>';
+if ($action === 'add') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $name  = trim($_POST['name'] ?? '');
+        $price = trim($_POST['price'] ?? '0.00');
+        if ($name === '') {
+            $message = '<div class="alert alert-danger">Name is required.</div>';
         } else {
             try {
-                $stmt = $pdo->prepare("INSERT INTO `extras` (`name`, `price`, `category`) VALUES (?, ?, ?)");
-                $stmt->execute([$name, $price, $category]);
-                header("Location: extras.php");
-                exit();
+                $stmt = $pdo->prepare("INSERT INTO extras_products (name, category, price) VALUES (?, ?, ?)");
+                $stmt->execute([$name, $category, $price]);
+                $message = '<div class="alert alert-success">Item added successfully.</div>';
             } catch (PDOException $e) {
-                if ($e->getCode() === '23000') {
-                    $message = '<div class="alert alert-danger">Extra name already exists.</div>';
-                } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
+                $message = '<div class="alert alert-danger">DB Error: ' . s($e->getMessage()) . '</div>';
+            }
+        }
+    }
+} elseif ($action === 'edit' && $id > 0) {
+    $stmt = $pdo->prepare("SELECT * FROM extras_products WHERE id = ?");
+    $stmt->execute([$id]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$item) {
+        $message = '<div class="alert alert-danger">Item not found.</div>';
+        $action = 'list';
+    } else {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $name  = trim($_POST['name'] ?? '');
+            $price = trim($_POST['price'] ?? '0.00');
+            if ($name === '') {
+                $message = '<div class="alert alert-danger">Name is required.</div>';
+            } else {
+                try {
+                    $stmtUpd = $pdo->prepare("UPDATE extras_products SET name=?, price=? WHERE id=?");
+                    $stmtUpd->execute([$name, $price, $id]);
+                    $message = '<div class="alert alert-success">Changes saved successfully.</div>';
+                    $item['name']  = $name;
+                    $item['price'] = $price;
+                } catch (PDOException $e) {
+                    $message = '<div class="alert alert-danger">DB Error: ' . s($e->getMessage()) . '</div>';
                 }
             }
         }
-    } elseif ($action === 'edit' && $id > 0) {
-        $name = trim($_POST['name']);
-        $price = trim($_POST['price']);
-        $category = trim($_POST['category']) ?: 'addon';
-
-        if ($name === '' || $price === '') {
-            $message = '<div class="alert alert-danger">Name and Price are required.</div>';
-        } elseif (!is_numeric($price) || floatval($price) < 0) {
-            $message = '<div class="alert alert-danger">Price must be a valid non-negative number.</div>';
-        } elseif ($category === '') {
-            $message = '<div class="alert alert-danger">Category is required.</div>';
-        } else {
-            try {
-                $stmt = $pdo->prepare("UPDATE `extras` SET `name` = ?, `price` = ?, `category` = ? WHERE `id` = ?");
-                $stmt->execute([$name, $price, $category, $id]);
-                header("Location: extras.php");
-                exit();
-            } catch (PDOException $e) {
-                if ($e->getCode() === '23000') {
-                    $message = '<div class="alert alert-danger">Extra name already exists.</div>';
-                } else {
-                    $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
-                }
-            }
-        }
+        $category = $item['category'];
     }
 } elseif ($action === 'delete' && $id > 0) {
     try {
-        $stmt = $pdo->prepare("DELETE FROM `extras` WHERE `id` = ?");
+        $stmt = $pdo->prepare("SELECT category FROM extras_products WHERE id=?");
         $stmt->execute([$id]);
-        header("Location: extras.php");
-        exit();
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+            $stmtDel = $pdo->prepare("DELETE FROM extras_products WHERE id = ?");
+            $stmtDel->execute([$id]);
+            $_SESSION['message'] = '<div class="alert alert-success">Item deleted successfully.</div>';
+            header('Location: extras.php?category=' . $existing['category']);
+            exit();
+        } else {
+            $message = '<div class="alert alert-danger">Item not found.</div>';
+        }
     } catch (PDOException $e) {
-        $message = '<div class="alert alert-danger">Error: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        $message = '<div class="alert alert-danger">DB Error: ' . s($e->getMessage()) . '</div>';
     }
 }
 
-if ($action === 'view') {
-    try {
-        $stmt = $pdo->query("SELECT * FROM `extras` ORDER BY `created_at` DESC");
-        $extras = $stmt->fetchAll();
-    } catch (PDOException $e) {
-        $message = '<div class="alert alert-danger">Error fetching extras: ' . htmlspecialchars($e->getMessage()) . '</div>';
-    }
+$stmtList = $pdo->prepare("SELECT * FROM extras_products WHERE category=? ORDER BY name ASC");
+$stmtList->execute([$category]);
+$items = $stmtList->fetchAll(PDO::FETCH_ASSOC);
+
+if (isset($_SESSION['message'])) {
+    $message .= $_SESSION['message'];
+    unset($_SESSION['message']);
 }
 ?>
 
-<?php if ($action === 'view'): ?>
-    <h2>Extras</h2>
+<div class="container my-5">
+    <h2 class="mb-4">Manage Extras, Sauces & Dressings</h2>
     <?= $message ?>
-    <hr>
-    <table id="extrasTable" class="table table-bordered table-hover">
-        <thead class="table-dark">
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Price (€)</th>
-                <th>Category</th>
-                <th>Created At</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (!empty($extras)): ?>
-                <?php foreach ($extras as $extra): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($extra['id']) ?></td>
-                        <td><?= htmlspecialchars($extra['name']) ?></td>
-                        <td><?= number_format($extra['price'], 2) ?></td>
-                        <td><?= htmlspecialchars($extra['category']) ?></td>
-                        <td><?= htmlspecialchars($extra['created_at']) ?></td>
-                        <td>
-                            <a href="extras.php?action=edit&id=<?= $extra['id'] ?>" class="btn btn-sm btn-warning">Edit</a>
-                            <a href="#" class="btn btn-sm btn-danger" onclick="showDeleteModal(<?= $extra['id'] ?>)">Delete</a>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php else: ?>
 
-            <?php endif; ?>
-        </tbody>
-    </table>
+    <ul class="nav nav-pills mb-4">
+        <li class="nav-item">
+            <a class="nav-link <?= ($category === 'Extras') ? 'active' : '' ?>"
+                href="extras.php?category=Extras">Extras</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?= ($category === 'Sauces') ? 'active' : '' ?>"
+                href="extras.php?category=Sauces">Sauces</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link <?= ($category === 'Dressing') ? 'active' : '' ?>"
+                href="extras.php?category=Dressing">Dressing</a>
+        </li>
+    </ul>
 
-    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <form method="GET" action="extras.php">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="id" id="deleteExtraId">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Confirm Deletion</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <?php if ($action === 'edit' && !empty($item)): ?>
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">Edit <?= s($item['category']) ?> (ID: <?= (int)$item['id'] ?>)</div>
+            <div class="card-body">
+                <form method="POST" action="extras.php?action=edit&id=<?= (int)$item['id'] ?>">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required value="<?= s($item['name']) ?>">
                     </div>
-                    <div class="modal-body">
-                        Are you sure you want to delete this extra?
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Price (€)</label>
+                        <input type="number" name="price" step="0.01" class="form-control" value="<?= s($item['price']) ?>">
                     </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    </div>
+                    <button type="submit" class="btn btn-success">Save Changes</button>
+                    <a href="extras.php?category=<?= s($item['category']) ?>" class="btn btn-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    <?php else: ?>
+        <?php if ($action === 'add'): ?>
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white">Add New to <?= s($category) ?></div>
+                <div class="card-body">
+                    <form method="POST" action="extras.php?action=add&category=<?= s($category) ?>">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control" required placeholder="e.g. Cheese">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Price (€)</label>
+                            <input type="number" name="price" step="0.01" class="form-control" placeholder="e.g. 1.50">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add</button>
+                        <a href="extras.php?category=<?= s($category) ?>" class="btn btn-secondary">Cancel</a>
+                    </form>
                 </div>
-            </form>
+            </div>
+        <?php else: ?>
+            <div class="mb-3">
+                <a href="extras.php?action=add&category=<?= s($category) ?>" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> Add New to <?= s($category) ?>
+                </a>
+            </div>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <span class="fw-bold"><?= s($category) ?></span>
+            <span class="text-muted ms-2">Total: <?= count($items) ?></span>
+        </div>
+        <div class="card-body p-0">
+            <?php if (!empty($items)): ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-striped align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Category</th>
+                                <th>Price (€)</th>
+                                <th class="text-center" style="width: 150px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($items as $row): ?>
+                                <tr>
+                                    <td><?= (int)$row['id'] ?></td>
+                                    <td><?= s($row['name']) ?></td>
+                                    <td><?= s($row['category']) ?></td>
+                                    <td>€<?= number_format($row['price'], 2) ?></td>
+                                    <td class="text-center">
+                                        <a href="extras.php?action=edit&id=<?= (int)$row['id'] ?>"
+                                            class="btn btn-warning btn-sm">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <a href="extras.php?action=delete&id=<?= (int)$row['id'] ?>"
+                                            class="btn btn-danger btn-sm"
+                                            onclick="return confirm('Are you sure you want to delete this item?');">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="p-3">No items found in this category.</div>
+            <?php endif; ?>
         </div>
     </div>
+</div>
 
-    <script>
-        function showDeleteModal(id) {
-            $('#deleteExtraId').val(id);
-            new bootstrap.Modal(document.getElementById('deleteModal')).show();
-        }
-    </script>
-
-<?php elseif ($action === 'add' || ($action === 'edit' && $id > 0)): ?>
-    <?php
-    if ($action === 'edit') {
-        try {
-            $stmt = $pdo->prepare("SELECT * FROM `extras` WHERE `id` = ?");
-            $stmt->execute([$id]);
-            $extra = $stmt->fetch();
-            if (!$extra) {
-                echo '<div class="alert alert-danger">Extra not found.</div>';
-                require_once 'includes/footer.php';
-                exit();
-            }
-        } catch (PDOException $e) {
-            echo '<div class="alert alert-danger">Error fetching extra details: ' . htmlspecialchars($e->getMessage()) . '</div>';
-            require_once 'includes/footer.php';
-            exit();
-        }
-    }
-    ?>
-    <h2><?= $action === 'add' ? 'Add Extra' : 'Edit Extra' ?></h2>
-    <?= $message ?>
-    <form method="POST" action="extras.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>">
-        <?php if ($action === 'edit'): ?>
-            <input type="hidden" name="id" value="<?= $id ?>">
-        <?php endif; ?>
-        <div class="mb-3">
-            <label for="name" class="form-label">Extra Name *</label>
-            <input type="text" class="form-control" id="name" name="name" required value="<?= $action === 'edit' ? htmlspecialchars($extra['name']) : (isset($_POST['name']) ? htmlspecialchars($_POST['name']) : '') ?>">
-        </div>
-        <div class="mb-3">
-            <label for="price" class="form-label">Price (€) *</label>
-            <input type="number" step="0.01" min="0" class="form-control" id="price" name="price" required value="<?= $action === 'edit' ? htmlspecialchars($extra['price']) : (isset($_POST['price']) ? htmlspecialchars($_POST['price']) : '') ?>">
-        </div>
-        <div class="mb-3">
-            <label for="category" class="form-label">Category *</label>
-            <input type="text" class="form-control" id="category" name="category" required value="<?= $action === 'edit' ? htmlspecialchars($extra['category']) : (isset($_POST['category']) ? htmlspecialchars($_POST['category']) : 'addon') ?>">
-            <div class="form-text">Default is 'addon'.</div>
-        </div>
-        <button type="submit" class="btn btn-success"><?= $action === 'add' ? 'Add' : 'Update' ?> Extra</button>
-        <a href="extras.php" class="btn btn-secondary">Cancel</a>
-    </form>
-<?php endif; ?>
-
-<?php
-require_once 'includes/footer.php';
-?><script>
-    $(document).ready(function() {
-        $('#extrasTable').DataTable({
-            "paging": true,
-            "searching": true,
-            "info": true,
-            "dom": '<"row mb-3"' +
-                '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
-                '>' +
-                'rt' +
-                '<"row mt-3"' +
-                '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
-                '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
-                '>',
-            "buttons": [{
-                    text: '<i class="fas fa-plus"></i> Add Extra',
-                    action: function(e, dt, node, config) {
-                        window.location.href = 'extras.php?action=add';
-                    },
-                    className: 'btn btn-success rounded-2'
-                },
-                {
-                    extend: 'csv',
-                    text: '<i class="fas fa-file-csv"></i> Export CSV',
-                    className: 'btn btn-primary rounded-2'
-                },
-                {
-                    extend: 'pdf',
-                    text: '<i class="fas fa-file-pdf"></i> Export PDF',
-                    className: 'btn btn-primary rounded-2'
-                },
-                {
-                    extend: 'colvis',
-                    text: '<i class="fas fa-columns"></i> Columns',
-                    className: 'btn btn-primary rounded-2',
-                },
-                {
-                    extend: 'copy',
-                    text: '<i class="fas fa-copy"></i> Copy',
-                    className: 'btn btn-primary rounded-2',
-                },
-            ],
-            "initComplete": function() {
-                var buttons = this.api().buttons();
-                buttons.container().addClass('d-flex flex-wrap gap-2');
-            },
-            "language": {
-                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
-            }
-        });
-    });
-</script>
+<?php require_once 'includes/footer.php'; ?>
