@@ -18,6 +18,7 @@ $adminMenuItems = [
     ['categories.php', 'fas fa-th-list', 'Categories'],
     ['products.php', 'fas fa-box', 'Products'],
     // ['settings.php', 'fas fa-sliders-h', 'Settings'],
+    ['extras.php', 'fas fa-plus', 'Extras'],
     ['orders.php', 'fas fa-receipt', 'Orders'],
     ['drinks.php', 'fas fa-coffee', 'Drinks'],
     ['cupons.php', 'fas fa-tags', 'Coupons'],
@@ -27,7 +28,8 @@ $adminMenuItems = [
     ['banners.php', 'fas fa-photo-video', 'Banners'],
     ['statistics.php', 'fas fa-chart-bar', 'Statistics'],
     ['logs.php', 'fas fa-history', 'Audit'],
-    
+
+
 ];
 
 $deliveryMenuItems = [
