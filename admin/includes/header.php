@@ -157,130 +157,158 @@ try {
             box-sizing: border-box;
         }
 
-        /* Color Palette Variables */
+        /* Clean Color Palette */
         :root {
-            --sidebar-bg: #2C3E50;
-            --sidebar-header-bg: #1A252F;
-            --sidebar-hover-bg: #34495E;
-            --sidebar-active-bg: #2980B9;
-            --sidebar-text: #ECF0F1;
-            --sidebar-hover-text: #FFFFFF;
+            --sidebar-bg: #ffffff;
+            --sidebar-header-bg: #f8fafc;
+            --sidebar-hover-bg: #f1f5f9;
+            --sidebar-active-bg: #0f172a;
+            --sidebar-text: #64748b;
+            --sidebar-hover-text: #334155;
+            --sidebar-active-text: #ffffff;
             --navbar-bg: #ffffff;
-            --content-bg: #F8F9FA;
-            --toggle-btn-bg: #2C3E50;
-            --toggle-btn-hover-bg: #1A252F;
-            --dropdown-bg: #FFFFFF;
-            --dropdown-item-hover-bg: #F1F1F1;
-            --border-color: #E0E0E0;
+            --content-bg: #f8fafc;
+            --toggle-btn-bg: #f1f5f9;
+            --toggle-btn-hover-bg: #e2e8f0;
+            --dropdown-bg: #ffffff;
+            --dropdown-item-hover-bg: #f1f5f9;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
         }
 
-        /* Sidebar Styling */
+        /* Main Layout */
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--content-bg);
+        }
+
+        .d-flex {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Full Left Sidebar */
         #sidebar {
-            min-width: 250px;
-            max-width: 250px;
-            height: fit-content;
-            background-color: var(--sidebar-bg);
+            width: 280px;
+            min-width: 280px;
+            background: var(--sidebar-bg);
             color: var(--sidebar-text);
-            transition: all 0.3s;
-            position: fixed;
-            overflow: hidden;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            border-radius: 15px;
-            margin: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-right: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
 
         #sidebar.collapsed {
+            width: 80px;
             min-width: 80px;
-            max-width: 80px;
         }
 
-        /* Sidebar Header */
+        /* Clean Sidebar Header */
         #sidebar .sidebar-header {
-            padding: 1rem;
-            background-color: var(--sidebar-header-bg);
+            padding: 2rem 1.5rem 1.5rem;
+            background: var(--sidebar-header-bg);
             text-align: center;
-            font-size: 1.2rem;
-            font-weight: bold;
             border-bottom: 1px solid var(--border-color);
         }
 
-        /* Sidebar Menu */
+        #sidebar .sidebar-header h4 {
+            margin: 0;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.025em;
+        }
+
+        /* Clean Sidebar Menu */
         #sidebar .list-unstyled {
-            padding: 0;
+            padding: 1rem 0;
             flex-grow: 1;
-            overflow-y: auto;
-            max-height: calc(100vh - 120px);
+            margin: 0;
         }
 
-        /* Scrollbar Styling */
-        #sidebar .list-unstyled::-webkit-scrollbar {
-            width: 8px;
+        #sidebar .list-unstyled li {
+            margin: 0;
+            padding: 0;
         }
 
-        #sidebar .list-unstyled::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
-        }
-
-        #sidebar .list-unstyled::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
-
-        /* Sidebar Links */
+        /* Clean Sidebar Links */
         #sidebar .list-unstyled .nav-link {
             color: var(--sidebar-text);
             display: flex;
             align-items: center;
-            padding: 0.75rem 1rem;
-            transition: background 0.3s, color 0.3s;
+            padding: 0.875rem 1.5rem;
+            margin: 0.25rem 1rem;
+            transition: all 0.15s ease;
             white-space: nowrap;
             position: relative;
-            border-left: 4px solid transparent;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            text-decoration: none;
         }
 
         #sidebar.collapsed .list-unstyled .nav-link {
             justify-content: center;
+            margin: 0.25rem 0.5rem;
+            padding: 0.875rem 0.5rem;
         }
 
-        #sidebar .list-unstyled .nav-link:hover,
-        #sidebar .list-unstyled .active>.nav-link {
+        #sidebar .list-unstyled .nav-link:hover {
             color: var(--sidebar-hover-text);
-            background-color: var(--sidebar-hover-bg);
-            border-left: 4px solid var(--sidebar-active-bg);
+            background: var(--sidebar-hover-bg);
         }
 
-        /* Icon Styling */
+        #sidebar .list-unstyled .active>.nav-link {
+            color: var(--sidebar-active-text);
+            background: var(--sidebar-active-bg);
+            font-weight: 600;
+        }
+
+        /* Clean Icon Styling */
         #sidebar .list-unstyled .nav-link i {
-            margin-right: 0.75rem;
+            margin-right: 0.875rem;
             width: 20px;
             text-align: center;
-            font-size: 1.1rem;
+            font-size: 1.125rem;
+        }
+
+        #sidebar.collapsed .list-unstyled .nav-link i {
+            margin-right: 0;
+            font-size: 1.25rem;
         }
 
         #sidebar.collapsed .list-unstyled .nav-link .nav-label {
             display: none;
         }
 
-        /* Tooltip for Collapsed Sidebar */
+        /* Clean Tooltip for Collapsed Sidebar */
         #sidebar.collapsed .list-unstyled .nav-link::after {
             content: attr(data-tooltip);
             position: absolute;
             left: 100%;
             top: 50%;
             transform: translateY(-50%);
-            background-color: var(--sidebar-bg);
-            color: var(--sidebar-text);
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
             white-space: nowrap;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s;
-            margin-left: 0.5rem;
+            transition: opacity 0.15s ease;
+            margin-left: 0.75rem;
             z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-lg);
+            font-size: 0.75rem;
+            font-weight: 500;
         }
 
         #sidebar.collapsed .list-unstyled .nav-link:hover::after {
@@ -289,80 +317,233 @@ try {
 
         /* Content Area */
         #content {
-            margin-left: 250px;
-            padding: 1rem;
-            transition: all 0.3s;
-            flex-grow: 1;
-            background-color: var(--content-bg);
+            flex: 1;
+            background: var(--content-bg);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        #sidebar.collapsed+#content {
-            margin-left: 80px;
-            width: calc(100% - 80px);
+        /* Clean Navbar */
+        .navbar {
+            background: var(--navbar-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            box-shadow: var(--shadow-sm);
         }
 
-        /* Toggle Button */
-        #sidebarCollapse {
-            background-color: var(--toggle-btn-bg);
-            color: var(--sidebar-text);
-            border: none;
+        .navbar .container-fluid {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Navbar Left Section */
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .navbar-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-left: 0.5rem;
+        }
+
+        /* Navbar Right Section */
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .navbar-item {
+            display: flex;
+            align-items: center;
+        }
+
+        /* Icon Button */
+        .btn-icon {
+            background: var(--toggle-btn-bg);
+            color: #64748b;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-icon:hover {
+            background: var(--toggle-btn-hover-bg);
+            color: #334155;
+        }
+
+        /* User Button */
+        .btn-user {
+            background: var(--toggle-btn-bg);
+            color: #64748b;
+            border: 1px solid var(--border-color);
             padding: 0.5rem 1rem;
             cursor: pointer;
-            border-radius: 0.25rem;
-            transition: background-color 0.3s;
+            border-radius: 8px;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+            min-width: 180px;
+        }
+
+        .btn-user:hover {
+            background: var(--toggle-btn-hover-bg);
+            color: #334155;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: #e2e8f0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            flex: 1;
+        }
+
+        .user-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .user-role {
+            font-size: 0.75rem;
+            color: #64748b;
+            line-height: 1.2;
+        }
+
+        .btn-user .fas.fa-chevron-down {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        /* Clean Toggle Button */
+        #sidebarCollapse {
+            background: var(--toggle-btn-bg);
+            color: #64748b;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            font-weight: 500;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #sidebarCollapse:hover {
-            background-color: var(--toggle-btn-hover-bg);
+            background: var(--toggle-btn-hover-bg);
+            color: #334155;
         }
 
-        /* Navbar Styling */
-        .navbar {
-            padding: 0.5rem 1rem;
-            background: var(--navbar-bg);
-            border-bottom: 1px solid var(--border-color);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            border-radius: 0.5rem;
-        }
-
-        /* Responsive Adjustments */
-        @media (max-width: 768px) {
-            #sidebar {
-                margin-left: -250px;
-            }
-
-            #sidebar.active {
-                margin-left: 0;
-            }
-
-            #content {
-                margin-left: 0;
-                width: 100%;
-            }
-
-            #sidebar.active+#content {
-                margin-left: 250px;
-                width: calc(100% - 250px);
-            }
-
-            #sidebar.collapsed {
-                min-width: 250px;
-                max-width: 250px;
-            }
-        }
-
-        /* Dropdown Menu Styling */
+        /* Clean Dropdown */
         .dropdown-menu {
             min-width: 200px;
-            background-color: var(--dropdown-bg);
+            background: var(--dropdown-bg);
             border: 1px solid var(--border-color);
-            border-radius: 0.25rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            padding: 0.5rem;
+        }
+
+        .dropdown-item {
+            border-radius: 6px;
+            margin: 0.125rem 0;
+            transition: background-color 0.15s ease;
+            font-size: 0.875rem;
+            padding: 0.5rem 0.75rem;
         }
 
         .dropdown-item:hover {
-            background-color: var(--dropdown-item-hover-bg);
+            background: var(--dropdown-item-hover-bg);
+        }
+
+        /* Clean Button Styling */
+        .btn-secondary {
+            background: #0f172a;
+            color: #ffffff;
+            border: 1px solid #0f172a;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+        }
+
+        .btn-secondary:hover {
+            background: #1e293b;
+            border-color: #1e293b;
+            color: #ffffff;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .d-flex {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                min-width: 100%;
+                height: auto;
+                position: relative;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+            #sidebar.collapsed {
+                width: 100%;
+                min-width: 100%;
+            }
+
+            #content {
+                min-height: auto;
+            }
+        }
+
+        /* Scrollbar Styling */
+        #sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
@@ -398,24 +579,40 @@ try {
         <!-- Main Content Area -->
         <div id="content" class="flex-grow-1">
             <!-- Top Navigation Bar -->
-            <nav class="navbar navbar-expand-lg navbar-light rounded-2 border mb-4">
-                <button type="button" id="sidebarCollapse" class="btn" aria-label="Toggle Sidebar">
-                    <i class="fas fa-bars"></i>
-                </button>
+            <nav class="navbar">
                 <div class="container-fluid">
-                    <div class="ms-auto d-flex align-items-center">
+                    <div class="navbar-left">
+                        <button type="button" id="sidebarCollapse" class="btn" aria-label="Toggle Sidebar">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <span class="navbar-title">Dashboard</span>
+                    </div>
+                    
+                    <div class="navbar-right">
+                        <!-- Notifications -->
+                        <div class="navbar-item">
+                            <button class="btn btn-icon" aria-label="Notifications">
+                                <i class="fas fa-bell"></i>
+                            </button>
+                        </div>
+                        
                         <!-- User Dropdown Menu -->
                         <div class="dropdown">
-                            <button class="btn btn-secondary dropdown-toggle d-flex align-items-center" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-user-circle me-1"></i> <?= htmlspecialchars($_SESSION['username'], ENT_QUOTES, 'UTF-8') ?>
+                            <button class="btn btn-user dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <div class="user-avatar">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div class="user-info">
+                                    <span class="user-name"><?= htmlspecialchars($_SESSION['username'], ENT_QUOTES, 'UTF-8') ?></span>
+                                    <span class="user-role"><?= htmlspecialchars($_SESSION['role'], ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
+                                <i class="fas fa-chevron-down"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                                 <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i> Profile</a></li>
-                                <li><a class="dropdown-item" href="#"><i class="fas fa-id-badge me-2"></i> Role: <?= htmlspecialchars($_SESSION['role'], ENT_QUOTES, 'UTF-8') ?></a></li>
-                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i> Settings</a></li>
-                                <li>
-                                    <hr class="dropdown-divider">
-                                </li>
+                                <li><a class="dropdown-item" href="#"><i class="fas fa-id-badge me-2"></i> Account Settings</a></li>
+                                <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i> System Settings</a></li>
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
                             </ul>
                         </div>

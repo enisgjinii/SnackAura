@@ -4,7 +4,13 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 session_start();
-require 'includes/db_connect.php';
+
+// Define constants
+define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+define('APP_VERSION', '1.0.1');
+define('DEFAULT_LOCALE', 'de-DE');
+
+// Initialize session variables with null coalescing operator
 $_SESSION['applied_coupon'] = $_SESSION['applied_coupon'] ?? null;
 $_SESSION['cart'] = $_SESSION['cart'] ?? [];
 $_SESSION['customer_name'] = $_SESSION['customer_name'] ?? '';
@@ -15,26 +21,55 @@ $_SESSION['payment_method'] = $_SESSION['payment_method'] ?? '';
 $_SESSION['scheduled_date'] = $_SESSION['scheduled_date'] ?? '';
 $_SESSION['scheduled_time'] = $_SESSION['scheduled_time'] ?? '';
 $_SESSION['csrf_token'] = $_SESSION['csrf_token'] ?? bin2hex(random_bytes(32));
-define('ERROR_LOG_FILE', __DIR__ . '/errors.md');
+
+// Import required files
+try {
+    require 'includes/db_connect.php';
+} catch (Exception $e) {
+    die('<div class="alert alert-danger">Database connection failed. Please try again later.</div>');
+}
+
+// Enhanced error logging function
 function log_error_markdown($m, $c = '')
 {
+    $timestamp = date('Y-m-d H:i:s');
+    $message = htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $context = $c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" : '';
+    $logEntry = "### [$timestamp] Error\n\n**Message:** $message\n\n$context---\n\n";
+    
     file_put_contents(
         ERROR_LOG_FILE,
-        "### [" . date('Y-m-d H:i:s') . "] Error\n\n**Message:** " . htmlspecialchars($m, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-            . "\n\n" . ($c ? "**Context:** " . htmlspecialchars($c, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" : '')
-            . "---\n\n",
+        $logEntry,
         FILE_APPEND | LOCK_EX
     );
+    
+    // Return a sanitized error code for client display
+    return md5(substr($message, 0, 32));
 }
+
+// Set custom exception handler
 set_exception_handler(function ($e) {
-    log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
-    header("Location: index.php?error=unknown_error");
+    $errorCode = log_error_markdown("Uncaught Exception: " . $e->getMessage(), "File: {$e->getFile()} Line: {$e->getLine()}");
+    header("Location: index.php?error=exception&code=$errorCode");
     exit;
 });
+
+// Set custom error handler
 set_error_handler(function ($sev, $msg, $fl, $ln) {
     if (!(error_reporting() & $sev)) return;
-    throw new ErrorException($msg, 0, $sev, $fl, $ln);
+    
+    $errorCode = log_error_markdown("PHP Error [$sev]: $msg", "File: $fl Line: $ln");
+    
+    if (!headers_sent()) {
+        header("Location: index.php?error=runtime&code=$errorCode");
+        exit;
+    }
+    
+    echo "<div class='alert alert-danger'>A critical error occurred. Please try again later. (Code: $errorCode)</div>";
+    exit;
 });
+
+// Utility functions
 include 'settings_fetch.php';
 $selected_store_id = $_SESSION['selected_store'] ?? null;
 $main_store = null;
@@ -80,7 +115,7 @@ if ($main_store) {
     }
 } else {
     $is_closed = true;
-    $notification = ['title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
+    $notification = ['type' => 'warning', 'title' => 'No Store Selected', 'message' => 'Please select a store before ordering.'];
 }
 try {
     $tip_options = $pdo->query("SELECT * FROM tips WHERE is_active=1 ORDER BY percentage ASC, amount ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -159,6 +194,11 @@ function getDeliveryZonePrice($store, $lat, $lng)
 function applyCoupon($pdo, $code, $cartTotal)
 {
     $r = ['ok' => false, 'error' => '', 'coupon' => null];
+    $code = trim($code);
+    if (empty($code)) {
+        $r['error'] = "Coupon code cannot be empty.";
+        return $r;
+    }
     $s = $pdo->prepare("SELECT * FROM coupons WHERE code=? AND is_active=1 LIMIT 1");
     $s->execute([$code]);
     $c = $s->fetch(PDO::FETCH_ASSOC);
@@ -187,6 +227,11 @@ function logdb($m)
     file_put_contents('errors.md', $m . "\n", FILE_APPEND);
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'])) {
+        log_error_markdown("CSRF Token Validation Failed", "POST Request");
+        header("Location: index.php?error=invalid_request");
+        exit;
+    }
     if (isset($_POST['checkout'])) {
         if (empty($_SESSION['cart'])) {
             header("Location:index.php?error=empty_cart");
@@ -210,17 +255,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         }
-        if (!in_array($pm, ['paypal', 'pickup', 'cash'])) {
+        $allowed_payment_methods = ['paypal', 'pickup', 'cash'];
+        if (!in_array($pm, $allowed_payment_methods)) {
             header("Location:index.php?error=invalid_payment_method");
             exit;
         }
-        if (!$cn || !$ce || !$cp || !$da || !$postal_code) {
+        if (!$cn || !$ce || !filter_var($ce, FILTER_VALIDATE_EMAIL) || !$cp || !$da || !$postal_code) {
             header("Location:index.php?error=invalid_order_details");
             exit;
         }
         if ($pm !== 'pickup' && $main_store) {
             $delivery_zone_price_test = getDeliveryZonePrice($main_store, $_SESSION['latitude'] ?? 0, $_SESSION['longitude'] ?? 0);
-            if ($delivery_zone_price_test == 0) {
+            if ($delivery_zone_price_test <= 0) {
                 header("Location:index.php?error=out_of_zone");
                 exit;
             }
@@ -252,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'delivery_zone_price' => $delivery_zone_price,
             'coupon_code' => $_SESSION['applied_coupon']['code'] ?? null,
             'coupon_discount' => $coupon_discount
-        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
         try {
             $pdo->beginTransaction();
             $stmt = $pdo->prepare("INSERT INTO orders(user_id, customer_name, customer_email, customer_phone, delivery_address, postal_code, total_amount, status_id, tip_id, tip_amount, scheduled_date, scheduled_time, payment_method, store_id, order_details, coupon_code, coupon_discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -276,20 +322,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $coupon_discount
             ]);
             $oid = $pdo->lastInsertId();
+            $_SESSION['cart'] = [];
+            $_SESSION['selected_tip'] = null;
+            $_SESSION['applied_coupon'] = null;
             if ($pm === 'paypal') {
                 $pdo->commit();
-                $_SESSION['cart'] = [];
-                $_SESSION['selected_tip'] = null;
-                $_SESSION['applied_coupon'] = null;
                 header("Location:index.php?pending_paypal_order_id=$oid");
                 exit;
             } elseif (in_array($pm, ['pickup', 'cash'])) {
                 $statusMap = ['pickup' => 3, 'cash' => 4];
                 $pdo->prepare("UPDATE orders SET status_id=? WHERE id=?")->execute([$statusMap[$pm], $oid]);
                 $pdo->commit();
-                $_SESSION['cart'] = [];
-                $_SESSION['selected_tip'] = null;
-                $_SESSION['applied_coupon'] = null;
                 header("Location:index.php?order=success&scheduled_date=$sd&scheduled_time=$st_time");
                 exit;
             }
@@ -319,12 +362,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $la = trim($_POST['latitude'] ?? '');
             $lo = trim($_POST['longitude'] ?? '');
             $postal_code = trim($_POST['postal_code'] ?? '');
-            if (!$da || !$la || !$lo || !$postal_code) {
-                $error_message = "Please provide a valid delivery address, postal code & location.";
+            if (!$da || !is_numeric($la) || !is_numeric($lo) || !$postal_code) {
+                header("Location: index.php?action=change_address&store_error=invalid_address_location");
+                exit;
             } else {
-                $delivery_zone_test = getDeliveryZonePrice($store, $la, $lo);
-                if ($delivery_zone_test == 0) {
-                    $error_message = "Your location is out of this store's delivery zones. Please pick another store or location.";
+                $delivery_zone_price = getDeliveryZonePrice($store, $la, $lo);
+                if ($delivery_zone_price <= 0) {
+                    header("Location: index.php?action=change_address&store_error=out_of_zone");
+                    exit;
                 } else {
                     $_SESSION['selected_store'] = $sid;
                     $_SESSION['store_name'] = $store['name'];
@@ -1600,8 +1645,8 @@ try {
             }
 
             function updateSizeSpecificOptions(form, sd) {
-                let se = [],
-                    ss = [],
+                let se = [], 
+                    ss = [], 
                     dd = [];
                 if (sd.sizesExtras) {
                     try {

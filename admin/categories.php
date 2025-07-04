@@ -155,145 +155,527 @@ if ($action === 'view') {
     $categories = $stmt->fetchAll();
 }
 ?>
-<?php if ($action === 'view'): ?>
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2>Kategorien</h2>
-        <button class="btn btn-success btn-sm" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas">
-            <i class="fas fa-plus"></i> Neue Kategorie
-        </button>
+
+<!-- Categories Content -->
+<div class="categories-content">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-content">
+            <div class="header-text">
+                <h1 class="page-title">Categories</h1>
+                <p class="page-subtitle">Manage your product categories and organize your inventory</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas">
+                    <i class="fas fa-plus"></i> Add Category
+                </button>
+            </div>
+        </div>
     </div>
-    <hr>
-    <div class="table-responsive">
-        <table id="categoriesTable" class="table table-striped table-bordered align-middle small">
-            <thead class="table-dark">
-                <tr>
-                    <th>Verschieben</th>
-                    <th>ID</th>
-                    <th>Bild</th>
-                    <th>Name</th>
-                    <th>Beschreibung</th>
-                    <th>Erstellt am</th>
-                    <th>Aktionen</th>
-                </tr>
-            </thead>
-            <tbody id="sortable">
-                <?php if (!empty($categories)): ?>
-                    <?php foreach ($categories as $category): ?>
-                        <tr data-id="<?= sanitizeInput($category['id']) ?>">
-                            <td class="text-center">
-                                <i class="fas fa-bars handle" style="cursor: move;"></i>
-                            </td>
-                            <td><?= sanitizeInput($category['id']) ?></td>
-                            <td>
-                                <?php if (!empty($category['image_url']) && file_exists($category['image_url'])): ?>
-                                    <img src="<?= sanitizeInput($category['image_url']) ?>" alt="Kategoriebild" class="img-thumbnail" style="width: 40px; height: 40px; object-fit: cover;">
-                                <?php else: ?>
-                                    <i class="fas fa-image fa-lg text-muted"></i>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= sanitizeInput($category['name']) ?></td>
-                            <td><?= sanitizeInput($category['description']) ?></td>
-                            <td><?= sanitizeInput($category['created_at']) ?></td>
-                            <td>
-                                <button class="btn btn-sm btn-warning me-1 edit-category-btn"
-                                    data-id="<?= $category['id'] ?>"
-                                    data-name="<?= sanitizeInput($category['name']) ?>"
-                                    data-description="<?= sanitizeInput($category['description']) ?>"
-                                    data-image="<?= sanitizeInput($category['image_url']) ?>"
-                                    data-bs-toggle="offcanvas"
-                                    data-bs-target="#editCategoryOffcanvas">
-                                    <i class="fas fa-edit"></i> 
-                                </button>
-                                <button class="btn btn-sm btn-danger delete-category-btn"
-                                    data-id="<?= $category['id'] ?>"
-                                    data-name="<?= sanitizeInput($category['name']) ?>">
-                                    <i class="fas fa-trash-alt"></i> 
-                                </button>
+
+    <!-- Categories Table -->
+    <div class="table-section">
+        <div class="table-container">
+            <table id="categoriesTable" class="data-table">
+                <thead>
+                    <tr>
+                        <th width="50">Sort</th>
+                        <th width="80">ID</th>
+                        <th width="80">Image</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th width="120">Created</th>
+                        <th width="120">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sortable">
+                    <?php if (!empty($categories)): ?>
+                        <?php foreach ($categories as $category): ?>
+                            <tr data-id="<?= sanitizeInput($category['id']) ?>">
+                                <td class="sort-handle">
+                                    <i class="fas fa-grip-vertical"></i>
+                                </td>
+                                <td class="text-center"><?= sanitizeInput($category['id']) ?></td>
+                                <td class="image-cell">
+                                    <?php if (!empty($category['image_url']) && file_exists($category['image_url'])): ?>
+                                        <img src="<?= sanitizeInput($category['image_url']) ?>" alt="Category Image" class="category-image">
+                                    <?php else: ?>
+                                        <div class="placeholder-image">
+                                            <i class="fas fa-image"></i>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="name-cell">
+                                    <span class="category-name"><?= sanitizeInput($category['name']) ?></span>
+                                </td>
+                                <td class="description-cell">
+                                    <span class="category-description"><?= sanitizeInput($category['description']) ?></span>
+                                </td>
+                                <td class="date-cell">
+                                    <?= date('M d, Y', strtotime($category['created_at'])) ?>
+                                </td>
+                                <td class="actions-cell">
+                                    <div class="action-buttons">
+                                        <button class="btn btn-sm btn-edit edit-category-btn"
+                                            data-id="<?= $category['id'] ?>"
+                                            data-name="<?= sanitizeInput($category['name']) ?>"
+                                            data-description="<?= sanitizeInput($category['description']) ?>"
+                                            data-image="<?= sanitizeInput($category['image_url']) ?>"
+                                            data-bs-toggle="offcanvas"
+                                            data-bs-target="#editCategoryOffcanvas"
+                                            title="Edit Category">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-delete delete-category-btn"
+                                            data-id="<?= $category['id'] ?>"
+                                            data-name="<?= sanitizeInput($category['name']) ?>"
+                                            title="Delete Category">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="7" class="no-data">
+                                <div class="empty-state">
+                                    <i class="fas fa-folder-open"></i>
+                                    <h3>No Categories Found</h3>
+                                    <p>Start by adding your first category to organize your products.</p>
+                                    <button class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas">
+                                        <i class="fas fa-plus"></i> Add Category
+                                    </button>
+                                </div>
                             </td>
                         </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="7" class="text-center">Keine Kategorien gefunden.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
+
     <!-- Add Category Offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="addCategoryOffcanvas" aria-labelledby="addCategoryOffcanvasLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="addCategoryOffcanvasLabel">Neue Kategorie hinzufügen</h5>
-            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+            <h5 class="offcanvas-title" id="addCategoryOffcanvasLabel">Add New Category</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body">
-            <form method="POST" action="categories.php?action=add" enctype="multipart/form-data">
+            <form method="POST" action="categories.php?action=add" enctype="multipart/form-data" class="category-form">
                 <input type="hidden" name="csrf_token" value="<?= generateCsrfToken(); ?>">
-                <div class="mb-2">
-                    <label for="add-name" class="form-label">Kategoriename <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="add-name" name="name" required>
+                
+                <div class="form-group">
+                    <label for="add-name" class="form-label">Category Name <span class="required">*</span></label>
+                    <input type="text" class="form-control" id="add-name" name="name" required>
                 </div>
-                <div class="mb-2">
-                    <label for="add-description" class="form-label">Beschreibung</label>
-                    <textarea class="form-control form-control-sm" id="add-description" name="description" rows="2"></textarea>
+                
+                <div class="form-group">
+                    <label for="add-description" class="form-label">Description</label>
+                    <textarea class="form-control" id="add-description" name="description" rows="3"></textarea>
                 </div>
-                <div class="mb-2">
-                    <label for="add-image" class="form-label">Kategoriebild</label>
-                    <input type="file" class="form-control form-control-sm" id="add-image" name="image_file" accept="image/*">
+                
+                <div class="form-group">
+                    <label for="add-image" class="form-label">Category Image</label>
+                    <input type="file" class="form-control" id="add-image" name="image_file" accept="image/*">
+                    <small class="form-text">Max size: 2MB. Supported formats: JPG, PNG, GIF</small>
                 </div>
-                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Kategorie speichern</button>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Category
+                    </button>
+                </div>
             </form>
         </div>
     </div>
+
     <!-- Edit Category Offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="editCategoryOffcanvas" aria-labelledby="editCategoryOffcanvasLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="editCategoryOffcanvasLabel">Kategorie </h5>
-            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+            <h5 class="offcanvas-title" id="editCategoryOffcanvasLabel">Edit Category</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body">
-            <form method="POST" action="categories.php?action=edit" enctype="multipart/form-data">
+            <form method="POST" action="categories.php?action=edit" enctype="multipart/form-data" class="category-form">
                 <input type="hidden" name="csrf_token" value="<?= generateCsrfToken(); ?>">
                 <input type="hidden" name="id" id="edit-id" value="">
-                <div class="mb-2">
-                    <label for="edit-name" class="form-label">Kategoriename <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="edit-name" name="name" required>
+                
+                <div class="form-group">
+                    <label for="edit-name" class="form-label">Category Name <span class="required">*</span></label>
+                    <input type="text" class="form-control" id="edit-name" name="name" required>
                 </div>
-                <div class="mb-2">
-                    <label for="edit-description" class="form-label">Beschreibung</label>
-                    <textarea class="form-control form-control-sm" id="edit-description" name="description" rows="2"></textarea>
+                
+                <div class="form-group">
+                    <label for="edit-description" class="form-label">Description</label>
+                    <textarea class="form-control" id="edit-description" name="description" rows="3"></textarea>
                 </div>
-                <div class="mb-2">
-                    <label for="edit-image" class="form-label">Bild ändern</label>
-                    <input type="file" class="form-control form-control-sm" id="edit-image" name="image_file" accept="image/*">
+                
+                <div class="form-group">
+                    <label for="edit-image" class="form-label">Change Image</label>
+                    <input type="file" class="form-control" id="edit-image" name="image_file" accept="image/*">
+                    <small class="form-text">Max size: 2MB. Supported formats: JPG, PNG, GIF</small>
                 </div>
-                <div class="mb-2">
-                    <label class="form-label">Aktuelles Bild</label>
-                    <div><img src="" alt="Aktuelles Bild" id="current-image" class="img-thumbnail" style="width: 80px; height: 80px; object-fit: cover;"></div>
+                
+                <div class="form-group">
+                    <label class="form-label">Current Image</label>
+                    <div class="current-image">
+                        <img src="" alt="Current Image" id="current-image" class="preview-image">
+                    </div>
                 </div>
-                <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-save"></i> Kategorie aktualisieren</button>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Update Category
+                    </button>
+                </div>
             </form>
         </div>
     </div>
-    <!-- Toast-Benachrichtigungen -->
-    <div class="position-fixed bottom-0 end-0 p-2" style="z-index: 1100;">
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
         <div id="toast-container"></div>
     </div>
-<?php endif; ?>
-<?php
-require_once 'includes/footer.php';
-?>
+</div>
+
+<style>
+    /* Categories Page Styles */
+    .categories-content {
+        padding: 2rem;
+        background: var(--content-bg);
+        min-height: 100vh;
+    }
+
+    /* Page Header */
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
+    }
+
+    .page-title {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .page-subtitle {
+        color: #64748b;
+        margin: 0;
+        font-size: 1rem;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 1rem;
+    }
+
+    /* Table Section */
+    .table-section {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .data-table th {
+        background: #f8fafc;
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #374151;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 0.875rem;
+    }
+
+    .data-table td {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        color: #374151;
+        vertical-align: middle;
+    }
+
+    .data-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    /* Sort Handle */
+    .sort-handle {
+        text-align: center;
+        color: #9ca3af;
+        cursor: move;
+    }
+
+    .sort-handle i {
+        font-size: 1rem;
+    }
+
+    /* Image Cell */
+    .image-cell {
+        text-align: center;
+    }
+
+    .category-image {
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--border-color);
+    }
+
+    .placeholder-image {
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af;
+        border: 1px solid var(--border-color);
+    }
+
+    /* Name and Description */
+    .name-cell .category-name {
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .description-cell .category-description {
+        color: #64748b;
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+
+    .date-cell {
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+
+    /* Action Buttons */
+    .actions-cell {
+        text-align: center;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
+    .btn-edit {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 0.5rem;
+        border-radius: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .btn-edit:hover {
+        background: #2563eb;
+        color: white;
+    }
+
+    .btn-delete {
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 0.5rem;
+        border-radius: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .btn-delete:hover {
+        background: #dc2626;
+        color: white;
+    }
+
+    /* Empty State */
+    .no-data {
+        text-align: center;
+        padding: 3rem 1rem;
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        color: #9ca3af;
+    }
+
+    .empty-state h3 {
+        color: #374151;
+        margin: 0;
+        font-size: 1.25rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin: 0;
+    }
+
+    /* Offcanvas Styles */
+    .offcanvas {
+        border-left: 1px solid var(--border-color);
+    }
+
+    .offcanvas-header {
+        border-bottom: 1px solid var(--border-color);
+        padding: 1.5rem;
+    }
+
+    .offcanvas-title {
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .offcanvas-body {
+        padding: 1.5rem;
+    }
+
+    /* Form Styles */
+    .category-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .form-label {
+        font-weight: 500;
+        color: #374151;
+        font-size: 0.875rem;
+    }
+
+    .required {
+        color: #ef4444;
+    }
+
+    .form-control {
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        transition: all 0.15s ease;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-text {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
+    }
+
+    /* Current Image Preview */
+    .current-image {
+        display: flex;
+        justify-content: center;
+    }
+
+    .preview-image {
+        width: 120px;
+        height: 120px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--border-color);
+    }
+
+    /* Toast Container */
+    .toast-container {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1100;
+    }
+
+    /* Sortable Placeholder */
+    .sortable-placeholder {
+        background: #f8fafc;
+        border: 2px dashed #cbd5e1;
+        height: 80px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .categories-content {
+            padding: 1rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            gap: 1rem;
+            text-align: center;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0.75rem 0.5rem;
+        }
+    }
+</style>
+
 <script>
     $(document).ready(function() {
-        // Initialisiere DataTable
+        // Initialize DataTable
         $('#categoriesTable').DataTable({
-            "paging": true, // Pagination aktivieren
-            "searching": true, // Suche aktivieren
-            "info": true, // Tabelleninfo anzeigen
-            "order": [
-                [5, "desc"]
-            ], // Standardmäßig nach 'Erstellt am' sortieren (Index 5)
-            // Buttons, Suche, Info, Pagination hinzufügen
+            "paging": true,
+            "searching": true,
+            "info": true,
+            "order": [[5, "desc"]],
             "dom": '<"row mb-3"' +
                 '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
                 '>' +
@@ -302,48 +684,32 @@ require_once 'includes/footer.php';
                 '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
                 '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
                 '>',
-            // Benutzerdefinierte Buttons für Export
             "buttons": [{
-                    text: '<i class="fas fa-plus"></i> Neue Kategorie',
-                    className: 'btn btn-success btn-sm rounded-2',
+                    text: '<i class="fas fa-plus"></i> Add Category',
+                    className: 'btn btn-primary btn-sm',
                     action: function() {
                         $('#addCategoryOffcanvas').offcanvas('show');
                     }
                 },
                 {
                     extend: 'csv',
-                    text: '<i class="fas fa-file-csv"></i> CSV exportieren',
-                    className: 'btn btn-primary btn-sm rounded-2'
+                    text: '<i class="fas fa-file-csv"></i> Export CSV',
+                    className: 'btn btn-secondary btn-sm'
                 },
                 {
                     extend: 'pdf',
-                    text: '<i class="fas fa-file-pdf"></i> PDF exportieren',
-                    className: 'btn btn-primary btn-sm rounded-2'
-                },
-                {
-                    extend: 'colvis',
-                    text: '<i class="fas fa-columns"></i> Spalten',
-                    className: 'btn btn-primary btn-sm rounded-2',
-                },
-                {
-                    extend: 'copy',
-                    text: '<i class="fas fa-copy"></i> Kopieren',
-                    className: 'btn btn-primary btn-sm rounded-2',
-                },
+                    text: '<i class="fas fa-file-pdf"></i> Export PDF',
+                    className: 'btn btn-secondary btn-sm'
+                }
             ],
-            initComplete: function() {
-                // Ändere die Buttons, sodass sie keine Gruppenschaltflächen sind
-                var buttons = this.api().buttons();
-                buttons.container().addClass('d-flex flex-wrap gap-2');
-            },
-            // Deutsch
             "language": {
                 url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
             }
         });
-        // Initialisiere Sortable
+
+        // Initialize Sortable
         $("#sortable").sortable({
-            handle: ".handle",
+            handle: ".sort-handle",
             placeholder: "sortable-placeholder",
             update: function(event, ui) {
                 var order = [];
@@ -363,40 +729,44 @@ require_once 'includes/footer.php';
                     dataType: 'json',
                     success: function(response) {
                         if (response.status === 'success') {
-                            Swal.fire('Erfolg', response.message, 'success');
+                            showToast('Success', response.message, 'success');
                         } else {
-                            Swal.fire('Fehler', response.message, 'error');
+                            showToast('Error', response.message, 'error');
                         }
                     },
                     error: function() {
-                        Swal.fire('Fehler', 'Beim Aktualisieren der Positionen ist ein Fehler aufgetreten.', 'error');
+                        showToast('Error', 'An error occurred while updating positions.', 'error');
                     }
                 });
             }
         }).disableSelection();
-        // -Button Klick behandeln
+
+        // Edit Category Button
         $('.edit-category-btn').on('click', function() {
             var id = $(this).data('id');
             var name = $(this).data('name');
             var description = $(this).data('description');
             var image = $(this).data('image');
+            
             $('#edit-id').val(id);
             $('#edit-name').val(name);
             $('#edit-description').val(description);
             $('#current-image').attr('src', image ? image : 'assets/images/placeholder.png');
         });
-        // -Button Klick behandeln
+
+        // Delete Category Button
         $('.delete-category-btn').on('click', function() {
             var id = $(this).data('id');
             var name = $(this).data('name');
+            
             Swal.fire({
-                title: 'Sind Sie sicher?',
-                text: `Möchten Sie die Kategorie "${name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+                title: 'Are you sure?',
+                text: `Do you want to delete the category "${name}"? This action cannot be undone.`,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Ja, löschen!'
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
                 if (result.isConfirmed) {
                     var form = $('<form>', {
@@ -418,15 +788,16 @@ require_once 'includes/footer.php';
                 }
             });
         });
-        // Toast-Benachrichtigungen anzeigen
-        <?php if (isset($_SESSION['toast'])): ?>
-            var toastHtml = `
-                <div class="toast align-items-center text-white bg-<?= $_SESSION['toast']['type'] === 'success' ? 'success' : 'danger' ?> border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+
+        // Show Toast Function
+        function showToast(title, message, type) {
+            const toastHtml = `
+                <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
                     <div class="d-flex">
                         <div class="toast-body">
-                            <?= $_SESSION['toast']['message'] ?>
+                            ${message}
                         </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Schließen"></button>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                     </div>
                 </div>
             `;
@@ -434,15 +805,14 @@ require_once 'includes/footer.php';
             $('.toast').toast({
                 delay: 5000
             }).toast('show');
+        }
+
+        // Show existing toast if available
+        <?php if (isset($_SESSION['toast'])): ?>
+            showToast('<?= $_SESSION['toast']['type'] === 'success' ? 'Success' : 'Error' ?>', '<?= $_SESSION['toast']['message'] ?>', '<?= $_SESSION['toast']['type'] ?>');
             <?php unset($_SESSION['toast']); ?>
         <?php endif; ?>
     });
 </script>
-<!-- Benutzerdefinierte Styles für Sortable Placeholder -->
-<style>
-    .sortable-placeholder {
-        background: #f0f0f0;
-        border: 2px dashed #ccc;
-        height: 40px;
-    }
-</style>
+
+<?php require_once 'includes/footer.php'; ?>
