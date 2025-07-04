@@ -16,3 +16,9 @@
 **Context:** File: C:\xampp\htdocs\SnackAura\admin\orders.php Line: 449
 ---
 
+### [2025-07-04 17:00:07] [EXCEPTION]
+
+**Message:** Undefined array key &quot;price&quot;
+**Context:** File: C:\xampp\htdocs\SnackAura\admin\orders.php Line: 449
+---
+

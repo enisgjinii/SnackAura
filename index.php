@@ -729,8 +729,8 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Restaurant Delivery</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
+    <title>SnackAura - Premium Food Delivery</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Saira:wght@100..900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" rel="stylesheet">
@@ -739,108 +739,513 @@ try {
         <link rel="icon" type="image/png" href="admin/<?= htmlspecialchars($main_store['cart_logo']) ?>">
     <?php endif; ?>
     <style>
+        :root {
+            --shadcn-background: #ffffff;
+            --shadcn-foreground: #0f172a;
+            --shadcn-card: #ffffff;
+            --shadcn-card-foreground: #0f172a;
+            --shadcn-popover: #ffffff;
+            --shadcn-popover-foreground: #0f172a;
+            --shadcn-primary: #0f172a;
+            --shadcn-primary-foreground: #ffffff;
+            --shadcn-secondary: #f8fafc;
+            --shadcn-secondary-foreground: #0f172a;
+            --shadcn-muted: #f1f5f9;
+            --shadcn-muted-foreground: #64748b;
+            --shadcn-accent: #f1f5f9;
+            --shadcn-accent-foreground: #0f172a;
+            --shadcn-destructive: #ef4444;
+            --shadcn-destructive-foreground: #ffffff;
+            --shadcn-border: #e2e8f0;
+            --shadcn-input: #ffffff;
+            --shadcn-ring: #0f172a;
+            --shadcn-radius: 0.5rem;
+            --shadcn-radius-lg: 0.75rem;
+            --shadcn-radius-xl: 1rem;
+        }
+
         * {
             font-family: 'Inter', sans-serif;
-            font-weight: 400
+            font-weight: 400;
         }
 
         body {
-            font-size: 0.9rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            background-color: var(--shadcn-background);
+            color: var(--shadcn-foreground);
         }
 
+        /* Enhanced Loading Overlay */
         .loading-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
             z-index: 9999;
             display: flex;
             justify-content: center;
-            align-items: center
+            align-items: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--shadcn-muted);
+            border-top: 3px solid var(--shadcn-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Enhanced Promo Banner */
+        .promo-banner {
+            background: linear-gradient(135deg, var(--shadcn-background) 0%, var(--shadcn-secondary) 100%);
+            border-bottom: 1px solid var(--shadcn-border);
+            padding: 2rem 0;
         }
 
         .promo-banner .carousel-item img {
             height: 300px;
-            object-fit: cover
+            object-fit: cover;
+            border-radius: var(--shadcn-radius-lg);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
 
+        /* Enhanced Offers Section */
         .offers-section .card-img-top {
             height: 170px;
-            object-fit: cover
+            object-fit: cover;
+            border-radius: var(--shadcn-radius) var(--shadcn-radius) 0 0;
         }
 
-        @media(max-width:768px) {
-            .promo-banner .carousel-item img {
-                height: 200px
-            }
-
-            .offers-section .card-img-top {
-                height: 130px
-            }
+        /* Enhanced Navigation Tabs */
+        .nav-tabs {
+            justify-content: center;
+            border-bottom: 1px solid var(--shadcn-border);
+            margin: 2rem 0;
+            background: var(--shadcn-background);
+            border-radius: var(--shadcn-radius-lg);
+            padding: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
-        .btn.disabled,
-        .btn:disabled {
-            opacity: .65;
-            cursor: not-allowed
+        .nav-tabs .nav-link {
+            color: var(--shadcn-muted-foreground);
+            font-weight: 500;
+            border: none;
+            transition: all 0.2s ease;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--shadcn-radius);
+            margin: 0 0.25rem;
+            position: relative;
         }
 
+        .nav-tabs .nav-link:hover {
+            color: var(--shadcn-foreground);
+            background: var(--shadcn-accent);
+        }
+
+        .nav-tabs .nav-link.active {
+            color: var(--shadcn-primary-foreground);
+            background: var(--shadcn-primary);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        /* Enhanced Product Cards */
+        .product-card {
+            background: var(--shadcn-card);
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius-lg);
+            overflow: hidden;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .product-card .card-img-top {
+            height: 200px;
+            object-fit: cover;
+            transition: transform 0.2s ease;
+        }
+
+        .product-card:hover .card-img-top {
+            transform: scale(1.05);
+        }
+
+        .product-card .card-body {
+            padding: 1.5rem;
+        }
+
+        .product-card .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--shadcn-card-foreground);
+            margin-bottom: 0.5rem;
+        }
+
+        .product-card .card-text {
+            color: var(--shadcn-muted-foreground);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .product-card .price {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--shadcn-primary);
+        }
+
+        .product-card .btn-add-cart {
+            background: var(--shadcn-primary);
+            color: var(--shadcn-primary-foreground);
+            border: none;
+            border-radius: var(--shadcn-radius);
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .product-card .btn-add-cart:hover {
+            background: var(--shadcn-primary);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Enhanced Order Summary */
         .order-summary {
-            background-color: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
+            background: var(--shadcn-card);
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius-lg);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             position: sticky;
-            top: 20px
+            top: 2rem;
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
         }
 
-        .order-title {
-            margin-bottom: 10px;
-            font-size: 1rem
+        .order-summary .card-body {
+            padding: 1.5rem;
         }
 
-        .store-card.selected {
-            border: 2px solid #0d6efd;
-            background-color: #e7f1ff
+        .order-summary .order-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--shadcn-card-foreground);
+            margin-bottom: 1rem;
         }
 
-        .store-card .select-store-btn {
-            width: 100%
+        .order-summary .cart-item {
+            background: var(--shadcn-secondary);
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
         }
 
+        .order-summary .cart-item-title {
+            font-weight: 600;
+            color: var(--shadcn-card-foreground);
+            margin-bottom: 0.25rem;
+        }
+
+        .order-summary .cart-item-details {
+            font-size: 0.875rem;
+            color: var(--shadcn-muted-foreground);
+        }
+
+        .order-summary .cart-item-price {
+            font-weight: 600;
+            color: var(--shadcn-primary);
+        }
+
+        /* Enhanced Buttons */
+        .btn {
+            border-radius: var(--shadcn-radius);
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: var(--shadcn-primary);
+            color: var(--shadcn-primary-foreground);
+            border-color: var(--shadcn-primary);
+        }
+
+        .btn-primary:hover {
+            background: var(--shadcn-primary);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .btn-secondary {
+            background: var(--shadcn-secondary);
+            color: var(--shadcn-secondary-foreground);
+            border-color: var(--shadcn-border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--shadcn-accent);
+            color: var(--shadcn-accent-foreground);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            border-color: #10b981;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            border-color: #059669;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: var(--shadcn-destructive);
+            color: var(--shadcn-destructive-foreground);
+            border-color: var(--shadcn-destructive);
+        }
+
+        /* Enhanced Badges */
+        .badge {
+            border-radius: var(--shadcn-radius);
+            font-weight: 500;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .badge-new {
+            background: #10b981;
+            color: white;
+        }
+
+        .badge-offer {
+            background: #f59e0b;
+            color: white;
+        }
+
+        /* Enhanced Form Controls */
+        .form-control {
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius);
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus {
+            border-color: var(--shadcn-ring);
+            box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1);
+        }
+
+        .form-select {
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius);
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        /* Enhanced Alerts */
+        .alert {
+            border-radius: var(--shadcn-radius);
+            border: 1px solid transparent;
+            padding: 0.75rem 1rem;
+        }
+
+        .alert-success {
+            background: #f0fdf4;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+
+        .alert-danger {
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            color: #92400e;
+            border-color: #fed7aa;
+        }
+
+        .alert-info {
+            background: #f0f9ff;
+            color: #1e40af;
+            border-color: #bfdbfe;
+        }
+
+        /* Enhanced Modals */
+        .modal-content {
+            border-radius: var(--shadcn-radius-lg);
+            border: 1px solid var(--shadcn-border);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .modal-header {
+            border-bottom: 1px solid var(--shadcn-border);
+            padding: 1.5rem;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            border-top: 1px solid var(--shadcn-border);
+            padding: 1.5rem;
+        }
+
+        /* Enhanced Store Cards */
         .store-card {
-            padding: 6px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            transition: box-shadow .3s;
-            height: 100%
+            background: var(--shadcn-card);
+            border: 1px solid var(--shadcn-border);
+            border-radius: var(--shadcn-radius-lg);
+            padding: 1.5rem;
+            transition: all 0.2s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
         .store-card:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, .1)
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .store-card.selected {
+            border-color: var(--shadcn-primary);
+            background: var(--shadcn-accent);
         }
 
         .store-card img {
-            height: 50px;
+            height: 60px;
             object-fit: contain;
-            margin-bottom: 5px
+            margin-bottom: 1rem;
+            border-radius: var(--shadcn-radius);
         }
 
         .store-card .card-title {
-            font-size: 1rem;
-            margin-bottom: 3px
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--shadcn-card-foreground);
+            margin-bottom: 0.5rem;
         }
 
         .store-card .card-text {
-            font-size: .8rem;
-            color: #555
+            font-size: 0.875rem;
+            color: var(--shadcn-muted-foreground);
+            margin-bottom: 1rem;
         }
 
         .select-store-btn {
             margin-top: auto;
-            padding: 6px 0;
-            font-size: .8rem
+            background: var(--shadcn-primary);
+            color: var(--shadcn-primary-foreground);
+            border: none;
+            border-radius: var(--shadcn-radius);
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .select-store-btn:hover {
+            background: var(--shadcn-primary);
+            transform: translateY(-1px);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .promo-banner .carousel-item img {
+                height: 200px;
+            }
+
+            .offers-section .card-img-top {
+                height: 130px;
+            }
+
+            .nav-tabs .nav-link {
+                padding: 0.5rem 1rem;
+                font-size: 0.875rem;
+            }
+
+            .product-card .card-body {
+                padding: 1rem;
+            }
+
+            .order-summary {
+                position: static;
+                max-height: none;
+                margin-top: 2rem;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .promo-banner {
+                padding: 1rem 0;
+            }
+
+            .nav-tabs {
+                margin: 1rem 0;
+                padding: 0.25rem;
+            }
+
+            .nav-tabs .nav-link {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Enhanced Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-up {
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Enhanced Scrollbar */
+        .order-summary::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .order-summary::-webkit-scrollbar-track {
+            background: var(--shadcn-muted);
+            border-radius: 3px;
+        }
+
+        .order-summary::-webkit-scrollbar-thumb {
+            background: var(--shadcn-border);
+            border-radius: 3px;
+        }
+
+        .order-summary::-webkit-scrollbar-thumb:hover {
+            background: var(--shadcn-muted-foreground);
         }
     </style>
     <script src="https://js.stripe.com/v3/"></script>
@@ -850,7 +1255,7 @@ try {
 
 <body>
     <div class="loading-overlay" id="loading-overlay">
-        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+        <div class="loading-spinner"></div>
     </div>
     <?php if ($is_closed && isset($_SESSION['selected_store'])): ?>
         <div class="modal fade" id="storeClosedModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -1231,34 +1636,36 @@ try {
             </div>
         </div>
     </div>
-    <ul class="nav nav-tabs justify-content-center my-3">
+    <ul class="nav nav-tabs justify-content-center my-4">
         <li class="nav-item"><a class="nav-link <?= ($selC === 0 ? 'active' : '') ?>" href="index.php">All</a></li>
         <?php foreach ($categories as $cItem): ?>
             <li class="nav-item"><a class="nav-link <?= ($selC === $cItem['id'] ? 'active' : '') ?>" href="index.php?category_id=<?= $cItem['id'] ?>"><?= htmlspecialchars($cItem['name']) ?></a></li>
         <?php endforeach; ?>
     </ul>
-    <main class="container my-3">
+    <main class="container my-4">
         <div class="row">
             <div class="col-lg-9">
-                <div class="row g-3">
+                <div class="row g-4">
                     <?php if ($products) foreach ($products as $pd): ?>
                         <div class="col-md-4">
-                            <div class="card h-100 shadow-sm">
+                            <div class="product-card h-100 fade-in">
                                 <div class="position-relative">
                                     <img src="admin/<?= htmlspecialchars($pd['image_url']) ?>" class="card-img-top" alt="<?= htmlspecialchars($pd['name']) ?>" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                                     <?php if ($pd['is_new'] || $pd['is_offer']): ?>
-                                        <span class="badge <?= ($pd['is_new'] ? 'bg-success' : 'bg-warning text-dark') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2"><?= ($pd['is_new'] ? 'New' : 'Offer') ?></span>
+                                        <span class="badge <?= ($pd['is_new'] ? 'badge-new' : 'badge-offer') ?> position-absolute <?= ($pd['is_offer'] ? 'top-40' : 'top-0') ?> end-0 m-2"><?= ($pd['is_new'] ? 'New' : 'Offer') ?></span>
                                     <?php endif; ?>
                                 </div>
-                                <div class="card-body d-flex flex-column" style="gap:4px">
-                                    <h6 class="card-title" style="font-size:.95rem"><?= htmlspecialchars($pd['name']) ?></h6>
-                                    <p class="card-text" style="font-size:.8rem;line-height:1.2"><?= htmlspecialchars($pd['description']) ?></p>
+                                <div class="card-body d-flex flex-column">
+                                    <h6 class="card-title"><?= htmlspecialchars($pd['name']) ?></h6>
+                                    <p class="card-text"><?= htmlspecialchars($pd['description']) ?></p>
                                     <?php if ($pd['allergies']): ?>
-                                        <p class="card-text text-danger" style="font-size:.8rem"><strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?></p>
+                                        <p class="card-text text-danger"><strong>Allergies:</strong> <?= htmlspecialchars($pd['allergies']) ?></p>
                                     <?php endif; ?>
-                                    <div class="mt-auto">
-                                        <small><strong><?= (!empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€") ?></strong></small>
-                                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?> style="font-size:.8rem"><i class="bi bi-cart-plus"></i></button>
+                                    <div class="mt-auto d-flex justify-content-between align-items-center">
+                                        <span class="price"><?= (!empty($pd['sizes']) ? "From " . number_format($pd['display_price'], 2) . "€" : number_format($pd['display_price'], 2) . "€") ?></span>
+                                        <button class="btn btn-add-cart" data-bs-toggle="modal" data-bs-target="#addToCartModal<?= $pd['id'] ?>" <?= ($is_closed ? 'disabled' : '') ?>>
+                                            <i class="bi bi-cart-plus"></i>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1435,29 +1842,29 @@ try {
                 </div>
             </div>
             <div class="col-lg-3">
-                <div class="order-summary card shadow-sm">
-                    <div class="card-body p-4">
+                <div class="order-summary slide-up">
+                    <div class="card-body">
                         <div class="d-flex align-items-center mb-4">
-                            <h5 class="card-title mb-0 flex-grow-1">Your Order</h5>
+                            <h5 class="order-title mb-0 flex-grow-1">Your Order</h5>
                             <?php if (!empty($main_store['logo'])): ?>
                                 <img src="admin/<?= htmlspecialchars($main_store['logo']) ?>" alt="Store Logo" width="50" height="50" class="img-fluid rounded-circle" onerror="this.src='https://coffective.com/wp-content/uploads/2018/06/default-featured-image.png.jpg';">
                             <?php endif; ?>
                         </div>
                         <?php if (!empty($main_store['cart_description'])): ?>
-                            <div class="mb-3">
-                                <p class="text-muted small mb-1"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p>
+                            <div class="mb-4">
+                                <p class="text-muted small mb-2"><?= nl2br(htmlspecialchars($main_store['cart_description'])) ?></p>
                                 <p class="text-muted small mb-3"><?= htmlspecialchars($_SESSION['store_name'] ?? '') ?></p>
-                                <p><?= htmlspecialchars($_SESSION['store_lat'] ?? '') ?> , <?= htmlspecialchars($_SESSION['store_lng'] ?? '') ?></p>
+                                <p class="text-muted small"><?= htmlspecialchars($_SESSION['store_lat'] ?? '') ?> , <?= htmlspecialchars($_SESSION['store_lng'] ?? '') ?></p>
                             </div>
                         <?php endif; ?>
                         <?php if (!empty($_SESSION['delivery_address'])): ?>
                             <div class="mb-4">
-                                <h6 class="fw-bold">Delivery Address</h6>
-                                <p class="mb-1"><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
+                                <h6 class="fw-bold mb-2">Delivery Address</h6>
+                                <p class="mb-2"><?= htmlspecialchars($_SESSION['delivery_address']) ?></p>
                                 <?php if (isset($_SESSION['latitude'], $_SESSION['longitude'])): ?>
-                                    <p class="mb-1"><?= htmlspecialchars($_SESSION['latitude']) ?> , <?= htmlspecialchars($_SESSION['longitude']) ?></p>
+                                    <p class="text-muted small mb-2"><?= htmlspecialchars($_SESSION['latitude']) ?> , <?= htmlspecialchars($_SESSION['longitude']) ?></p>
                                 <?php else: ?>
-                                    <p class="mb-1">Location not available</p>
+                                    <p class="text-muted small mb-2">Location not available</p>
                                 <?php endif; ?>
                                 <div class="d-flex gap-2">
                                     <a href="?action=change_address" class="btn btn-sm btn-outline-primary" title="Change Address" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Change Address"><i class="bi bi-geo-alt"></i></a>
@@ -1467,45 +1874,41 @@ try {
                         <?php endif; ?>
                         <div id="cart-items">
                             <?php if (!empty($_SESSION['cart'])): ?>
-                                <ul class="list-group mb-4">
+                                <div class="mb-4">
                                     <?php foreach ($_SESSION['cart'] as $i => $it): ?>
-                                        <li class="list-group-item p-3">
+                                        <div class="cart-item">
                                             <div class="d-flex justify-content-between align-items-start">
-                                                <div>
-                                                    <h6 class="mb-1" style="font-size:0.95rem;"><?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
+                                                <div class="flex-grow-1">
+                                                    <h6 class="cart-item-title"><?= htmlspecialchars($it['name']) ?><?php if (isset($it['size'])) echo " (" . htmlspecialchars($it['size']) . ")"; ?> x<?= htmlspecialchars($it['quantity']) ?></h6>
                                                     <?php if (!empty($it['extras']) || !empty($it['sauces']) || !empty($it['drink']) || !empty($it['special_instructions'])): ?>
-                                                        <ul class="list-unstyled ms-3" style="font-size:0.8rem;">
+                                                        <div class="cart-item-details">
                                                             <?php if (!empty($it['extras'])): ?>
-                                                                <li><strong>Extras:</strong>
-                                                                    <ul class="list-unstyled ms-3">
-                                                                        <?php foreach ($it['extras'] as $ex): ?>
-                                                                            <li><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€=<?= number_format($ex['price'] * $ex['quantity'], 2) ?>€</li>
-                                                                        <?php endforeach; ?>
-                                                                    </ul>
-                                                                </li>
+                                                                <div class="mb-1"><strong>Extras:</strong>
+                                                                    <?php foreach ($it['extras'] as $ex): ?>
+                                                                        <span class="d-block"><?= htmlspecialchars($ex['name']) ?> x<?= htmlspecialchars($ex['quantity']) ?> @ <?= number_format($ex['price'], 2) ?>€</span>
+                                                                    <?php endforeach; ?>
+                                                                </div>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['sauces'])): ?>
-                                                                <li><strong>Sauces:</strong>
-                                                                    <ul class="list-unstyled ms-3">
-                                                                        <?php foreach ($it['sauces'] as $sx): ?>
-                                                                            <li><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€=<?= number_format($sx['price'] * $sx['quantity'], 2) ?>€</li>
-                                                                        <?php endforeach; ?>
-                                                                    </ul>
-                                                                </li>
+                                                                <div class="mb-1"><strong>Sauces:</strong>
+                                                                    <?php foreach ($it['sauces'] as $sx): ?>
+                                                                        <span class="d-block"><?= htmlspecialchars($sx['name']) ?> x<?= htmlspecialchars($sx['quantity']) ?> @ <?= number_format($sx['price'], 2) ?>€</span>
+                                                                    <?php endforeach; ?>
+                                                                </div>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['drink'])): ?>
-                                                                <li><strong>Drink:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</li>
+                                                                <div class="mb-1"><strong>Drink:</strong> <?= htmlspecialchars($it['drink']['name']) ?> (+<?= number_format($it['drink']['price'], 2) ?>€)</div>
                                                             <?php endif; ?>
                                                             <?php if (!empty($it['special_instructions'])): ?>
-                                                                <li><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></li>
+                                                                <div class="mb-1"><strong>Instructions:</strong> <?= htmlspecialchars($it['special_instructions']) ?></div>
                                                             <?php endif; ?>
-                                                        </ul>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </div>
-                                                <div class="text-end">
-                                                    <strong><?= number_format($it['total_price'], 2) ?>€</strong>
-                                                    <div class="mt-2 d-flex flex-column gap-1">
-                                                        <form action="index.php" method="POST">
+                                                <div class="text-end ms-3">
+                                                    <div class="cart-item-price mb-2"><?= number_format($it['total_price'], 2) ?>€</div>
+                                                    <div class="d-flex flex-column gap-1">
+                                                        <form action="index.php" method="POST" class="d-inline">
                                                             <input type="hidden" name="remove" value="<?= $i ?>">
                                                             <button type="submit" class="btn btn-sm btn-danger" title="Remove Item" data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Remove Item"><i class="bi bi-trash"></i></button>
                                                         </form>
@@ -1513,35 +1916,48 @@ try {
                                                     </div>
                                                 </div>
                                             </div>
-                                        </li>
+                                        </div>
                                     <?php endforeach; ?>
-                                </ul>
+                                </div>
                                 <?php if (!empty($_SESSION['applied_coupon']) && $coupon_discount > 0): ?>
-                                    <div class="alert alert-info d-flex justify-content-between align-items-center mb-4 p-2" role="alert">
+                                    <div class="alert alert-info d-flex justify-content-between align-items-center mb-4" role="alert">
                                         <span>Coupon (<?= htmlspecialchars($_SESSION['applied_coupon']['code']) ?>)</span><span>-<?= number_format($coupon_discount, 2) ?>€</span>
                                     </div>
                                 <?php endif; ?>
                                 <div class="mb-4">
-                                    <p class="mb-1"><strong>Subtotal:</strong> <?= number_format($cart_total_with_tip, 2) ?> €</p>
-                                    <hr class="my-2">
-                                    <p class="mb-1"><strong>Delivery Zone Price:</strong> <?= number_format($delivery_zone_price, 2) ?> €</p>
-                                    <hr class="my-2">
-                                    <p class="mb-1"><strong>Total:</strong> <?= number_format($total_with_zone_price, 2) ?> €</p>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Subtotal:</span>
+                                        <span class="fw-bold"><?= number_format($cart_total_with_tip, 2) ?>€</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Delivery:</span>
+                                        <span class="fw-bold"><?= number_format($delivery_zone_price, 2) ?>€</span>
+                                    </div>
+                                    <hr class="my-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="fw-bold">Total:</span>
+                                        <span class="fw-bold fs-5"><?= number_format($total_with_zone_price, 2) ?>€</span>
+                                    </div>
                                 </div>
                                 <form method="POST" action="index.php" class="mb-4">
                                     <div class="input-group">
-                                        <input type="text" name="coupon_code" class="form-control form-control-sm" placeholder="Enter coupon code">
-                                        <button type="submit" name="apply_coupon" class="btn btn-outline-primary btn-sm">Apply</button>
+                                        <input type="text" name="coupon_code" class="form-control" placeholder="Enter coupon code">
+                                        <button type="submit" name="apply_coupon" class="btn btn-outline-primary">Apply</button>
                                     </div>
                                     <?php if (isset($_GET['coupon_error'])): ?>
-                                        <div class="alert alert-danger mt-2 p-2 text-center small" role="alert"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
+                                        <div class="alert alert-danger mt-2 text-center small" role="alert"><?= htmlspecialchars($_GET['coupon_error']) ?></div>
                                     <?php elseif (isset($_GET['coupon']) && $_GET['coupon'] === 'applied'): ?>
-                                        <div class="alert alert-success mt-2 p-2 text-center small" role="alert">Coupon applied!</div>
+                                        <div class="alert alert-success mt-2 text-center small" role="alert">Coupon applied!</div>
                                     <?php endif; ?>
                                 </form>
-                                <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>><i class="bi bi-bag-check-fill me-2"></i> Checkout</button>
+                                <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#checkoutModal" <?= ($is_closed ? 'disabled' : '') ?>>
+                                    <i class="bi bi-bag-check-fill me-2"></i> Checkout
+                                </button>
                             <?php else: ?>
-                                <p class="text-center text-muted">Your cart is empty.</p>
+                                <div class="text-center py-4">
+                                    <i class="bi bi-cart-x fs-1 text-muted mb-3"></i>
+                                    <p class="text-muted">Your cart is empty.</p>
+                                </div>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -1557,34 +1973,164 @@ try {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://www.paypal.com/sdk/js?client-id=AfbPMlmPT4z37DRzH886cPd1AggGZjz-L_LnVJxx_Odv7AB82AQ9CIz8P_s-5cjgLf-NDgpng0NLAiWr&currency=EUR"></script>
     <script>
-        function showBootstrapAlert(m, t = 'info') {
-            let a = document.getElementById('alert_placeholder');
-            if (!a) {
-                let c = document.createElement('div');
-                c.id = 'alert_placeholder';
-                document.body.prepend(c);
-                a = c;
-            }
-            let w = document.createElement('div');
-            w.innerHTML = `<div class="alert alert-${t} alert-dismissible fade show" role="alert">${m}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
-            a.append(w);
+        // Enhanced alert system with shadcn styling
+        function showBootstrapAlert(message, type = 'info') {
+            const alertPlaceholder = document.getElementById('alert_placeholder') || createAlertPlaceholder();
+            const alertElement = document.createElement('div');
+            
+            const alertClasses = {
+                'success': 'alert-success',
+                'danger': 'alert-danger',
+                'warning': 'alert-warning',
+                'info': 'alert-info'
+            };
+            
+            alertElement.innerHTML = `
+                <div class="alert ${alertClasses[type] || alertClasses.info} alert-dismissible fade show slide-up" role="alert">
+                    <div class="d-flex align-items-center">
+                        <i class="bi ${getAlertIcon(type)} me-2"></i>
+                        <span>${message}</span>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            alertPlaceholder.appendChild(alertElement);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                if (alertElement.parentNode) {
+                    alertElement.querySelector('.btn-close').click();
+                }
+            }, 5000);
         }
+        
+        function createAlertPlaceholder() {
+            const placeholder = document.createElement('div');
+            placeholder.id = 'alert_placeholder';
+            placeholder.className = 'position-fixed top-0 start-50 translate-middle-x p-3';
+            placeholder.style.zIndex = '9999';
+            document.body.prepend(placeholder);
+            return placeholder;
+        }
+        
+        function getAlertIcon(type) {
+            const icons = {
+                'success': 'bi-check-circle-fill',
+                'danger': 'bi-exclamation-triangle-fill',
+                'warning': 'bi-exclamation-triangle-fill',
+                'info': 'bi-info-circle-fill'
+            };
+            return icons[type] || icons.info;
+        }
+        
+        // Enhanced loading animation
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+            }
+        }
+        
+        // Product card hover effects
+        function initializeProductCards() {
+            const productCards = document.querySelectorAll('.product-card');
+            productCards.forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.1}s`;
+                
+                // Add hover sound effect (optional)
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-4px)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+        }
+        
+        // Enhanced cart interactions
+        function initializeCartInteractions() {
+            const cartButtons = document.querySelectorAll('.btn-add-cart');
+            cartButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Add click animation
+                    this.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                    }, 150);
+                });
+            });
+        }
+        
+        // Smooth scroll to top
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+        
+        // Initialize everything when DOM is loaded
         $(function() {
-            $('#loading-overlay').fadeOut('slow');
-            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>showBootstrapAlert("Item added to cart.", "success");
-        <?php endif; ?>
-        <?php if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>showBootstrapAlert("Item removed from cart.", "warning");
-        <?php endif; ?>
-        <?php if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>showBootstrapAlert("Cart updated.", "info");
-        <?php endif; ?>
-        <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>showBootstrapAlert("Order placed successfully.", "success");
-        <?php endif; ?>
-        <?php if (isset($_GET['error'])): ?>showBootstrapAlert("Error: <?= htmlspecialchars($_GET['error']) ?>", "danger");
-        <?php endif; ?>
-        <?php if (isset($_GET['empty_cart']) && $_GET['empty_cart'] == 1): ?>showBootstrapAlert("Cart is empty.", "warning");
-        <?php endif; ?>
-        <?php if (isset($_GET['out_of_zone']) && $_GET['out_of_zone'] == 1): ?>showBootstrapAlert("Your location is out of the delivery zones.", "danger");
-        <?php endif; ?>
+            // Hide loading overlay with animation
+            setTimeout(hideLoadingOverlay, 500);
+            
+            // Initialize components
+            initializeProductCards();
+            initializeCartInteractions();
+            
+            // Show alerts with enhanced styling
+            <?php if (isset($_GET['added']) && $_GET['added'] == 1): ?>
+                showBootstrapAlert("Item added to cart successfully!", "success");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['removed']) && $_GET['removed'] == 1): ?>
+                showBootstrapAlert("Item removed from cart.", "warning");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
+                showBootstrapAlert("Cart updated successfully.", "info");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['order']) && $_GET['order'] === 'success'): ?>
+                showBootstrapAlert("Order placed successfully! Thank you for your order.", "success");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['error'])): ?>
+                showBootstrapAlert("Error: <?= htmlspecialchars($_GET['error']) ?>", "danger");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['empty_cart']) && $_GET['empty_cart'] == 1): ?>
+                showBootstrapAlert("Your cart is empty. Add some items to get started!", "warning");
+            <?php endif; ?>
+            
+            <?php if (isset($_GET['out_of_zone']) && $_GET['out_of_zone'] == 1): ?>
+                showBootstrapAlert("Your location is outside our delivery zones. Please select a different address.", "danger");
+            <?php endif; ?>
+            
+            // Add scroll to top button
+            const scrollButton = document.createElement('button');
+            scrollButton.innerHTML = '<i class="bi bi-arrow-up"></i>';
+            scrollButton.className = 'btn btn-primary position-fixed bottom-0 end-0 m-3 rounded-circle';
+            scrollButton.style.width = '50px';
+            scrollButton.style.height = '50px';
+            scrollButton.style.display = 'none';
+            scrollButton.style.zIndex = '1000';
+            scrollButton.addEventListener('click', scrollToTop);
+            document.body.appendChild(scrollButton);
+            
+            // Show/hide scroll button based on scroll position
+            window.addEventListener('scroll', function() {
+                if (window.pageYOffset > 300) {
+                    scrollButton.style.display = 'block';
+                } else {
+                    scrollButton.style.display = 'none';
+                }
+            });
         });
         document.addEventListener('DOMContentLoaded', function() {
             window.lastChangedInput = {

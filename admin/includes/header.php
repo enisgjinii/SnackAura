@@ -324,18 +324,20 @@ try {
             flex-direction: column;
         }
 
-        /* Clean Navbar */
+        /* Shadcn-inspired Compact Admin Navbar */
         .navbar {
-            background: var(--navbar-bg);
-            border-bottom: 1px solid var(--border-color);
-            padding: 1rem 2rem;
-            box-shadow: var(--shadow-sm);
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0.75rem 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         .navbar .container-fluid {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
         /* Navbar Left Section */
@@ -349,7 +351,8 @@ try {
             font-size: 1.125rem;
             font-weight: 600;
             color: #0f172a;
-            margin-left: 0.5rem;
+            margin-left: 0.75rem;
+            letter-spacing: -0.025em;
         }
 
         /* Navbar Right Section */
@@ -364,57 +367,44 @@ try {
             align-items: center;
         }
 
-        /* Icon Button */
-        .btn-icon {
-            background: var(--toggle-btn-bg);
+        /* Shadcn-inspired User Button */
+        .btn-user {
+            background: #ffffff;
             color: #64748b;
-            border: 1px solid var(--border-color);
-            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem 0.75rem;
             cursor: pointer;
             border-radius: 6px;
-            transition: all 0.15s ease;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn-icon:hover {
-            background: var(--toggle-btn-hover-bg);
-            color: #334155;
-        }
-
-        /* User Button */
-        .btn-user {
-            background: var(--toggle-btn-bg);
-            color: #64748b;
-            border: 1px solid var(--border-color);
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            border-radius: 8px;
             transition: all 0.15s ease;
             display: flex;
             align-items: center;
             gap: 0.75rem;
             font-weight: 500;
             min-width: 180px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
         .btn-user:hover {
-            background: var(--toggle-btn-hover-bg);
+            background: #f8fafc;
             color: #334155;
+            border-color: #cbd5e1;
+        }
+
+        .btn-user:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
         }
 
         .user-avatar {
             width: 32px;
             height: 32px;
-            background: #e2e8f0;
+            background: #f1f5f9;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #64748b;
+            border: 1px solid #e2e8f0;
         }
 
         .user-info {
@@ -426,7 +416,7 @@ try {
 
         .user-name {
             font-size: 0.875rem;
-            font-weight: 600;
+            font-weight: 500;
             color: #0f172a;
             line-height: 1.2;
         }
@@ -440,50 +430,79 @@ try {
         .btn-user .fas.fa-chevron-down {
             font-size: 0.75rem;
             color: #94a3b8;
+            transition: transform 0.15s ease;
         }
 
-        /* Clean Toggle Button */
+        .btn-user:hover .fas.fa-chevron-down {
+            transform: rotate(180deg);
+        }
+
+        /* Shadcn-inspired Toggle Button */
         #sidebarCollapse {
-            background: var(--toggle-btn-bg);
+            background: #ffffff;
             color: #64748b;
-            border: 1px solid var(--border-color);
+            border: 1px solid #e2e8f0;
             padding: 0.5rem;
             cursor: pointer;
             border-radius: 6px;
             transition: all 0.15s ease;
             font-weight: 500;
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
         #sidebarCollapse:hover {
-            background: var(--toggle-btn-hover-bg);
+            background: #f8fafc;
             color: #334155;
+            border-color: #cbd5e1;
         }
 
-        /* Clean Dropdown */
+        #sidebarCollapse:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+
+        /* Shadcn-inspired Dropdown */
         .dropdown-menu {
             min-width: 200px;
-            background: var(--dropdown-bg);
-            border: 1px solid var(--border-color);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             padding: 0.5rem;
         }
 
         .dropdown-item {
             border-radius: 6px;
             margin: 0.125rem 0;
-            transition: background-color 0.15s ease;
+            transition: all 0.15s ease;
             font-size: 0.875rem;
             padding: 0.5rem 0.75rem;
+            color: #64748b;
+            font-weight: 500;
         }
 
         .dropdown-item:hover {
-            background: var(--dropdown-item-hover-bg);
+            background: #f8fafc;
+            color: #334155;
+        }
+
+        .dropdown-item i {
+            color: #94a3b8;
+            transition: color 0.15s ease;
+        }
+
+        .dropdown-item:hover i {
+            color: #64748b;
+        }
+
+        .dropdown-divider {
+            border-color: #e2e8f0;
+            margin: 0.375rem 0;
         }
 
         /* Clean Button Styling */
@@ -589,13 +608,6 @@ try {
                     </div>
                     
                     <div class="navbar-right">
-                        <!-- Notifications -->
-                        <div class="navbar-item">
-                            <button class="btn btn-icon" aria-label="Notifications">
-                                <i class="fas fa-bell"></i>
-                            </button>
-                        </div>
-                        
                         <!-- User Dropdown Menu -->
                         <div class="dropdown">
                             <button class="btn btn-user dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">

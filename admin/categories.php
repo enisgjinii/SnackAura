@@ -1,27 +1,72 @@
 <?php
+// categories.php
+
 ob_start();
 require_once 'includes/db_connect.php';
 require_once 'includes/header.php';
-if (session_status() == PHP_SESSION_NONE) session_start();
-$action = $_REQUEST['action'] ?? 'view';
-$id = isset($_REQUEST['id']) ? (int) $_REQUEST['id'] : 0;
 
+// Create categories table if it doesn't exist
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `categories` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `name` VARCHAR(100) NOT NULL UNIQUE,
+            `description` TEXT,
+            `image_url` VARCHAR(255),
+            `position` INT DEFAULT 0,
+            `is_active` BOOLEAN DEFAULT TRUE,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+} catch (PDOException $e) {
+    $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Tabelle konnte nicht erstellt werden: ' . htmlspecialchars($e->getMessage())];
+    header('Location: categories.php?action=list');
+    exit();
+}
+
+$action = $_REQUEST['action'] ?? 'list';
+$id     = isset($_REQUEST['id']) ? (int)$_REQUEST['id'] : 0;
+$message = '';
+
+// Function to sanitize inputs
 function sanitizeInput($data)
 {
     return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
 }
 
-function generateCsrfToken()
+// Function to validate category data
+function validateCategory($pdo, $data, $id = 0)
 {
-    if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    return $_SESSION['csrf_token'];
+    $errors = [];
+    $name = sanitizeInput($data['name'] ?? '');
+    $description = sanitizeInput($data['description'] ?? '');
+    $is_active = isset($data['is_active']) ? 1 : 0;
+
+    // Required fields
+    if (empty($name)) {
+        $errors[] = 'Der Kategoriename ist erforderlich.';
+    }
+
+    // Name uniqueness
+    if (!empty($name)) {
+        $sql = "SELECT COUNT(*) FROM categories WHERE name = ?";
+        $params = [$name];
+        if ($id > 0) {
+            $sql .= " AND id != ?";
+            $params[] = $id;
+        }
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        if ($stmt->fetchColumn() > 0) {
+            $errors[] = 'Der Kategoriename existiert bereits.';
+        }
+    }
+
+    return [$errors, compact('name', 'description', 'is_active')];
 }
 
-function validateCsrfToken($token)
-{
-    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
-}
-
+// Function to handle image upload
 function handleImageUpload($file, $existingImage = null)
 {
     $image_url = $existingImage ?? '';
@@ -57,295 +102,210 @@ function handleImageUpload($file, $existingImage = null)
     return $image_url;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
-        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Ungültiges CSRF-Token.'];
-        header('Location: categories.php');
-        exit();
+// Handle AJAX requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+    header('Content-Type: application/json');
+    $response = ['status' => 'error', 'message' => 'Unbekannter Fehler'];
+
+    if ($_POST['ajax_action'] === 'update_status') {
+        $id = (int)($_POST['id'] ?? 0);
+        $is_active = (int)($_POST['is_active'] ?? 0);
+
+        if ($id > 0) {
+            try {
+                $pdo->beginTransaction();
+                $current_time = date('Y-m-d H:i:s');
+                $status_text = $is_active ? 'aktiviert' : 'deaktiviert';
+                $stmt = $pdo->prepare('UPDATE categories SET is_active = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$is_active, $id]);
+                $pdo->commit();
+                $response = ['status' => 'success', 'message' => "Kategorie erfolgreich $status_text."];
+            } catch (PDOException $e) {
+                $pdo->rollBack();
+                $response = ['status' => 'error', 'message' => 'Datenbankfehler: ' . sanitizeInput($e->getMessage())];
+            }
+        } else {
+            $response = ['status' => 'error', 'message' => 'Ungültige Kategorie-ID'];
+        }
+    } elseif ($_POST['ajax_action'] === 'update_position') {
+        $positions = $_POST['positions'] ?? [];
+        
+        if (!empty($positions)) {
+            try {
+                $pdo->beginTransaction();
+                foreach ($positions as $position => $category_id) {
+                    $stmt = $pdo->prepare('UPDATE categories SET position = ? WHERE id = ?');
+                    $stmt->execute([$position + 1, $category_id]);
+                }
+                $pdo->commit();
+                $response = ['status' => 'success', 'message' => 'Reihenfolge erfolgreich aktualisiert.'];
+            } catch (PDOException $e) {
+                $pdo->rollBack();
+                $response = ['status' => 'error', 'message' => 'Datenbankfehler: ' . sanitizeInput($e->getMessage())];
+            }
+        } else {
+            $response = ['status' => 'error', 'message' => 'Keine Positionen übermittelt'];
+        }
     }
-    if ($action === 'add') {
-        $name = sanitizeInput($_POST['name'] ?? '');
-        $description = sanitizeInput($_POST['description'] ?? '');
+
+    echo json_encode($response);
+    exit;
+}
+
+// Handle Add/Edit form submissions
+if (($action === 'add' || $action === 'edit') && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Retrieve and sanitize form inputs
+    $name = trim($_POST['name'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $is_active = isset($_POST['is_active']) ? 1 : 0;
+
+    // Validate inputs
+    list($errors, $validatedData) = validateCategory($pdo, $_POST, $id);
+
+    if ($errors) {
+        $_SESSION['toast'] = ['type' => 'danger', 'message' => implode('<br>', $errors)];
+        header("Location: categories.php?action=" . ($action === 'add' ? 'add' : 'edit') . ($action === 'edit' ? "&id=$id" : ''));
+        exit();
+    } else {
         try {
-            $image_url = handleImageUpload($_FILES['image_file'] ?? null);
-            if ($name === '') throw new Exception('Der Kategoriename ist erforderlich.');
-            // Automatisch die nächste Position zuweisen
-            $stmt = $pdo->query('SELECT MAX(position) AS max_position FROM categories');
-            $result = $stmt->fetch();
-            $position = $result['max_position'] !== null ? $result['max_position'] + 1 : 1;
-            $stmt = $pdo->prepare('INSERT INTO categories (name, description, image_url, position) VALUES (?, ?, ?, ?)');
-            $stmt->execute([$name, $description, $image_url, $position]);
-            $_SESSION['toast'] = ['type' => 'success', 'message' => 'Kategorie erfolgreich hinzugefügt.'];
-            header('Location: categories.php');
-            exit();
-        } catch (Exception $e) {
-            $_SESSION['toast'] = ['type' => 'danger', 'message' => sanitizeInput($e->getMessage())];
-            header('Location: categories.php');
+            // Handle image upload
+            $image_url = handleImageUpload($_FILES['image_file'] ?? null, $action === 'edit' ? $_POST['current_image'] ?? '' : '');
+
+            // Prepare SQL and parameters based on action
+            if ($action === 'add') {
+                // Get the next position
+                $stmt = $pdo->query('SELECT MAX(position) AS max_position FROM categories');
+                $result = $stmt->fetch();
+                $position = $result['max_position'] !== null ? $result['max_position'] + 1 : 1;
+                
+                $sql = 'INSERT INTO categories (name, description, image_url, is_active, position) VALUES (?, ?, ?, ?, ?)';
+                $params = [
+                    $validatedData['name'],
+                    $validatedData['description'],
+                    $image_url,
+                    $validatedData['is_active'],
+                    $position
+                ];
+            } else { // Edit
+                $sql = 'UPDATE categories SET name = ?, description = ?, image_url = ?, is_active = ?, updated_at = NOW() WHERE id = ?';
+                $params = [
+                    $validatedData['name'],
+                    $validatedData['description'],
+                    $image_url,
+                    $validatedData['is_active'],
+                    $id
+                ];
+            }
+
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $_SESSION['toast'] = ['type' => 'success', 'message' => 'Kategorie erfolgreich ' . ($action === 'add' ? 'hinzugefügt.' : 'aktualisiert.')];
+            header("Location: categories.php?action=list");
             exit();
         } catch (PDOException $e) {
-            if ($e->getCode() === '23000') {
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Kategoriename existiert bereits.'];
-            } else {
-                error_log('Datenbankfehler: ' . $e->getMessage());
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.'];
-            }
-            header('Location: categories.php');
-            exit();
-        }
-    } elseif ($action === 'edit' && $id > 0) {
-        $name = sanitizeInput($_POST['name'] ?? '');
-        $description = sanitizeInput($_POST['description'] ?? '');
-        try {
-            $stmt = $pdo->prepare('SELECT * FROM categories WHERE id = ?');
-            $stmt->execute([$id]);
-            $category = $stmt->fetch();
-            if (!$category) throw new Exception('Kategorie nicht gefunden.');
-            $image_url = handleImageUpload($_FILES['image_file'] ?? null, $category['image_url']);
-            if ($name === '') throw new Exception('Der Kategoriename ist erforderlich.');
-            $stmt = $pdo->prepare('UPDATE categories SET name = ?, description = ?, image_url = ? WHERE id = ?');
-            $stmt->execute([$name, $description, $image_url, $id]);
-            $_SESSION['toast'] = ['type' => 'success', 'message' => 'Kategorie erfolgreich aktualisiert.'];
-            header('Location: categories.php');
-            exit();
-        } catch (Exception $e) {
-            $_SESSION['toast'] = ['type' => 'danger', 'message' => sanitizeInput($e->getMessage())];
-            header('Location: categories.php');
-            exit();
-        } catch (PDOException $e) {
-            if ($e->getCode() === '23000') {
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Der Kategoriename existiert bereits.'];
-            } else {
-                error_log('Datenbankfehler: ' . $e->getMessage());
-                $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.'];
-            }
-            header('Location: categories.php');
-            exit();
-        }
-    } elseif ($action === 'delete' && $id > 0) {
-        try {
-            $stmt = $pdo->prepare('SELECT image_url FROM categories WHERE id = ?');
-            $stmt->execute([$id]);
-            $category = $stmt->fetch();
-            if ($category) {
-                if (!empty($category['image_url']) && file_exists($category['image_url'])) unlink($category['image_url']);
-                $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
-                $stmt->execute([$id]);
-                $_SESSION['toast'] = ['type' => 'success', 'message' => 'Kategorie erfolgreich gelöscht.'];
-                header('Location: categories.php');
-                exit();
-            } else {
-                throw new Exception('Kategorie nicht gefunden.');
-            }
-        } catch (Exception $e) {
-            $_SESSION['toast'] = ['type' => 'danger', 'message' => sanitizeInput($e->getMessage())];
-            header('Location: categories.php');
-            exit();
-        } catch (PDOException $e) {
-            error_log('Datenbankfehler: ' . $e->getMessage());
-            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.'];
-            header('Location: categories.php');
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Verarbeiten der Daten: ' . htmlspecialchars($e->getMessage())];
+            header("Location: categories.php?action=" . ($action === 'add' ? 'add' : 'edit') . ($action === 'edit' ? "&id=$id" : ''));
             exit();
         }
     }
 }
 
-if ($action === 'view') {
-    $stmt = $pdo->prepare('SELECT * FROM categories ORDER BY position ASC');
-    $stmt->execute();
-    $categories = $stmt->fetchAll();
+// Handle category deletion
+if ($action === 'delete' && $id > 0) {
+    try {
+        // Check if category has products
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM products WHERE category_id = ?');
+        $stmt->execute([$id]);
+        if ($stmt->fetchColumn() > 0) {
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Kategorie kann nicht gelöscht werden, da sie Produkte enthält.'];
+            header("Location: categories.php?action=list");
+            exit();
+        }
+
+        // Get image path before deletion
+        $stmt = $pdo->prepare('SELECT image_url FROM categories WHERE id = ?');
+        $stmt->execute([$id]);
+        $category = $stmt->fetch();
+
+        // Delete category
+        $stmt = $pdo->prepare('DELETE FROM categories WHERE id = ?');
+        $stmt->execute([$id]);
+
+        // Delete image file if exists
+        if ($category && !empty($category['image_url']) && file_exists($category['image_url'])) {
+            unlink($category['image_url']);
+        }
+
+        $_SESSION['toast'] = ['type' => 'success', 'message' => 'Kategorie erfolgreich gelöscht.'];
+        header("Location: categories.php?action=list");
+        exit();
+    } catch (PDOException $e) {
+        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Fehler beim Löschen der Kategorie: ' . htmlspecialchars($e->getMessage())];
+        header("Location: categories.php?action=list");
+        exit();
+    }
+}
+
+// Fetch categories for listing with optional filters
+function getCategories($pdo, $filters = [])
+{
+    try {
+        $query = 'SELECT * FROM categories';
+        $conditions = [];
+        $params = [];
+
+        if (isset($filters['status']) && $filters['status'] !== '') {
+            $conditions[] = 'is_active = ?';
+            $params[] = (int)$filters['status'];
+        }
+
+        if ($conditions) {
+            $query .= ' WHERE ' . implode(' AND ', $conditions);
+        }
+
+        $query .= ' ORDER BY position ASC, name ASC';
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+// Fetch categories for listing
+if ($action === 'list') {
+    $filters = [];
+    if (isset($_GET['filter_status'])) {
+        $filters['status'] = sanitizeInput($_GET['filter_status']);
+    }
+
+    $categories = getCategories($pdo, $filters);
+}
+
+// For edit action, fetch category data
+if ($action === 'edit' && $id > 0) {
+    try {
+        $stmt = $pdo->prepare('SELECT * FROM categories WHERE id = ?');
+        $stmt->execute([$id]);
+        $category = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$category) {
+            $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Category not found.'];
+            header("Location: categories.php?action=list");
+            exit();
+        }
+    } catch (PDOException $e) {
+        $_SESSION['toast'] = ['type' => 'danger', 'message' => 'Error: ' . sanitizeInput($e->getMessage())];
+        header("Location: categories.php?action=list");
+        exit();
+    }
 }
 ?>
 
-<!-- Categories Content -->
-<div class="categories-content">
-    <!-- Header Section -->
-    <div class="page-header">
-        <div class="header-content">
-            <div class="header-text">
-                <h1 class="page-title">Categories</h1>
-                <p class="page-subtitle">Manage your product categories and organize your inventory</p>
-            </div>
-            <div class="header-actions">
-                <button class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas">
-                    <i class="fas fa-plus"></i> Add Category
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Categories Table -->
-    <div class="table-section">
-        <div class="table-container">
-            <table id="categoriesTable" class="data-table">
-                <thead>
-                    <tr>
-                        <th width="50">Sort</th>
-                        <th width="80">ID</th>
-                        <th width="80">Image</th>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th width="120">Created</th>
-                        <th width="120">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="sortable">
-                    <?php if (!empty($categories)): ?>
-                        <?php foreach ($categories as $category): ?>
-                            <tr data-id="<?= sanitizeInput($category['id']) ?>">
-                                <td class="sort-handle">
-                                    <i class="fas fa-grip-vertical"></i>
-                                </td>
-                                <td class="text-center"><?= sanitizeInput($category['id']) ?></td>
-                                <td class="image-cell">
-                                    <?php if (!empty($category['image_url']) && file_exists($category['image_url'])): ?>
-                                        <img src="<?= sanitizeInput($category['image_url']) ?>" alt="Category Image" class="category-image">
-                                    <?php else: ?>
-                                        <div class="placeholder-image">
-                                            <i class="fas fa-image"></i>
-                                        </div>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="name-cell">
-                                    <span class="category-name"><?= sanitizeInput($category['name']) ?></span>
-                                </td>
-                                <td class="description-cell">
-                                    <span class="category-description"><?= sanitizeInput($category['description']) ?></span>
-                                </td>
-                                <td class="date-cell">
-                                    <?= date('M d, Y', strtotime($category['created_at'])) ?>
-                                </td>
-                                <td class="actions-cell">
-                                    <div class="action-buttons">
-                                        <button class="btn btn-sm btn-edit edit-category-btn"
-                                            data-id="<?= $category['id'] ?>"
-                                            data-name="<?= sanitizeInput($category['name']) ?>"
-                                            data-description="<?= sanitizeInput($category['description']) ?>"
-                                            data-image="<?= sanitizeInput($category['image_url']) ?>"
-                                            data-bs-toggle="offcanvas"
-                                            data-bs-target="#editCategoryOffcanvas"
-                                            title="Edit Category">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-delete delete-category-btn"
-                                            data-id="<?= $category['id'] ?>"
-                                            data-name="<?= sanitizeInput($category['name']) ?>"
-                                            title="Delete Category">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="7" class="no-data">
-                                <div class="empty-state">
-                                    <i class="fas fa-folder-open"></i>
-                                    <h3>No Categories Found</h3>
-                                    <p>Start by adding your first category to organize your products.</p>
-                                    <button class="btn btn-primary" data-bs-toggle="offcanvas" data-bs-target="#addCategoryOffcanvas">
-                                        <i class="fas fa-plus"></i> Add Category
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Add Category Offcanvas -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="addCategoryOffcanvas" aria-labelledby="addCategoryOffcanvasLabel">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="addCategoryOffcanvasLabel">Add New Category</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div>
-        <div class="offcanvas-body">
-            <form method="POST" action="categories.php?action=add" enctype="multipart/form-data" class="category-form">
-                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken(); ?>">
-                
-                <div class="form-group">
-                    <label for="add-name" class="form-label">Category Name <span class="required">*</span></label>
-                    <input type="text" class="form-control" id="add-name" name="name" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="add-description" class="form-label">Description</label>
-                    <textarea class="form-control" id="add-description" name="description" rows="3"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="add-image" class="form-label">Category Image</label>
-                    <input type="file" class="form-control" id="add-image" name="image_file" accept="image/*">
-                    <small class="form-text">Max size: 2MB. Supported formats: JPG, PNG, GIF</small>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Category
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Edit Category Offcanvas -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="editCategoryOffcanvas" aria-labelledby="editCategoryOffcanvasLabel">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="editCategoryOffcanvasLabel">Edit Category</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div>
-        <div class="offcanvas-body">
-            <form method="POST" action="categories.php?action=edit" enctype="multipart/form-data" class="category-form">
-                <input type="hidden" name="csrf_token" value="<?= generateCsrfToken(); ?>">
-                <input type="hidden" name="id" id="edit-id" value="">
-                
-                <div class="form-group">
-                    <label for="edit-name" class="form-label">Category Name <span class="required">*</span></label>
-                    <input type="text" class="form-control" id="edit-name" name="name" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="edit-description" class="form-label">Description</label>
-                    <textarea class="form-control" id="edit-description" name="description" rows="3"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="edit-image" class="form-label">Change Image</label>
-                    <input type="file" class="form-control" id="edit-image" name="image_file" accept="image/*">
-                    <small class="form-text">Max size: 2MB. Supported formats: JPG, PNG, GIF</small>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Current Image</label>
-                    <div class="current-image">
-                        <img src="" alt="Current Image" id="current-image" class="preview-image">
-                    </div>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Update Category
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Toast Notifications -->
-    <div class="toast-container">
-        <div id="toast-container"></div>
-    </div>
-</div>
-
 <style>
-    /* Categories Page Styles */
+    /* Categories Page - Match Products UI */
     .categories-content {
         padding: 2rem;
-        background: var(--content-bg);
+        background: var(--content-bg, #f8fafc);
         min-height: 100vh;
     }
 
@@ -365,6 +325,10 @@ if ($action === 'view') {
         border: 1px solid var(--border-color);
     }
 
+    .header-text {
+        flex: 1;
+    }
+
     .page-title {
         font-size: 1.875rem;
         font-weight: 700;
@@ -381,6 +345,30 @@ if ($action === 'view') {
     .header-actions {
         display: flex;
         gap: 1rem;
+    }
+
+    /* Alert Container */
+    .alert-container {
+        margin-bottom: 2rem;
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid;
+        margin-bottom: 1rem;
+    }
+
+    .alert-success {
+        background: #d1fae5;
+        border-color: #10b981;
+        color: #065f46;
+    }
+
+    .alert-danger {
+        background: #fee2e2;
+        border-color: #ef4444;
+        color: #991b1b;
     }
 
     /* Table Section */
@@ -422,18 +410,7 @@ if ($action === 'view') {
         background: #f8fafc;
     }
 
-    /* Sort Handle */
-    .sort-handle {
-        text-align: center;
-        color: #9ca3af;
-        cursor: move;
-    }
-
-    .sort-handle i {
-        font-size: 1rem;
-    }
-
-    /* Image Cell */
+    /* Table Cells */
     .image-cell {
         text-align: center;
     }
@@ -458,21 +435,42 @@ if ($action === 'view') {
         border: 1px solid var(--border-color);
     }
 
-    /* Name and Description */
-    .name-cell .category-name {
+    .category-name {
         font-weight: 600;
         color: #0f172a;
     }
 
-    .description-cell .category-description {
+    .category-description {
         color: #64748b;
         font-size: 0.875rem;
-        line-height: 1.4;
     }
 
-    .date-cell {
-        font-size: 0.875rem;
-        color: #64748b;
+    /* Badges */
+    .badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-left: 0.5rem;
+    }
+
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+
+    .status-active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .status-inactive {
+        background: #fee2e2;
+        color: #991b1b;
     }
 
     /* Action Buttons */
@@ -514,6 +512,38 @@ if ($action === 'view') {
         color: white;
     }
 
+    .btn-toggle {
+        background: #10b981;
+        color: white;
+        border: none;
+        padding: 0.5rem;
+        border-radius: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .btn-toggle:hover {
+        background: #059669;
+        color: white;
+    }
+
+    .btn-toggle.inactive {
+        background: #6b7280;
+    }
+
+    .btn-toggle.inactive:hover {
+        background: #4b5563;
+    }
+
+    .sort-handle {
+        cursor: move;
+        color: #9ca3af;
+        text-align: center;
+    }
+
+    .sort-handle:hover {
+        color: #6b7280;
+    }
+
     /* Empty State */
     .no-data {
         text-align: center;
@@ -543,42 +573,69 @@ if ($action === 'view') {
         margin: 0;
     }
 
-    /* Offcanvas Styles */
-    .offcanvas {
-        border-left: 1px solid var(--border-color);
+    /* Form Section */
+    .form-section {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
     }
 
-    .offcanvas-header {
-        border-bottom: 1px solid var(--border-color);
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    /* Form Cards */
+    .form-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+    }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         padding: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        background: #f8fafc;
     }
 
-    .offcanvas-title {
+    .card-header h3 {
+        margin: 0;
+        font-size: 1.125rem;
         font-weight: 600;
         color: #0f172a;
     }
 
-    .offcanvas-body {
+    .card-header i {
+        color: #64748b;
+        font-size: 1.25rem;
+    }
+
+    .card-content {
         padding: 1.5rem;
     }
 
-    /* Form Styles */
-    .category-form {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
+    /* Form Groups */
+    .form-group {
+        margin-bottom: 1.5rem;
     }
 
-    .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+    .form-group:last-child {
+        margin-bottom: 0;
     }
 
     .form-label {
+        display: block;
         font-weight: 500;
         color: #374151;
         font-size: 0.875rem;
+        margin-bottom: 0.5rem;
     }
 
     .required {
@@ -586,6 +643,7 @@ if ($action === 'view') {
     }
 
     .form-control {
+        width: 100%;
         padding: 0.75rem;
         border: 1px solid var(--border-color);
         border-radius: 6px;
@@ -602,43 +660,90 @@ if ($action === 'view') {
     .form-text {
         font-size: 0.75rem;
         color: #64748b;
+        margin-top: 0.25rem;
     }
 
+    /* Image Preview */
+    .image-preview {
+        margin-top: 1rem;
+    }
+
+    .image-preview img {
+        max-width: 200px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+    }
+
+    /* Form Actions */
     .form-actions {
         display: flex;
         gap: 1rem;
         justify-content: flex-end;
-        padding-top: 1rem;
-        border-top: 1px solid var(--border-color);
-    }
-
-    /* Current Image Preview */
-    .current-image {
-        display: flex;
-        justify-content: center;
-    }
-
-    .preview-image {
-        width: 120px;
-        height: 120px;
-        border-radius: 8px;
-        object-fit: cover;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
         border: 1px solid var(--border-color);
     }
 
-    /* Toast Container */
-    .toast-container {
-        position: fixed;
-        bottom: 2rem;
-        right: 2rem;
-        z-index: 1100;
+    /* Buttons */
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
-    /* Sortable Placeholder */
-    .sortable-placeholder {
-        background: #f8fafc;
-        border: 2px dashed #cbd5e1;
-        height: 80px;
+    .btn-primary {
+        background: #3b82f6;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #2563eb;
+        color: white;
+    }
+
+    .btn-secondary {
+        background: #6b7280;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #4b5563;
+        color: white;
+    }
+
+    .btn-success {
+        background: #10b981;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background: #059669;
+        color: white;
+    }
+
+    .btn-danger {
+        background: #ef4444;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #dc2626;
+        color: white;
+    }
+
+    .btn-sm {
+        padding: 0.5rem;
+        font-size: 0.75rem;
     }
 
     /* Responsive */
@@ -657,6 +762,10 @@ if ($action === 'view') {
             font-size: 1.5rem;
         }
 
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+
         .action-buttons {
             flex-direction: column;
         }
@@ -668,151 +777,309 @@ if ($action === 'view') {
     }
 </style>
 
+<!-- Categories Content -->
+<div class="categories-content">
+    <?php if ($action === 'list'): ?>
+        <!-- Categories List View -->
+        <div class="page-header">
+            <div class="header-content">
+                <div class="header-text">
+                    <h1 class="page-title">Categories</h1>
+                    <p class="page-subtitle">Manage your product categories and organize your inventory</p>
+                </div>
+                <div class="header-actions">
+                    <a href="categories.php?action=add" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Category
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Table -->
+        <div class="table-section">
+            <div class="table-container">
+                <table id="categoriesTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th width="50">Sort</th>
+                            <th width="80">Image</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th width="150">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sortable">
+                        <?php if (!empty($categories)): ?>
+                            <?php foreach ($categories as $category): ?>
+                                <tr data-id="<?= sanitizeInput($category['id']) ?>">
+                                    <td class="sort-handle">
+                                        <i class="fas fa-grip-vertical"></i>
+                                    </td>
+                                    <td class="image-cell">
+                                        <?php if (!empty($category['image_url']) && file_exists($category['image_url'])): ?>
+                                            <img src="<?= sanitizeInput($category['image_url']) ?>" alt="Category Image" class="category-image">
+                                        <?php else: ?>
+                                            <div class="placeholder-image">
+                                                <i class="fas fa-image"></i>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="category-name"><?= sanitizeInput($category['name']) ?></span>
+                                    </td>
+                                    <td>
+                                        <span class="category-description"><?= sanitizeInput($category['description']) ?></span>
+                                    </td>
+                                    <td>
+                                        <span class="status-badge status-<?= $category['is_active'] ? 'active' : 'inactive' ?>">
+                                            <?= $category['is_active'] ? 'Active' : 'Inactive' ?>
+                                        </span>
+                                    </td>
+                                    <td><?= date('M j, Y', strtotime($category['created_at'])) ?></td>
+                                    <td class="actions-cell">
+                                        <div class="action-buttons">
+                                            <a href="categories.php?action=edit&id=<?= $category['id'] ?>" class="btn btn-sm btn-edit" title="Edit Category">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button class="btn btn-sm btn-toggle <?= $category['is_active'] ? '' : 'inactive' ?>" 
+                                                    title="<?= $category['is_active'] ? 'Deactivate' : 'Activate' ?> Category" 
+                                                    data-id="<?= $category['id'] ?>" 
+                                                    data-status="<?= $category['is_active'] ?>">
+                                                <i class="fas fa-<?= $category['is_active'] ? 'eye-slash' : 'eye' ?>"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-delete delete-category-btn" 
+                                                    title="Delete Category" 
+                                                    data-id="<?= $category['id'] ?>" 
+                                                    data-name="<?= sanitizeInput($category['name']) ?>">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="7" class="no-data">
+                                    <div class="empty-state">
+                                        <i class="fas fa-folder-open"></i>
+                                        <h3>No Categories Found</h3>
+                                        <p>Start by adding your first category to organize your products.</p>
+                                        <a href="categories.php?action=add" class="btn btn-primary">
+                                            <i class="fas fa-plus"></i> Add Category
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    <?php elseif ($action === 'add' || $action === 'edit'): ?>
+        <!-- Add/Edit Category Form -->
+        <div class="page-header">
+            <div class="header-content">
+                <div class="header-text">
+                    <h1 class="page-title"><?= $action === 'edit' ? 'Edit Category' : 'Add New Category' ?></h1>
+                    <p class="page-subtitle"><?= $action === 'edit' ? 'Update category information' : 'Create a new category for your products' ?></p>
+                </div>
+                <div class="header-actions">
+                    <a href="categories.php" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Categories
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <?php if ($message): ?>
+            <div class="alert-container">
+                <?= $message ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="form-section">
+            <form method="POST" enctype="multipart/form-data" action="categories.php?action=<?= $action ?><?= $action === 'edit' ? '&id=' . $id : '' ?>" class="category-form">
+                <div class="form-grid">
+                    <!-- Basic Information -->
+                    <div class="form-card">
+                        <div class="card-header">
+                            <h3>Basic Information</h3>
+                            <i class="fas fa-info-circle"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="form-group">
+                                <label for="name" class="form-label">Category Name <span class="required">*</span></label>
+                                <input type="text" id="name" name="name" class="form-control" required 
+                                       value="<?= $action === 'edit' ? sanitizeInput($category['name']) : '' ?>" 
+                                       placeholder="e.g., Main Dishes">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea id="description" name="description" class="form-control" rows="3" 
+                                          placeholder="Category description..."><?= $action === 'edit' ? sanitizeInput($category['description']) : '' ?></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" name="is_active" value="1" <?= ($action === 'edit' && $category['is_active']) ? 'checked' : 'checked' ?>>
+                                    Active
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Image -->
+                    <div class="form-card">
+                        <div class="card-header">
+                            <h3>Category Image</h3>
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="form-group">
+                                <label for="image_file" class="form-label">Upload Image</label>
+                                <input type="file" id="image_file" name="image_file" class="form-control" accept="image/*">
+                                <small class="form-text">Max size: 2MB. Supported formats: JPG, PNG, GIF</small>
+                            </div>
+                            
+                            <?php if ($action === 'edit' && !empty($category['image_url'])): ?>
+                                <div class="form-group">
+                                    <label class="form-label">Current Image</label>
+                                    <div class="image-preview">
+                                        <img src="<?= sanitizeInput($category['image_url']) ?>" alt="Current Image">
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> <?= $action === 'edit' ? 'Update Category' : 'Save Category' ?>
+                    </button>
+                    <a href="categories.php" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    <?php endif; ?>
+</div>
+
 <script>
-    $(document).ready(function() {
+$(document).ready(function() {
+    <?php if ($action === 'list'): ?>
         // Initialize DataTable
         $('#categoriesTable').DataTable({
-            "paging": true,
-            "searching": true,
-            "info": true,
-            "order": [[5, "desc"]],
-            "dom": '<"row mb-3"' +
-                '<"col-12 d-flex justify-content-between align-items-center"lBf>' +
-                '>' +
-                'rt' +
-                '<"row mt-3"' +
-                '<"col-sm-12 col-md-6 d-flex justify-content-start"i>' +
-                '<"col-sm-12 col-md-6 d-flex justify-content-end"p>' +
-                '>',
-            "buttons": [{
-                    text: '<i class="fas fa-plus"></i> Add Category',
-                    className: 'btn btn-primary btn-sm',
-                    action: function() {
-                        $('#addCategoryOffcanvas').offcanvas('show');
-                    }
-                },
-                {
-                    extend: 'csv',
-                    text: '<i class="fas fa-file-csv"></i> Export CSV',
-                    className: 'btn btn-secondary btn-sm'
-                },
-                {
-                    extend: 'pdf',
-                    text: '<i class="fas fa-file-pdf"></i> Export PDF',
-                    className: 'btn btn-secondary btn-sm'
-                }
-            ],
-            "language": {
-                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/de-DE.json'
+            responsive: true,
+            order: [[2, 'asc']], // Sort by name by default
+            pageLength: 25,
+            language: {
+                search: "Search categories:",
+                lengthMenu: "Show _MENU_ categories per page",
+                info: "Showing _START_ to _END_ of _TOTAL_ categories",
+                emptyTable: "No categories found"
             }
         });
 
-        // Initialize Sortable
-        $("#sortable").sortable({
-            handle: ".sort-handle",
-            placeholder: "sortable-placeholder",
-            update: function(event, ui) {
-                var order = [];
-                $('#sortable tr').each(function(index) {
-                    order.push({
-                        id: $(this).data('id'),
-                        position: index + 1
-                    });
-                });
-                $.ajax({
-                    url: 'update_position.php',
-                    method: 'POST',
-                    data: {
-                        csrf_token: '<?= generateCsrfToken(); ?>',
-                        order: JSON.stringify(order)
-                    },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            showToast('Success', response.message, 'success');
-                        } else {
-                            showToast('Error', response.message, 'error');
-                        }
-                    },
-                    error: function() {
-                        showToast('Error', 'An error occurred while updating positions.', 'error');
-                    }
-                });
-            }
-        }).disableSelection();
-
-        // Edit Category Button
-        $('.edit-category-btn').on('click', function() {
-            var id = $(this).data('id');
-            var name = $(this).data('name');
-            var description = $(this).data('description');
-            var image = $(this).data('image');
+        // Handle Status Toggle
+        $(document).on('click', '.btn-toggle', function() {
+            let id = $(this).data('id');
+            let currentStatus = $(this).data('status');
+            let newStatus = currentStatus ? 0 : 1;
             
-            $('#edit-id').val(id);
-            $('#edit-name').val(name);
-            $('#edit-description').val(description);
-            $('#current-image').attr('src', image ? image : 'assets/images/placeholder.png');
-        });
-
-        // Delete Category Button
-        $('.delete-category-btn').on('click', function() {
-            var id = $(this).data('id');
-            var name = $(this).data('name');
-            
-            Swal.fire({
-                title: 'Are you sure?',
-                text: `Do you want to delete the category "${name}"? This action cannot be undone.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#ef4444',
-                cancelButtonColor: '#6b7280',
-                confirmButtonText: 'Yes, delete it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    var form = $('<form>', {
-                        method: 'POST',
-                        action: 'categories.php?action=delete'
-                    });
-                    form.append($('<input>', {
-                        type: 'hidden',
-                        name: 'csrf_token',
-                        value: '<?= generateCsrfToken(); ?>'
-                    }));
-                    form.append($('<input>', {
-                        type: 'hidden',
-                        name: 'id',
-                        value: id
-                    }));
-                    $('body').append(form);
-                    form.submit();
+            $.post('categories.php', {
+                ajax_action: 'update_status',
+                id: id,
+                is_active: newStatus
+            }, function(response) {
+                if (response.status === 'success') {
+                    showToast(response.message, 'success');
+                    location.reload();
+                } else {
+                    showToast(response.message, 'danger');
                 }
+            }, 'json').fail(() => {
+                showToast('Error updating status.', 'danger');
             });
         });
 
-        // Show Toast Function
-        function showToast(title, message, type) {
-            const toastHtml = `
-                <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+        // Handle Delete Category
+        $(document).on('click', '.delete-category-btn', function() {
+            let id = $(this).data('id');
+            let name = $(this).data('name');
+            
+            if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+                window.location.href = 'categories.php?action=delete&id=' + id;
+            }
+        });
+
+        // Sortable functionality
+        $("#sortable").sortable({
+            handle: ".sort-handle",
+            update: function(event, ui) {
+                let positions = [];
+                $("#sortable tr").each(function(index) {
+                    positions.push($(this).data('id'));
+                });
+                
+                $.post('categories.php', {
+                    ajax_action: 'update_position',
+                    positions: positions
+                }, function(response) {
+                    if (response.status === 'success') {
+                        showToast(response.message, 'success');
+                    } else {
+                        showToast(response.message, 'danger');
+                        location.reload();
+                    }
+                }, 'json').fail(() => {
+                    showToast('Error updating positions.', 'danger');
+                    location.reload();
+                });
+            }
+        });
+
+        // Function to show toast notifications
+        function showToast(message, type = 'primary') {
+            let toastHtml = `
+                <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
                     <div class="d-flex">
                         <div class="toast-body">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
                             ${message}
                         </div>
                         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                     </div>
                 </div>
             `;
+            
+            // Create toast container if it doesn't exist
+            if ($('#toast-container').length === 0) {
+                $('body').append('<div id="toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;"></div>');
+            }
+            
             $('#toast-container').html(toastHtml);
             $('.toast').toast({
-                delay: 5000
+                delay: 5000,
+                autohide: true
             }).toast('show');
         }
 
-        // Show existing toast if available
+        // Show toast from PHP session
         <?php if (isset($_SESSION['toast'])): ?>
-            showToast('<?= $_SESSION['toast']['type'] === 'success' ? 'Success' : 'Error' ?>', '<?= $_SESSION['toast']['message'] ?>', '<?= $_SESSION['toast']['type'] ?>');
+            showToast(`<?= $_SESSION['toast']['message'] ?>`, '<?= $_SESSION['toast']['type'] === 'success' ? 'success' : 'danger' ?>');
             <?php unset($_SESSION['toast']); ?>
         <?php endif; ?>
-    });
+    <?php endif; ?>
+});
 </script>
 
-<?php require_once 'includes/footer.php'; ?>
+<?php
+require_once 'includes/footer.php';
+ob_end_flush();
+?>
